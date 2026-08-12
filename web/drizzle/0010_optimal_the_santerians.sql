@@ -1,0 +1,1 @@
+ALTER TABLE "marketing_updates" ADD COLUMN "campaign" text;
