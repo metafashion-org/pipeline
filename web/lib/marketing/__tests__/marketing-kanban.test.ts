@@ -22,7 +22,9 @@ async function testMarketingKanbanFilters() {
   console.log("✓ All P4-T4 marketing Kanban filter assertions passed cleanly against live DB!");
 }
 
-testMarketingKanbanFilters().catch((err) => {
-  console.error("Test failed:", err);
-  process.exit(1);
-});
+testMarketingKanbanFilters()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error("Test failed:", err);
+    process.exit(1);
+  });

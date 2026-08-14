@@ -109,3 +109,13 @@ export async function getMarketingUpdatesForAsset(sku: string) {
     .where(eq(marketingUpdates.assetId, assetRecord[0].id))
     .orderBy(desc(marketingUpdates.createdAt));
 }
+
+// Allow direct execution via CLI
+if (require.main === module) {
+  seedMarketingStatuses()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error("Marketing status seeding failed:", err);
+      process.exit(1);
+    });
+}
