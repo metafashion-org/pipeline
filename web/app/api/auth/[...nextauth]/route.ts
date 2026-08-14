@@ -1,22 +1,62 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
+import { Provider } from "next-auth/providers/index";
 import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { ENV } from "@/lib/env";
 import { getActivePersonnelByEmail } from "@/lib/auth/personnel-auth";
 
-export const authOptions: NextAuthOptions = {
-    providers: [
-        GoogleProvider({
-            clientId: ENV.GOOGLE_OAUTH_CLIENT_ID,
-            clientSecret: ENV.GOOGLE_OAUTH_CLIENT_SECRET,
-            authorization: {
-                params: {
-                    scope: "openid email profile https://www.googleapis.com/auth/spreadsheets",
-                    access_type: "offline",
-                    prompt: "consent",
-                }
+// Test-only login path for Playwright e2e, gated so it can never be reachable in production.
+// Gate A: PLAYWRIGHT_TEST_LOGIN must be explicitly set to "true".
+// Gate B: NODE_ENV must not be "production" (Next.js defaults NODE_ENV to "production" for both build and start unless overridden).
+// Gate D: VERCEL must be unset, which structurally excludes every Vercel deployment regardless of how NODE_ENV resolves there.
+// All three are checked once at module load, so a misconfigured env var can't flip this at request time.
+const TEST_LOGIN_ENABLED =
+    process.env.PLAYWRIGHT_TEST_LOGIN === "true" && process.env.NODE_ENV !== "production" && !process.env.VERCEL;
+
+const providers: Provider[] = [
+    GoogleProvider({
+        clientId: ENV.GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: ENV.GOOGLE_OAUTH_CLIENT_SECRET,
+        authorization: {
+            params: {
+                scope: "openid email profile https://www.googleapis.com/auth/spreadsheets",
+                access_type: "offline",
+                prompt: "consent",
             }
-        }),
-    ],
+        }
+    }),
+];
+
+if (TEST_LOGIN_ENABLED) {
+    providers.push(
+        CredentialsProvider({
+            id: "test-login",
+            name: "Test Login",
+            credentials: {
+                email: { label: "Email", type: "text" },
+            },
+            async authorize(credentials, req) {
+                // Gate C: defense-in-depth, checked per request. Only reliable when edge routing
+                // guarantees an external request can never carry Host: localhost/127.0.0.1 by the
+                // time it reaches this code — Host is attacker-controlled at the HTTP level itself,
+                // so this check alone is not a security boundary, gates A/B/D are.
+                const host = req.headers?.host ?? "";
+                if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return null;
+
+                const email = credentials?.email?.trim().toLowerCase();
+                if (!email) return null;
+
+                const authResult = await getActivePersonnelByEmail(email);
+                if (!authResult.isAllowed || !authResult.personnelId) return null;
+
+                return { id: authResult.personnelId, email };
+            },
+        })
+    );
+}
+
+export const authOptions: NextAuthOptions = {
+    providers,
     callbacks: {
         async signIn({ user }) {
             const email = user.email?.toLowerCase() || "";
