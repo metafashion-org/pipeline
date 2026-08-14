@@ -19,6 +19,7 @@ import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { AssignTaskDialog } from "./AssignTaskDialog";
+import { NewAssetDialog } from "./NewAssetDialog";
 import { toast } from "sonner";
 import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";
 
@@ -134,6 +135,11 @@ export function Board({ initialColumns = [], role, artistEmails = [] }: BoardPro
 
     return (
         <>
+            {role === "admin" && (
+                <div className="flex justify-end mb-3">
+                    <NewAssetDialog onCreated={() => mutate()} />
+                </div>
+            )}
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}
