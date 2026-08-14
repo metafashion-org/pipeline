@@ -105,6 +105,12 @@ export async function seedDefaultCurationFieldConfig() {
   }
 }
 
+// Generates a unique-enough SKU for an asset created outside the historical import flow.
+// Shared by curation item ideas and admin-created assets so there is one SKU scheme, not two.
+export function generateAssetSku(prefix: string): string {
+  return `SKU-${prefix}-${Date.now().toString().slice(-6)}`;
+}
+
 export interface SubmitItemIdeaOptions {
   ideaTitle: string;
   category?: string;
@@ -132,7 +138,7 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
     .returning();
 
   // 2. Auto-generate SKU and create asset at 'unassigned'
-  const sku = `SKU-IDEA-${Date.now().toString().slice(-6)}`;
+  const sku = generateAssetSku("IDEA");
   const [asset] = await db
     .insert(assets)
     .values({
