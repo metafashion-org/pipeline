@@ -17,7 +17,9 @@ async function isAuthorized(request: NextRequest): Promise<boolean> {
   return Boolean(session && session.user?.role === "admin");
 }
 
-export async function POST(request: NextRequest) {
+// Shared by both methods: Vercel Cron Jobs invoke this path with GET, while the
+// admin "Run pull now" button (components/archive/RunPaymentPullButton.tsx) uses POST.
+async function handle(request: NextRequest) {
   if (!(await isAuthorized(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -32,3 +34,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const GET = handle;
+export const POST = handle;
