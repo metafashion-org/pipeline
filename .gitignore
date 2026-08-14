@@ -8,3 +8,6 @@ build/
 # internal coordination/process docs, not for the repo
 docs/
 TEST-hey.md
+
+# local Excel workbook exports, never committed
+*.xlsx
