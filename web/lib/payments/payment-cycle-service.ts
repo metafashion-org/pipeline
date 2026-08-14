@@ -53,7 +53,17 @@ export async function runPaymentCyclePull(today: Date = new Date()): Promise<Pay
     .from(assets)
     .where(inArray(assets.currentStatus, PENDING_PAYMENT_STATUSES));
 
-  const [cycle] = await db.insert(paymentCycles).values({ cycleDate: todayDateOnly }).returning();
+  const [inserted] = await db
+    .insert(paymentCycles)
+    .values({ cycleDate: todayDateOnly })
+    .onConflictDoNothing({ target: paymentCycles.cycleDate })
+    .returning();
+
+  if (!inserted) {
+    // Lost the race to a concurrent call (e.g. cron + manual retry) that inserted first; skip cleanly instead of duplicating.
+    return { skipped: true, reason: `A payment cycle for ${todayDateOnly} already exists` };
+  }
+  const cycle = inserted;
 
   if (eligibleAssets.length > 0) {
     await db.insert(paymentCycleItems).values(
