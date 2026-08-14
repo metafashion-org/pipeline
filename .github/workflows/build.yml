@@ -1,0 +1,43 @@
+name: Build Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install Dependencies
+      working-directory: ./web
+      run: pnpm install
+
+    - name: Run Build
+      working-directory: ./web
+      run: pnpm run build
+      env:
+        NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+        GOOGLE_OAUTH_CLIENT_ID: "dummy-client-id"
+        GOOGLE_OAUTH_CLIENT_SECRET: "dummy-client-secret"
+        GOOGLE_SPREADSHEET_ID: "dummy-spreadsheet-id"
+        GOOGLE_CLIENT_EMAIL: "dummy@example.com"
+        GOOGLE_PRIVATE_KEY: "dummy-private-key"
+        NEXTAUTH_URL: "http://localhost:3000"
+        NEXTAUTH_SECRET: "dummy-nextauth-secret"
+        ADMIN_EMAILS: "admin@example.com"
+        ARTIST_EMAILS: "artist@example.com"

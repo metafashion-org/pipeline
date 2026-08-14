@@ -1,0 +1,1 @@
+ALTER TABLE "assets" ADD COLUMN "payment_receipt_url" text;
