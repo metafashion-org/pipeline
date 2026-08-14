@@ -10,7 +10,12 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "tsx lib/db/run-migrate.ts",
-    "db:seed": "tsx lib/db/seed-statuses.ts"
+    "db:seed": "tsx lib/db/seed-statuses.ts",
+    "db:seed:marketing": "tsx lib/marketing/marketing-service.ts",
+    "db:seed:e2e": "tsx lib/db/seed-e2e-fixtures.ts",
+    "test:db:up": "bash scripts/test-db.sh up",
+    "test:db:down": "bash scripts/test-db.sh down",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -40,6 +45,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
