@@ -17,8 +17,6 @@ import { Loader2 } from "lucide-react";
 
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
-import { FeedbackDialog } from "./FeedbackDialog";
-import { AssignTaskDialog } from "./AssignTaskDialog";
 import { NewAssetDialog } from "./NewAssetDialog";
 import { toast } from "sonner";
 import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";

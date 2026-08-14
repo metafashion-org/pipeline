@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/admin/payment-cycles/run",
-      "schedule": "0 6 * * *"
-    }
-  ]
-}
