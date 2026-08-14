@@ -1,0 +1,1 @@
+ALTER TABLE "payment_cycles" ADD CONSTRAINT "payment_cycles_cycle_date_unique" UNIQUE("cycle_date");
