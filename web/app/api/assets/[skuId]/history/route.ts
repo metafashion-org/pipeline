@@ -37,8 +37,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ skuId: string }> }
 ) {
-  const { skuId } = await params;
-  const session = await getServerSession(authOptions);
+  const [{ skuId }, session] = await Promise.all([params, getServerSession(authOptions)]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

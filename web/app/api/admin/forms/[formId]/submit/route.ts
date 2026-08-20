@@ -13,12 +13,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ formId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { formId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { formId } = await params;
   const body = await request.json();
   const parseResult = SubmitSchema.safeParse(body);
   if (!parseResult.success) {

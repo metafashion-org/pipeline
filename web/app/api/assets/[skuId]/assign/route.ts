@@ -10,9 +10,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 const AssignSchema = z.object({
-  artistId: z.string().uuid(),
+  artistId: z.uuid(),
   feeAmount: z.string().trim().min(1).optional(),
-  ccEmails: z.array(z.string().email()).optional(),
+  ccEmails: z.array(z.email()).optional(),
   reason: z.string().trim().min(1).optional(),
 });
 
@@ -25,8 +25,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ skuId: string }> }
 ) {
-  const { skuId } = await params;
-  const session = await getServerSession(authOptions);
+  const [{ skuId }, session] = await Promise.all([params, getServerSession(authOptions)]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

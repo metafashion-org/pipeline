@@ -23,15 +23,16 @@ export default async function PersonnelPage() {
     redirect("/unauthorized");
   }
 
-  await seedOnboardingFormDefinition();
-
-  const people = await db.select().from(personnel).orderBy(desc(personnel.dateOnboarded));
-
-  const accessForm = await db
-    .select()
-    .from(formDefinitions)
-    .where(eq(formDefinitions.key, ARTIST_ACCESS_FORM_KEY))
-    .limit(1);
+  // The seed, the personnel list and the access-form lookup are independent, so they run together instead of costing three round trips in a row.
+  const [, people, accessForm] = await Promise.all([
+    seedOnboardingFormDefinition(),
+    db.select().from(personnel).orderBy(desc(personnel.dateOnboarded)),
+    db
+      .select()
+      .from(formDefinitions)
+      .where(eq(formDefinitions.key, ARTIST_ACCESS_FORM_KEY))
+      .limit(1),
+  ]);
 
   let pendingSubmissions: (typeof formSubmissions.$inferSelect)[] = [];
   if (accessForm.length > 0) {

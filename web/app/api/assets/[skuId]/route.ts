@@ -12,7 +12,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ skuId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { skuId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -22,7 +22,6 @@ export async function PATCH(
     return NextResponse.json({ error: "You don't have permission to edit assets" }, { status: 403 });
   }
 
-  const { skuId } = await params;
   const body = await request.json();
   const parseResult = UpdateAssetSchema.safeParse(body);
   if (!parseResult.success) {

@@ -58,7 +58,9 @@ async function runOnboardingSeed() {
     { fieldKey: "notes", label: "Skills & Background", fieldType: "textarea", sortOrder: 4, isRequired: false },
   ];
 
-  for (const f of fields) {
+  // Each field is keyed independently, so the check-and-insert pairs do not interact and run concurrently.
+  await Promise.all(
+    fields.map(async (f) => {
     const existingField = await db
       .select()
       .from(formFields)
@@ -75,7 +77,8 @@ async function runOnboardingSeed() {
         isRequired: f.isRequired,
       });
     }
-  }
+    })
+  );
 }
 
 export async function approveArtistAccessSubmission(

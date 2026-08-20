@@ -52,18 +52,20 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
     })
     .returning();
 
-  // 4. Add CC list entries
-  for (const ccEmail of ccEmails) {
-    const trimmed = ccEmail.trim().toLowerCase();
-    if (trimmed) {
-      const ccPerson = await db.select().from(personnel).where(eq(personnel.email, trimmed)).limit(1);
-      await db.insert(assignmentCcs).values({
-        assignmentId: newAssignment.id,
-        email: trimmed,
-        personnelId: ccPerson.length > 0 ? ccPerson[0].id : null,
-      });
-    }
-  }
+  // 4. Add CC list entries. Each address is independent of the others, so they resolve and insert concurrently rather than costing two sequential round trips per address.
+  await Promise.all(
+    ccEmails
+      .map((ccEmail) => ccEmail.trim().toLowerCase())
+      .filter(Boolean)
+      .map(async (trimmed) => {
+        const ccPerson = await db.select().from(personnel).where(eq(personnel.email, trimmed)).limit(1);
+        await db.insert(assignmentCcs).values({
+          assignmentId: newAssignment.id,
+          email: trimmed,
+          personnelId: ccPerson.length > 0 ? ccPerson[0].id : null,
+        });
+      })
+  );
 
   // 5. Update asset record
   await db

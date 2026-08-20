@@ -14,12 +14,10 @@ export interface MarketingFilterOptions {
 }
 
 export async function getMarketingKanbanData(filters: MarketingFilterOptions = {}) {
-  const statusConfigs = await db
-    .select()
-    .from(marketingStatusConfig)
-    .orderBy(marketingStatusConfig.sortOrder);
-
-  const rawUpdates = await db
+  // The status config and the update list are independent, so they are fetched together rather than one after the other.
+  const [statusConfigs, rawUpdates] = await Promise.all([
+    db.select().from(marketingStatusConfig).orderBy(marketingStatusConfig.sortOrder),
+    db
     .select({
       updateId: marketingUpdates.id,
       assetId: assets.id,
@@ -41,7 +39,8 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
     .from(marketingUpdates)
     .innerJoin(assets, eq(marketingUpdates.assetId, assets.id))
     .leftJoin(personnel, eq(marketingUpdates.responsiblePersonId, personnel.id))
-    .orderBy(desc(marketingUpdates.createdAt));
+    .orderBy(desc(marketingUpdates.createdAt)),
+  ]);
 
   let filtered = rawUpdates;
 

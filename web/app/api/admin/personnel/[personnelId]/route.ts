@@ -19,12 +19,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ personnelId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { personnelId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { personnelId } = await params;
   const body = await request.json();
   const parseResult = UpdateRolesSchema.safeParse(body);
   if (!parseResult.success) {
@@ -64,12 +63,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ personnelId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { personnelId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { personnelId } = await params;
   if (session.user.personnelId === personnelId) {
     return NextResponse.json({ error: "You can't delete your own account" }, { status: 400 });
   }

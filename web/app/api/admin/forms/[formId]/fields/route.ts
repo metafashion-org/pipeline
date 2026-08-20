@@ -20,12 +20,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ formId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { formId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { formId } = await params;
   const body = await request.json();
   const parseResult = AddFieldSchema.safeParse(body);
   if (!parseResult.success) {
@@ -47,12 +46,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ formId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { formId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { formId } = await params;
   const body = await request.json();
   const parseResult = ReorderSchema.safeParse(body);
   if (!parseResult.success) {
