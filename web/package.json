@@ -19,7 +19,8 @@
     "deadcode": "knip --include files,dependencies,unlisted,binaries",
     "deadcode:all": "knip",
     "typecheck": "tsc --noEmit",
-    "prepare": "cd .. && git config core.hooksPath .githooks"
+    "prepare": "cd .. && git config core.hooksPath .githooks",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
@@ -31,7 +32,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^0.564.0",
-    "next": "16.1.6",
+    "next": "16.2.12",
     "next-auth": "^4.24.15",
     "next-themes": "^0.4.6",
     "postgres": "^3.4.9",
