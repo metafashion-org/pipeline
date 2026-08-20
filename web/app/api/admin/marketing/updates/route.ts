@@ -9,7 +9,7 @@ const MARKETING_STATUS_KEYS = INITIAL_MARKETING_STATUSES.map((s) => s.statusKey)
 const CreateMarketingUpdateSchema = z.object({
   sku: z.string().min(1),
   platform: z.string().min(1),
-  postUrl: z.string().url().optional().or(z.literal("")),
+  postUrl: z.url().optional().or(z.literal("")),
   caption: z.string().optional(),
   notes: z.string().optional(),
   postedAt: z

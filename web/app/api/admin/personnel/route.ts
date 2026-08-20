@@ -14,7 +14,7 @@ const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "up
 
 const AddPersonnelSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   roles: z.array(z.enum(ROLE_OPTIONS)).min(1),
 });
 
