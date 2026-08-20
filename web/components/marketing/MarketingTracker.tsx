@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardHeader,
@@ -25,8 +25,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 import { toast } from "sonner";
 
 const COMMON_PLATFORMS = ["Pinterest", "Instagram", "TikTok", "YouTube Shorts", "Twitter/X"];
@@ -91,6 +105,20 @@ export function MarketingTracker({
   const [view, setView] = useState<"status" | "asset">("status");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
   const [showUnmarketed, setShowUnmarketed] = useState(false);
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDialogSku, setLogDialogSku] = useState<string | null>(null);
+
+  function openLogDialog(sku?: string) {
+    setLogDialogSku(sku ?? null);
+    setLogDialogOpen(true);
+  }
+
+  const assetOptions = useMemo(() => {
+    const bySku = new Map<string, string>();
+    for (const a of unmarketedAssets) bySku.set(a.sku, a.itemName);
+    for (const u of updates) if (!bySku.has(u.sku)) bySku.set(u.sku, u.itemName);
+    return Array.from(bySku.entries()).map(([sku, itemName]) => ({ sku, itemName }));
+  }, [unmarketedAssets, updates]);
 
   const statusLabel = useMemo(() => {
     const map = new Map(statusColumns.map((c) => [c.statusKey, c.label]));
@@ -168,6 +196,9 @@ export function MarketingTracker({
               By Asset
             </Button>
           </div>
+          <Button size="sm" onClick={() => openLogDialog()}>
+            Log marketing activity
+          </Button>
         </div>
       </div>
 
@@ -182,7 +213,12 @@ export function MarketingTracker({
             ) : (
               <div className="flex gap-2 flex-wrap">
                 {unmarketedAssets.map((a) => (
-                  <Badge key={a.id} variant="outline">
+                  <Badge
+                    key={a.id}
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => openLogDialog(a.sku)}
+                  >
                     {a.sku} - {a.itemName}
                   </Badge>
                 ))}
@@ -234,7 +270,9 @@ export function MarketingTracker({
                   <CardTitle className="text-sm">
                     <span className="font-mono">{group.sku}</span> - {group.itemName}
                   </CardTitle>
-                  <AddPlatformDialog sku={group.sku} itemName={group.itemName} onAdded={onUpdateAdded} />
+                  <Button size="sm" variant="outline" onClick={() => openLogDialog(group.sku)}>
+                    + Platform
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -286,25 +324,62 @@ export function MarketingTracker({
           ))}
         </div>
       )}
+
+      <LogMarketingDialog
+        open={logDialogOpen}
+        onOpenChange={setLogDialogOpen}
+        initialSku={logDialogSku}
+        assetOptions={assetOptions}
+        statusColumns={statusColumns}
+        onAdded={onUpdateAdded}
+      />
     </div>
   );
 }
 
-function AddPlatformDialog({
-  sku,
-  itemName,
+function LogMarketingDialog({
+  open,
+  onOpenChange,
+  initialSku,
+  assetOptions,
+  statusColumns,
   onAdded,
 }: {
-  sku: string;
-  itemName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialSku: string | null;
+  assetOptions: { sku: string; itemName: string }[];
+  statusColumns: StatusColumn[];
   onAdded: (update: MarketingUpdateRow) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [sku, setSku] = useState<string | null>(null);
   const [platform, setPlatform] = useState("");
   const [postUrl, setPostUrl] = useState("");
+  const [postedAt, setPostedAt] = useState("");
+  const [marketingStatus, setMarketingStatus] = useState("");
+  const [caption, setCaption] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (open) setSku(initialSku);
+  }, [open, initialSku]);
+
+  function reset() {
+    setSku(null);
+    setPlatform("");
+    setPostUrl("");
+    setPostedAt("");
+    setMarketingStatus("");
+    setCaption("");
+    setNotes("");
+  }
+
   async function submit() {
+    if (!sku) {
+      toast.error("Select an asset");
+      return;
+    }
     if (!platform.trim()) {
       toast.error("Platform is required");
       return;
@@ -314,18 +389,27 @@ function AddPlatformDialog({
       const res = await fetch("/api/admin/marketing/updates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku, platform: platform.trim(), postUrl: postUrl.trim() }),
+        body: JSON.stringify({
+          sku,
+          platform: platform.trim(),
+          postUrl: postUrl.trim(),
+          postedAt: postedAt || undefined,
+          marketingStatus: marketingStatus || undefined,
+          caption: caption.trim() || undefined,
+          notes: notes.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || "Failed to add platform");
+        toast.error(data.error || "Failed to log marketing activity");
         return;
       }
+      const asset = assetOptions.find((a) => a.sku === sku);
       onAdded({
         updateId: data.update.id,
         assetId: data.update.assetId,
         sku,
-        itemName,
+        itemName: asset?.itemName || sku,
         platform: data.update.platform,
         postUrl: data.update.postUrl,
         caption: data.update.caption,
@@ -334,27 +418,43 @@ function AddPlatformDialog({
         notes: data.update.notes,
         createdAt: data.update.createdAt,
       });
-      setPlatform("");
-      setPostUrl("");
-      setOpen(false);
-      toast.success(`${platform} added for ${sku}`);
+      toast.success(`${platform} logged for ${sku}`);
+      reset();
+      onOpenChange(false);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          + Platform
-        </Button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) reset();
+        onOpenChange(v);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Track a new platform for {sku}</DialogTitle>
+          <DialogTitle>Log marketing activity</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
+          <div>
+            <Label>Asset</Label>
+            <Combobox value={sku} onValueChange={setSku}>
+              <ComboboxInput placeholder="Select an asset..." />
+              <ComboboxContent>
+                <ComboboxList>
+                  <ComboboxEmpty>No assets found.</ComboboxEmpty>
+                  {assetOptions.map((a) => (
+                    <ComboboxItem key={a.sku} value={a.sku}>
+                      {a.sku} - {a.itemName}
+                    </ComboboxItem>
+                  ))}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
           <div>
             <Label htmlFor="platform-input">Platform</Label>
             <Input
@@ -380,10 +480,42 @@ function AddPlatformDialog({
               onChange={(e) => setPostUrl(e.target.value)}
             />
           </div>
+          <div>
+            <Label htmlFor="postedat-input">Posted date (optional)</Label>
+            <Input
+              id="postedat-input"
+              type="date"
+              value={postedAt}
+              onChange={(e) => setPostedAt(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Status (optional)</Label>
+            <Select value={marketingStatus} onValueChange={setMarketingStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Auto (based on post URL)" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusColumns.map((c) => (
+                  <SelectItem key={c.statusKey} value={c.statusKey}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="caption-input">Caption (optional)</Label>
+            <Input id="caption-input" value={caption} onChange={(e) => setCaption(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="notes-input">Notes (optional)</Label>
+            <Input id="notes-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={submitting}>
-            {submitting ? "Adding..." : "Add"}
+            {submitting ? "Logging..." : "Log activity"}
           </Button>
         </DialogFooter>
       </DialogContent>
