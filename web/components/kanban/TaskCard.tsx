@@ -92,7 +92,17 @@ export function TaskCard({ task, role }: TaskCardProps) {
                 {...attributes}
                 {...listeners}
                 data-testid={`task-card-${sku}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`${sku}: ${itemName}`}
                 onClick={() => setDrawerOpen(true)}
+                // The card opens the drawer on click, so it needs a keyboard path to the same action; dnd-kit's own listeners cover dragging but not this.
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDrawerOpen(true);
+                    }
+                }}
                 className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-all"
             >
                 <div className={`w-full h-24 overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>

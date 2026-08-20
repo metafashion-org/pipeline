@@ -13,6 +13,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { jsonFetcher } from "@/lib/fetcher";
 import { Label } from "@/components/ui/label";
 import {
     Select,
@@ -35,8 +36,6 @@ interface AssignTaskDialogProps {
     currentArtistName?: string | null;
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
 /**
  * Assign or reassign the artist on one asset.
  * Loads the pickable artists lazily (only once the dialog is opened) and, on success, revalidates the board's "/api/assets" SWR key so the card's artist updates without a page reload.
@@ -50,7 +49,7 @@ export function AssignTaskDialog({ sku, currentArtistId, currentArtistName }: As
 
     const { data, error, isLoading } = useSWR<{ artists?: Artist[]; error?: string }>(
         open ? "/api/personnel/artists" : null,
-        fetcher
+        jsonFetcher
     );
     const artists = data?.artists || [];
 

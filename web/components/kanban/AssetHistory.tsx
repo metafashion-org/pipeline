@@ -12,12 +12,11 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { jsonFetcher } from "@/lib/fetcher";
 import type { AssetHistoryEntry } from "@/app/api/assets/[skuId]/history/route";
 
 // How many of the most recent entries the drawer shows inline. The rest stay one click away in the full log rather than turning the drawer into a scroll well.
 const INLINE_ENTRY_LIMIT = 6;
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 function humanizeStatus(key: string | null | undefined): string {
     if (!key) return "nothing";
@@ -41,7 +40,7 @@ function formatValue(value: unknown): string {
 export function AssetHistory({ sku, enabled }: { sku: string; enabled: boolean }) {
     const { data, error, isLoading } = useSWR<{ history?: AssetHistoryEntry[]; error?: string }>(
         enabled ? `/api/assets/${encodeURIComponent(sku)}/history` : null,
-        fetcher
+        jsonFetcher
     );
 
     if (isLoading) {

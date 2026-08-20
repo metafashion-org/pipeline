@@ -23,14 +23,15 @@ export interface AssetDrawerProps {
  * One Drive reference, shown as a thumbnail linking out to the file.
  * Folders, non-Drive links, and files no source can fetch degrade to an "Open in Drive" tile so a reference is never silently dropped.
  */
-function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
-  const openInDrive = (
-    <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-[10px] text-muted-foreground">
-      <ExternalLink className="h-3.5 w-3.5" />
-      Open in Drive
-    </span>
-  );
+// Constant, so it is built once at module scope rather than rebuilt for every thumbnail on every render.
+const OPEN_IN_DRIVE = (
+  <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-[10px] text-muted-foreground">
+    <ExternalLink className="h-3.5 w-3.5" />
+    Open in Drive
+  </span>
+);
 
+function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
   return (
     <a
       href={driveRef.url}
@@ -44,10 +45,10 @@ function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
           fileId={driveRef.fileId}
           alt="Reference"
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          fallback={openInDrive}
+          fallback={OPEN_IN_DRIVE}
         />
       ) : (
-        openInDrive
+        OPEN_IN_DRIVE
       )}
     </a>
   );

@@ -20,6 +20,7 @@ import { TaskCard } from "./TaskCard";
 import { NewAssetDialog } from "./NewAssetDialog";
 import { toast } from "sonner";
 import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";
+import { jsonFetcher } from "@/lib/fetcher";
 
 interface BoardProps {
     initialColumns?: KanbanColumnData[];
@@ -27,9 +28,7 @@ interface BoardProps {
 }
 
 export function Board({ initialColumns = [], role }: BoardProps) {
-    const fetcher = (url: string) => fetch(url).then(r => r.json());
-
-    const { data: swrResponse, mutate, isValidating } = useSWR("/api/assets", fetcher, {
+    const { data: swrResponse, mutate, isValidating } = useSWR<{ data: KanbanColumnData[] }>("/api/assets", jsonFetcher, {
         fallbackData: { data: initialColumns },
         // The server component already rendered this board from a fresh query, so revalidating on mount refetched the whole thing immediately and made every visit pay for the same data twice.
         // Focus revalidation and the polling interval still keep it current after that.
