@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -94,20 +95,20 @@ export default async function AdminDashboardPage() {
                 <section>
                     <h2 className="text-lg font-semibold mb-3">Quick Links</h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-all" asChild>
-                            <a href="/admin/board">Kanban Board</a>
+                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]" asChild>
+                            <Link href="/admin/board">Kanban Board</Link>
                         </Button>
-                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-all" asChild>
-                            <a href="/admin/archive">Archive</a>
+                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]" asChild>
+                            <Link href="/admin/archive">Archive</Link>
                         </Button>
-                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-all" asChild>
-                            <a href="/admin/settings">Settings</a>
+                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]" asChild>
+                            <Link href="/admin/settings">Settings</Link>
                         </Button>
-                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-all" asChild>
-                            <a href="/admin/curation-fields">Brief Fields</a>
+                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]" asChild>
+                            <Link href="/admin/curation-fields">Brief Fields</Link>
                         </Button>
-                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-all" asChild>
-                            <a href="/admin/marketing">Marketing</a>
+                        <Button variant="outline" className="h-16 justify-start rounded-lg shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]" asChild>
+                            <Link href="/admin/marketing">Marketing</Link>
                         </Button>
                     </div>
                 </section>

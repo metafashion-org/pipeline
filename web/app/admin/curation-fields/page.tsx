@@ -41,7 +41,7 @@ export default async function CurationFieldsPage() {
       </header>
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
-        <Card className="shadow-sm hover:shadow-md transition-all">
+        <Card className="shadow-sm hover:shadow-md transition-shadow">
           <CardHeader>
             <CardTitle>Brief Fields</CardTitle>
           </CardHeader>

@@ -102,7 +102,7 @@ export function SettingsManager({
     toast.success(`Transition rule '${data.rule.fromStatus} → ${data.rule.toStatus}' saved`);
   }
 
-  const cardClass = "shadow-sm hover:shadow-md transition-all";
+  const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
   return (
     <div className="flex flex-col gap-6">

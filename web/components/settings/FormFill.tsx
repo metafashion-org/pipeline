@@ -52,19 +52,22 @@ export function FormFill({ formId, title, description, fields }: { formId: strin
       return;
     }
     setSubmitting(true);
-    const res = await fetch(`/api/admin/forms/${formId}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ values }),
-    });
-    setSubmitting(false);
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error || "Submission failed");
-      return;
+    try {
+      const res = await fetch(`/api/admin/forms/${formId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Submission failed");
+        return;
+      }
+      setSubmitted(true);
+      toast.success("Submitted");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitted(true);
-    toast.success("Submitted");
   }
 
   if (submitted) {
@@ -84,7 +87,9 @@ export function FormFill({ formId, title, description, fields }: { formId: strin
       </div>
 
       <div className="flex flex-col gap-5">
-        {fields.map((field) => (
+        {fields.map((field) => {
+          const activeOptions = field.fieldType === "multi_select" ? new Set((values[field.fieldKey] as string[]) || []) : null;
+          return (
           <div key={field.id}>
             <Label htmlFor={field.fieldKey}>
               {field.label}
@@ -107,7 +112,7 @@ export function FormFill({ formId, title, description, fields }: { formId: strin
             ) : field.fieldType === "multi_select" ? (
               <div className="flex flex-wrap gap-2 mt-1">
                 {field.options.map((opt) => {
-                  const active = ((values[field.fieldKey] as string[]) || []).includes(opt.value);
+                  const active = activeOptions!.has(opt.value);
                   return (
                     <Badge
                       key={opt.value}
@@ -134,7 +139,8 @@ export function FormFill({ formId, title, description, fields }: { formId: strin
               />
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <Button onClick={handleSubmit} disabled={submitting}>

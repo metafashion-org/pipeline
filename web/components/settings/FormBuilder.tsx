@@ -35,7 +35,7 @@ import { Trash2, ArrowUp, ArrowDown } from "lucide-react";
 
 const FIELD_TYPES = ["text", "textarea", "select", "multi_select", "url", "image", "file"] as const;
 
-const cardClass = "shadow-sm hover:shadow-md transition-all";
+const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
 interface FormSummary {
   id: string;
