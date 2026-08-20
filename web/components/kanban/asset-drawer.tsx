@@ -4,7 +4,13 @@ import React from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
-import { ExternalLink, Mail, DollarSign, Image, Calendar, Tag, ShieldCheck, History } from "lucide-react";
+import { parseDriveRefs, DriveRef } from "@/lib/assets/drive-links";
+import { DriveImage } from "./drive-image";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { AssignTaskDialog } from "./AssignTaskDialog";
+import { EditAssetDialog } from "./EditAssetDialog";
+import { AssetHistory } from "./AssetHistory";
+import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History } from "lucide-react";
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -13,13 +19,68 @@ export interface AssetDrawerProps {
   userRoles?: string[];
 }
 
+/**
+ * One Drive reference, shown as a thumbnail linking out to the file.
+ * Folders, non-Drive links, and files no source can fetch degrade to an "Open in Drive" tile so a reference is never silently dropped.
+ */
+function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
+  const openInDrive = (
+    <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-[10px] text-muted-foreground">
+      <ExternalLink className="h-3.5 w-3.5" />
+      Open in Drive
+    </span>
+  );
+
+  return (
+    <a
+      href={driveRef.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group relative block h-24 w-24 shrink-0 overflow-hidden rounded-md border bg-muted"
+      title={driveRef.url}
+    >
+      {driveRef.fileId ? (
+        <DriveImage
+          fileId={driveRef.fileId}
+          alt="Reference"
+          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          fallback={openInDrive}
+        />
+      ) : (
+        openInDrive
+      )}
+    </a>
+  );
+}
+
+function ReferenceGallery({ label, refs }: { label: string; refs: DriveRef[] }) {
+  if (refs.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {refs.map((driveRef) => (
+          <DriveThumbnail key={driveRef.url} driveRef={driveRef} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }: AssetDrawerProps) {
   if (!asset) return null;
 
   const isAdminOrOperator = userRoles.includes("admin") || userRoles.includes("operator");
   const isCurator = userRoles.includes("curator") || isAdminOrOperator;
-  const isMarketing = userRoles.includes("marketing") || isAdminOrOperator;
   const isPaymentAdmin = userRoles.includes("payment_admin") || isAdminOrOperator;
+  // Client-side gate only, to decide whether to show the button. The assign endpoint re-checks the same capability server-side.
+  const canAssignArtists = getEffectiveCapabilities(userRoles).canAssignArtists;
+  // Editing an asset's name, category, budget or deadline is the same production-management right as assigning its artist, so it rides on the same capability rather than inventing a second one.
+  const canEdit = canAssignArtists;
+
+  const references = parseDriveRefs(asset.referenceImages);
+  const recolorReferences = parseDriveRefs(asset.recolorReferenceImages);
+  const hasReferences = references.length > 0 || recolorReferences.length > 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -29,8 +90,13 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <Badge variant="outline" className="font-mono">{asset.sku}</Badge>
             <Badge variant="secondary" className="capitalize">{asset.currentStatus.replace(/_/g, " ")}</Badge>
           </div>
-          <SheetTitle className="text-xl font-bold mt-2">{asset.itemName}</SheetTitle>
-          {asset.category && <p className="text-xs text-muted-foreground">{asset.category}</p>}
+          <div className="mt-2 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <SheetTitle className="text-xl font-bold">{asset.itemName}</SheetTitle>
+              {asset.category && <p className="text-xs text-muted-foreground">{asset.category}</p>}
+            </div>
+            {canEdit && <EditAssetDialog asset={asset} />}
+          </div>
         </SheetHeader>
 
         {/* 1. Basic Details */}
@@ -42,6 +108,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <div><span className="text-xs text-muted-foreground">SKU:</span> <p className="font-mono">{asset.sku}</p></div>
             <div><span className="text-xs text-muted-foreground">Category:</span> <p>{asset.category || "N/A"}</p></div>
             <div><span className="text-xs text-muted-foreground">Status:</span> <p className="capitalize">{asset.currentStatus}</p></div>
+            <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{asset.deadline ? new Date(asset.deadline).toLocaleDateString() : "Not set"}</p></div>
             <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{new Date(asset.updatedAt).toLocaleDateString()}</p></div>
           </div>
         </section>
@@ -51,23 +118,41 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" /> 2. Artist Assignment
           </h4>
-          <div className="bg-muted/30 p-3 rounded-md text-sm space-y-1">
-            <p><span className="text-xs text-muted-foreground">Assigned Artist:</span> {asset.artistName || "Unassigned"}</p>
-            {asset.artistEmail && <p><span className="text-xs text-muted-foreground">Email:</span> {asset.artistEmail}</p>}
+          <div className="bg-muted/30 p-3 rounded-md text-sm space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-1 min-w-0">
+                <p><span className="text-xs text-muted-foreground">Assigned Artist:</span> {asset.artistName || "Unassigned"}</p>
+                {asset.artistEmail && <p className="truncate"><span className="text-xs text-muted-foreground">Email:</span> {asset.artistEmail}</p>}
+              </div>
+              {canAssignArtists && (
+                <AssignTaskDialog
+                  sku={asset.sku}
+                  currentArtistId={asset.artistId}
+                  currentArtistName={asset.artistName}
+                />
+              )}
+            </div>
           </div>
         </section>
 
-        {/* 3. Curation & Concept (Internal - hidden from artists) */}
-        {isCurator && (
-          <section className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Image className="h-3.5 w-3.5" /> 3. Curation & Concept
-            </h4>
-            <div className="bg-muted/30 p-3 rounded-md text-sm">
-              <p className="text-xs text-muted-foreground italic">Curator moodboards & concept links</p>
-            </div>
-          </section>
-        )}
+        {/* 3. References & Moodboards */}
+        <section className="space-y-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <ImageIcon className="h-3.5 w-3.5" /> 3. References & Moodboards
+          </h4>
+          <div className="bg-muted/30 p-3 rounded-md text-sm space-y-3">
+            {hasReferences ? (
+              <>
+                <ReferenceGallery label="Reference images" refs={references} />
+                {isCurator && (
+                  <ReferenceGallery label="Recolour references" refs={recolorReferences} />
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No reference links on this asset yet.</p>
+            )}
+          </div>
+        </section>
 
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">
@@ -116,8 +201,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <History className="h-3.5 w-3.5" /> 11. Status History & Audit Log
           </h4>
-          <div className="bg-muted/30 p-3 rounded-md text-xs text-muted-foreground">
-            <p>Timeline entries extracted from status history log</p>
+          <div className="bg-muted/30 p-3 rounded-md">
+            <AssetHistory sku={asset.sku} enabled={open} />
           </div>
         </section>
       </SheetContent>
