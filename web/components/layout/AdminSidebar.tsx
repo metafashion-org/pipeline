@@ -2,14 +2,13 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, KanbanSquare, Archive, Megaphone, Settings, FileText, Users } from "lucide-react";
+import { LayoutDashboard, KanbanSquare, Archive, Megaphone, Settings, Users } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
   { href: "/admin/archive", icon: Archive, label: "Archive" },
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
-  { href: "/admin/forms", icon: FileText, label: "Forms" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
