@@ -29,12 +29,19 @@ export interface KanbanAssetCard {
   artistName: string | null;
   artistEmail: string | null;
   gmailThreadId: string | null;
+  deadline: Date | null;
   updatedAt: Date;
+  // Raw JSONB straight from the assets table. Parse with parseDriveRefs (lib/assets/drive-links.ts) before rendering: one cell can hold several comma-joined Drive URLs, or free text that is not a link at all.
+  referenceImages: unknown;
+  recolorReferenceImages: unknown;
 }
 
 export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[] }> {
-  const allStatuses = await db.select().from(statuses).orderBy(asc(statuses.sortOrder));
-  let allAssets = await db
+  // The status config and the asset list are independent, so they are fetched concurrently.
+  // Awaiting them in sequence spent two full network round trips where one would do, which is the dominant cost of rendering this page against a remote database.
+  const [allStatuses, fetchedAssets] = await Promise.all([
+    db.select().from(statuses).orderBy(asc(statuses.sortOrder)),
+    db
     .select({
       id: assets.id,
       sku: assets.sku,
@@ -46,10 +53,16 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       artistName: personnel.name,
       artistEmail: personnel.email,
       gmailThreadId: assets.gmailThreadId,
+      deadline: assets.deadline,
       updatedAt: assets.updatedAt,
+      referenceImages: assets.referenceImages,
+      recolorReferenceImages: assets.recolorReferenceImages,
     })
     .from(assets)
-    .leftJoin(personnel, eq(assets.currentArtistId, personnel.id));
+    .leftJoin(personnel, eq(assets.currentArtistId, personnel.id)),
+  ]);
+
+  let allAssets = fetchedAssets;
 
   if (artistEmail) {
     allAssets = allAssets.filter(
@@ -93,7 +106,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
 // Payment gate is structural per PLAN.md §4/§9: encoded as an absence of rows in
 // status_transition_rules, "so it can't be bypassed via direct API calls." The admin
 // override below is deliberately scoped to exclude these two statuses so that promise
-// holds even for admins — admin flexibility is about normal workflow movement, not
+// holds even for admins - admin flexibility is about normal workflow movement, not
 // skipping the financial gate.
 const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
 
@@ -122,7 +135,7 @@ export async function updateAssetStatusInKanban(
     throw new Error(`Target status key '${targetStatusKey}' is not a valid status`);
   }
 
-  // Check status transition rules: deny by default, per PLAN.md §4 — a transition is only
+  // Check status transition rules: deny by default, per PLAN.md §4 - a transition is only
   // permitted if a matching row exists in status_transition_rules with isAllowed !== false.
   const rule = await db
     .select()
@@ -136,7 +149,7 @@ export async function updateAssetStatusInKanban(
     .limit(1);
 
   if (rule.length === 0) {
-    // Admin override, per PLAN.md §4/§5 ("admin: Everything... Override/repair records") —
+    // Admin override, per PLAN.md §4/§5 ("admin: Everything... Override/repair records") -
     // but never for the two payment-gated statuses, which stay structurally deny-by-default
     // for every role including admin. See PAYMENT_GATED_STATUSES comment above.
     const adminOverride = role === "admin" && !PAYMENT_GATED_STATUSES.includes(targetStatusKey);
@@ -144,7 +157,7 @@ export async function updateAssetStatusInKanban(
       throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is not permitted: no matching rule in status_transition_rules`);
     }
   } else if (!rule[0].isAllowed) {
-    // An explicit forbid always applies, admin included — only the "no rule exists" gap
+    // An explicit forbid always applies, admin included - only the "no rule exists" gap
     // above gets the admin override, never an explicit isAllowed: false row.
     throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${rule[0].failureReason || "Rule restriction"}`);
   }

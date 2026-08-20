@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AssetDrawer } from "./asset-drawer";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
+import { parseDriveRefs } from "@/lib/assets/drive-links";
+import { DriveImage } from "./drive-image";
 
 interface TaskCardProps {
     task: KanbanAssetCard | any;
@@ -73,8 +75,14 @@ export function TaskCard({ task, role }: TaskCardProps) {
         artistName,
         artistEmail: task.artistEmail || task.emailAddress || null,
         gmailThreadId: task.gmailThreadId || task.assignmentThreadId || null,
+        deadline: task.deadline ? new Date(task.deadline) : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
+        referenceImages: task.referenceImages ?? [],
+        recolorReferenceImages: task.recolorReferenceImages ?? [],
     };
+
+    // First reference that is an actual Drive file becomes the card's cover art; the colour gradient underneath stays visible when there is no such reference or no source can fetch it.
+    const coverRef = parseDriveRefs(formattedAsset.referenceImages).find((r) => r.fileId);
 
     return (
         <>
@@ -88,7 +96,14 @@ export function TaskCard({ task, role }: TaskCardProps) {
                 className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-all"
             >
                 <div className={`w-full h-24 overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>
-                    <div className="flex items-center justify-between">
+                    {coverRef?.fileId && (
+                        <DriveImage
+                            fileId={coverRef.fileId}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-cover after:absolute after:inset-0 after:bg-black/40"
+                        />
+                    )}
+                    <div className="relative flex items-center justify-between">
                         <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
                             {sku}
                         </span>
@@ -104,7 +119,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
                             <Maximize2 className="h-3 w-3" />
                         </Button>
                     </div>
-                    <p className="text-sm font-semibold truncate leading-tight">{itemName}</p>
+                    <p className="relative text-sm font-semibold truncate leading-tight">{itemName}</p>
                 </div>
 
                 <div className="px-3 py-2 flex flex-col gap-1">
