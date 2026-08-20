@@ -1,24 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { driveThumbnailUrl } from "@/lib/assets/drive-links";
 
 /**
- * Renders a Google Drive file as an image, falling back to `fallback` if it can't be loaded.
- * The pipeline's reference files are link-shared, so Drive's thumbnail endpoint serves them directly with no credentials involved.
+ * Renders a Google Drive file as an image, falling back to `fallback` if it cannot be loaded.
+ * The pipeline's reference files are link-shared, so Drive's thumbnail endpoint serves them with no credentials involved. It redirects to lh3.googleusercontent.com, and both hosts are allowed in next.config.ts so the optimizer can fetch and resize them rather than shipping the originals, some of which are several hundred kilobytes.
  *
- * Input: the Drive file id, alt text, and what to render instead when the image fails.
- * Output: an <img>, or the fallback once loading has failed.
+ * Input: the Drive file id, alt text, the sizes hint for the responsive srcset, and what to render instead when the image fails.
+ * Output: a fill-positioned next/image, or the fallback once loading has failed. The parent element must be positioned.
  */
 export function DriveImage({
   fileId,
   alt,
   className,
+  sizes = "160px",
   fallback = null,
 }: {
   fileId: string;
   alt: string;
   className?: string;
+  sizes?: string;
   fallback?: React.ReactNode;
 }) {
   const [failed, setFailed] = useState(false);
@@ -26,14 +29,13 @@ export function DriveImage({
   if (failed) return <>{fallback}</>;
 
   return (
-    // Plain <img>, not next/image: the source is a Google endpoint that redirects to a signed CDN URL, so there is no stable remote pattern to whitelist and nothing for the optimizer to usefully cache.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       src={driveThumbnailUrl(fileId)}
       alt={alt}
+      fill
+      sizes={sizes}
       className={className}
-      referrerPolicy="no-referrer"
-      loading="lazy"
+      unoptimized={false}
       onError={() => setFailed(true)}
     />
   );

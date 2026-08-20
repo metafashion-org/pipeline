@@ -103,15 +103,20 @@ export function TaskCard({ task, role }: TaskCardProps) {
                         setDrawerOpen(true);
                     }
                 }}
-                className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-all"
+                className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]"
             >
                 <div className={`w-full h-24 overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>
                     {coverRef?.fileId && (
-                        <DriveImage
-                            fileId={coverRef.fileId}
-                            alt=""
-                            className="absolute inset-0 h-full w-full object-cover after:absolute after:inset-0 after:bg-black/40"
-                        />
+                        <>
+                            <DriveImage
+                                fileId={coverRef.fileId}
+                                alt=""
+                                sizes="280px"
+                                className="object-cover"
+                            />
+                            {/* Darkens the cover so the SKU chip and item name stay readable over any image. */}
+                            <div className="absolute inset-0 bg-black/40" />
+                        </>
                     )}
                     <div className="relative flex items-center justify-between">
                         <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
