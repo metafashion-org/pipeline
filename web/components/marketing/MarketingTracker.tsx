@@ -163,85 +163,125 @@ export function MarketingTracker({
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-hidden">
-      <div className="flex items-center justify-between bg-muted/40 p-3 rounded-lg text-sm shrink-0">
+      <div className="flex items-center justify-between gap-3 bg-muted/40 p-3 rounded-lg text-sm shrink-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold mr-1">Quick Filters:</span>
-          <Badge
-            variant={showUnmarketed ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => setShowUnmarketed((v) => !v)}
-          >
-            Uploaded Not Marketed ({unmarketedAssets.length})
-          </Badge>
-          <Badge
-            variant={quickFilter === "postedThisWeek" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("postedThisWeek")}
-          >
-            Posted This Week
-          </Badge>
-          <Badge
-            variant={quickFilter === "needs_repost" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("needs_repost")}
-          >
-            Needs Repost
-          </Badge>
-          <Badge
-            variant={quickFilter === "high_performing" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("high_performing")}
-          >
-            High Performing
-          </Badge>
+          {/* Filters only narrow the logged activity, so they are pointless until something has been logged. */}
+          {updates.length > 0 && (
+            <>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-1">Filter</span>
+              <Badge
+                variant={quickFilter === "postedThisWeek" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("postedThisWeek")}
+              >
+                Posted this week
+              </Badge>
+              <Badge
+                variant={quickFilter === "needs_repost" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("needs_repost")}
+              >
+                Needs repost
+              </Badge>
+              <Badge
+                variant={quickFilter === "high_performing" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("high_performing")}
+              >
+                High performing
+              </Badge>
+              {quickFilter && (
+                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setQuickFilter(null)}>
+                  Clear
+                </Button>
+              )}
+            </>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs text-muted-foreground">
-            Showing {visibleUpdates.length} of {updates.length} campaign logs
-          </span>
-          <div className="flex gap-1">
-            <Button size="sm" variant={view === "status" ? "default" : "outline"} onClick={() => setView("status")}>
-              By Status
-            </Button>
-            <Button size="sm" variant={view === "asset" ? "default" : "outline"} onClick={() => setView("asset")}>
-              By Asset
-            </Button>
-          </div>
+          {updates.length > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                {visibleUpdates.length} of {updates.length} posts
+              </span>
+              <div className="flex gap-1">
+                <Button size="sm" variant={view === "status" ? "default" : "outline"} onClick={() => setView("status")}>
+                  By status
+                </Button>
+                <Button size="sm" variant={view === "asset" ? "default" : "outline"} onClick={() => setView("asset")}>
+                  By asset
+                </Button>
+              </div>
+            </>
+          )}
           <Button size="sm" onClick={() => openLogDialog()}>
             Log marketing activity
           </Button>
         </div>
       </div>
 
-      {showUnmarketed && (
+      {/* The queue of assets that are live on Roblox but have no marketing yet. This is the actual to-do list for this page, so it is a list of rows with an action on each rather than a filter toggle hiding a row of badges. */}
+      {unmarketedAssets.length > 0 && (
         <Card className={cardClass + " shrink-0"}>
-          <CardHeader>
-            <CardTitle className="text-sm">Uploaded, Not Yet Marketed</CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">
+                Waiting on marketing
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {unmarketedAssets.length} uploaded to Roblox with nothing posted yet
+                </span>
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowUnmarketed((v) => !v)}>
+                {showUnmarketed ? "Hide" : `Show all ${unmarketedAssets.length}`}
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
-            {unmarketedAssets.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing waiting on marketing right now.</p>
-            ) : (
-              <div className="flex gap-2 flex-wrap">
-                {unmarketedAssets.map((a) => (
-                  <Badge
-                    key={a.id}
-                    variant="outline"
-                    className="cursor-pointer"
-                    onClick={() => openLogDialog(a.sku)}
-                  >
-                    {a.sku} - {a.itemName}
-                  </Badge>
-                ))}
-              </div>
+          <CardContent className="pt-0">
+            <div className="divide-y">
+              {(showUnmarketed ? unmarketedAssets : unmarketedAssets.slice(0, 5)).map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{a.itemName}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {a.sku}
+                      {a.category ? ` - ${a.category}` : ""}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => openLogDialog(a.sku)}>
+                    Log activity
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {!showUnmarketed && unmarketedAssets.length > 5 && (
+              <p className="pt-2 text-xs text-muted-foreground">
+                {unmarketedAssets.length - 5} more waiting.
+              </p>
             )}
           </CardContent>
         </Card>
       )}
 
       {visibleUpdates.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-          No marketing updates match the current filters.
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-center">
+          {updates.length === 0 ? (
+            <>
+              <p className="text-sm font-medium">No marketing activity logged yet</p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Every post, platform and link recorded here is tied to an asset. Start with one of the assets waiting above.
+              </p>
+              <Button size="sm" className="mt-1" onClick={() => openLogDialog()}>
+                Log marketing activity
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Nothing matches this filter</p>
+              <Button size="sm" variant="outline" className="mt-1" onClick={() => setQuickFilter(null)}>
+                Clear filter
+              </Button>
+            </>
+          )}
         </div>
       ) : view === "status" ? (
         <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
