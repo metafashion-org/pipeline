@@ -74,7 +74,7 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
     })
     .where(eq(assets.id, assetId));
 
-  // 6. Queue the assignment email — admin-configured brief fields (P3-T9),
+  // 6. Queue the assignment email - admin-configured brief fields (P3-T9),
   // real template (P2-T18), real queue (P2-T17). Without this step the
   // three pieces exist but are never actually called together (P2-T16b).
   const briefFields = await getBriefFieldsForAsset(assetId);

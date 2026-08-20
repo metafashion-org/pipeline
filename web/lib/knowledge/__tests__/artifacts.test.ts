@@ -11,7 +11,7 @@ async function testArtifactIdGenerator() {
   assert.strictEqual(getArtifactPrefix("style_guide"), "STYLE", "style_guide prefix must be STYLE");
   assert.strictEqual(getArtifactPrefix("custom_type"), "CUST", "custom prefix fallback must use first 4 letters");
 
-  // 2. ID generation against the live DB — no failure path to catch here, this
+  // 2. ID generation against the live DB - no failure path to catch here, this
   // call is expected to succeed whenever the DB is reachable.
   const id = await generateTypedArtifactId("tech_spec");
   assert.ok(id.startsWith("SPEC-"), "Generated ID must start with SPEC-");

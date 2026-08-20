@@ -7,7 +7,7 @@ import { assignArtistToAsset } from "../assignment-service";
 import { eq } from "drizzle-orm";
 
 // Regression test for P2-T16b: assignArtistToAsset() used to update the DB
-// and stop — no email was ever queued, so the P2-T17/P2-T18/P3-T9 pieces
+// and stop - no email was ever queued, so the P2-T17/P2-T18/P3-T9 pieces
 // were each independently tested but never actually called together.
 const TEST_SKU = "__p2_t16b_test_sku__";
 const TEST_ARTIST_EMAIL = "__p2_t16b_test_artist__@example.com";

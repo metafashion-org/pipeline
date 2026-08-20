@@ -41,7 +41,7 @@ async function testBriefFieldSelector() {
     });
     assert.ok(emailWithField.includes("Deadline"), "Rendered email should include the Deadline row when enabled");
 
-    // 2. Toggling includeInArtistEmail off changes what the NEXT email contains — no code change
+    // 2. Toggling includeInArtistEmail off changes what the NEXT email contains - no code change
     await updateCurationFieldConfig("deadline", { includeInArtistEmail: false });
     const fieldsOff = await getBriefFieldsForAsset(asset.id);
     assert.ok(!fieldsOff.find((f) => f.key === "deadline"), "deadline should be excluded once toggled off");

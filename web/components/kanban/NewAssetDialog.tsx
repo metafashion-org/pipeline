@@ -63,7 +63,7 @@ export function NewAssetDialog({ onCreated }: NewAssetDialogProps) {
                 throw new Error(result.error || "Failed to create asset");
             }
 
-            toast.success(`Task created — SKU ${result.asset.sku}`);
+            toast.success(`Task created - SKU ${result.asset.sku}`);
             handleOpenChange(false);
             onCreated();
         } catch (error: unknown) {

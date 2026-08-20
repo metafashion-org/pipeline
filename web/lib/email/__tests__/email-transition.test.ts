@@ -20,7 +20,7 @@ async function testEmailStatusTransition() {
 
   await cleanup();
 
-  // currentStatus defaults to "unassigned" — dispatch is expected to flip it to "assigned".
+  // currentStatus defaults to "unassigned" - dispatch is expected to flip it to "assigned".
   const [asset] = await db
     .insert(assets)
     .values({ sku: TEST_SKU, itemName: "Email Transition Test Asset" })
@@ -35,7 +35,7 @@ async function testEmailStatusTransition() {
     });
 
     // No senderFn passed, so processEmailQueue() falls back to its safe fake
-    // sender (fake message ID, no real Gmail call) — safe to run for real here.
+    // sender (fake message ID, no real Gmail call) - safe to run for real here.
     const results = await processEmailQueue();
     const ourResult = results.find((r) => r.id === queued.id);
     assert.ok(ourResult, "processEmailQueue() result should include our queued item");

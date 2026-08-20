@@ -38,7 +38,7 @@ if (TEST_LOGIN_ENABLED) {
             async authorize(credentials, req) {
                 // Gate C: defense-in-depth, checked per request. Only reliable when edge routing
                 // guarantees an external request can never carry Host: localhost/127.0.0.1 by the
-                // time it reaches this code — Host is attacker-controlled at the HTTP level itself,
+                // time it reaches this code - Host is attacker-controlled at the HTTP level itself,
                 // so this check alone is not a security boundary, gates A/B/D are.
                 const host = req.headers?.host ?? "";
                 if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return null;

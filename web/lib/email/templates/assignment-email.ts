@@ -15,7 +15,7 @@ export interface AssignmentEmailData {
   recolours?: string | null;
   refImageUrls?: string[];
   wipInstruction?: string;
-  // Admin-toggleable via curation_field_config.includeInArtistEmail (P3-T9) —
+  // Admin-toggleable via curation_field_config.includeInArtistEmail (P3-T9) -
   // rendered as extra rows in the spec table, with no code change required
   // to add/remove a field from future emails.
   briefFields?: AssignmentEmailBriefField[];

@@ -4,7 +4,7 @@ import * as dotenv from "dotenv";
 import * as schema from "./schema";
 
 // Next.js loads .env.local automatically at runtime, so this is a no-op there
-// (dotenv never overrides an already-set var) — but standalone scripts run via
+// (dotenv never overrides an already-set var) - but standalone scripts run via
 // plain `tsx` (migrations, __tests__/*.test.ts) don't get that for free, and
 // silently fall back to empty-string env vars without this.
 dotenv.config({ path: ".env.local" });

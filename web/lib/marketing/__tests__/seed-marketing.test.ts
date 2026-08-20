@@ -5,7 +5,7 @@ import { marketingStatusConfig } from "@/lib/db/schema/marketing_status_config";
 import { asc, eq, inArray } from "drizzle-orm";
 
 // Expected keys and labels are written out literally here rather than imported from
-// INITIAL_MARKETING_STATUSES in ../marketing-service — comparing the seed's source array to itself
+// INITIAL_MARKETING_STATUSES in ../marketing-service - comparing the seed's source array to itself
 // would pass even if the seed function wrote nothing at all. This is the one check that actually
 // catches the seed drifting from what the app expects.
 const EXPECTED = [

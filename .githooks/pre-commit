@@ -1,30 +1,43 @@
 #!/bin/sh
-# Pre-commit gate: the app must still build, and no dead code may be introduced.
-#
-# Enabled by `git config core.hooksPath .githooks`, which web/package.json's "prepare"
-# script runs automatically on install. No hook manager or extra dependency involved.
-#
-# Skip a single commit with `git commit --no-verify` when you genuinely need to.
-set -e
+# GITBUTLER_MANAGED_HOOK_V1
+# This hook is managed by GitButler to prevent accidental commits on the workspace branch.
+# Your original pre-commit hook has been preserved as 'pre-commit-user'.
 
-# Nothing under web/ staged means nothing here can break, so don't spend the time.
-if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '^web/'; then
-  exit 0
+HOOKS_DIR=$(dirname "$0")
+
+# Run user's hook first if it exists - if it fails, stop here
+if [ -x "$HOOKS_DIR/pre-commit-user" ]; then
+    "$HOOKS_DIR/pre-commit-user" "$@" || exit $?
 fi
 
-cd "$(git rev-parse --show-toplevel)/web"
+# Get the current branch name
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
 
-echo "pre-commit: checking for dead code..."
-pnpm run --silent deadcode
+if [ "$BRANCH" = "gitbutler/workspace" ]; then
+    echo ""
+    echo "GITBUTLER_ERROR: Cannot commit directly to gitbutler/workspace branch."
+    echo ""
+    echo "GitButler manages commits on this branch. Please use GitButler to commit your changes:"
+    echo "  - Use the GitButler app to create commits"
+    echo "  - Or run 'but commit' from the command line"
+    echo ""
+    echo "If you want to exit GitButler mode and use normal git:"
+    echo "  - Run 'but teardown' to switch to a regular branch"
+    echo "  - Or directly checkout another branch: git checkout <branch>"
+    echo ""
+    echo "If you no longer have the GitButler CLI installed, you can simply remove this hook and checkout another branch:"
+    printf '  rm "%s/pre-commit"\n' "$HOOKS_DIR"
+    echo ""
+    exit 1
+fi
 
-echo "pre-commit: building..."
-# The build reads env at build time; these are placeholders so a developer without a
-# populated .env.local still gets a meaningful build check rather than an env error.
-NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}" \
-NEXTAUTH_URL="${NEXTAUTH_URL:-http://localhost:3000}" \
-NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-dummy-nextauth-secret}" \
-GOOGLE_OAUTH_CLIENT_ID="${GOOGLE_OAUTH_CLIENT_ID:-dummy-client-id}" \
-GOOGLE_OAUTH_CLIENT_SECRET="${GOOGLE_OAUTH_CLIENT_SECRET:-dummy-client-secret}" \
-pnpm run --silent build
+# Not on workspace branch - run user's original hook if it exists
+if [ -x "$HOOKS_DIR/pre-commit-user" ]; then
+    echo ""
+    echo "WARNING: GitButler's pre-commit hook is still installed but you're not on gitbutler/workspace."
+    echo "If you're no longer using GitButler, you can restore your original hook:"
+    printf '  mv "%s/pre-commit-user" "%s/pre-commit"\n' "$HOOKS_DIR" "$HOOKS_DIR"
+    echo ""
+fi
 
-echo "pre-commit: ok"
+exit 0

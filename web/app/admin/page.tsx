@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-// Deterministic per-status color accent, cycled by sortOrder — no `color` column
+// Deterministic per-status color accent, cycled by sortOrder - no `color` column
 // exists on `statuses`, so this stays correct if statuses are added/reordered
 // later rather than needing a hardcoded per-status map.
 const STATUS_ACCENTS = [

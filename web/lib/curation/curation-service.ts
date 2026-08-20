@@ -39,7 +39,7 @@ export interface UpdateCurationFieldConfigInput {
 }
 
 // Toggling includeInArtistEmail here changes what the *next* assignment email
-// contains via getBriefFieldsForAsset() below — no code change needed (P3-T9).
+// contains via getBriefFieldsForAsset() below - no code change needed (P3-T9).
 export async function updateCurationFieldConfig(fieldKey: string, input: UpdateCurationFieldConfigInput) {
   const [row] = await db
     .update(curationFieldConfig)
@@ -219,7 +219,7 @@ export async function updateAssetPaymentDetails(
   note?: string
 ) {
   if (updates.currency && !SUPPORTED_CURRENCIES.includes(updates.currency)) {
-    throw new Error(`Unsupported currency '${updates.currency}' — must be one of ${SUPPORTED_CURRENCIES.join(", ")}`);
+    throw new Error(`Unsupported currency '${updates.currency}' - must be one of ${SUPPORTED_CURRENCIES.join(", ")}`);
   }
 
   const assetRecord = await db.select().from(assets).where(eq(assets.sku, sku)).limit(1);

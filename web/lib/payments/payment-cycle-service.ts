@@ -4,7 +4,7 @@ import { paymentCycleItems } from "@/lib/db/schema/payment_cycle_items";
 import { assets } from "@/lib/db/schema/assets";
 import { eq, inArray } from "drizzle-orm";
 
-// Same statuses app/admin/archive/page.tsx's Pending Payments section reads —
+// Same statuses app/admin/archive/page.tsx's Pending Payments section reads -
 // client pays out on the 15th and the last day of the month.
 export const PENDING_PAYMENT_STATUSES = ["marked_for_payment", "uploaded_to_roblox"];
 

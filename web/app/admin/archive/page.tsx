@@ -90,7 +90,7 @@ export default async function ArchivePage() {
         // Pending Payments: who to pay, how much, and since when they entered
         // marked_for_payment/uploaded_to_roblox. This used to be a live continuous
         // query, but the client only pays out on a scheduled pull (the 15th and the
-        // last day of the month, see lib/payments/payment-cycle-service.ts) — so this
+        // last day of the month, see lib/payments/payment-cycle-service.ts) - so this
         // now reads the latest payment_cycles run's items instead, joined against
         // current asset data for fee/receipt-attached status since payment can still
         // be marked done after the pull ran.
@@ -165,7 +165,7 @@ export default async function ArchivePage() {
                         <CardTitle>Pending Payments</CardTitle>
                         <p className="text-sm text-muted-foreground">
                             {latestCycleDate
-                                ? `Who to pay, how much, and since when — from the ${new Date(latestCycleDate).toLocaleDateString()} payout pull. Client pays out on the 15th and the last day of each month.`
+                                ? `Who to pay, how much, and since when - from the ${new Date(latestCycleDate).toLocaleDateString()} payout pull. Client pays out on the 15th and the last day of each month.`
                                 : "Who to pay, how much, and since when. Client pays out on the 15th and the last day of each month."}
                         </p>
                     </div>

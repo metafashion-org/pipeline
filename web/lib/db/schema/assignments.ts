@@ -14,7 +14,7 @@ export const assignments = pgTable("assignments", {
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow().notNull(),
   unassignedAt: timestamp("unassigned_at", { withTimezone: true }),
   unassignedReason: text("unassigned_reason"),
-  // P5-T1: AI-generated brief draft. Never canonical on its own — only an explicit
+  // P5-T1: AI-generated brief draft. Never canonical on its own - only an explicit
   // accept action (acceptAiBriefDraft in ai/brief-generation-service.ts) copies it
   // into briefNotes above, which is the field the assignment email actually uses.
   aiGeneratedBriefDraft: text("ai_generated_brief_draft"),

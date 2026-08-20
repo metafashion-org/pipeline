@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Server-side OG image fetcher — avoids browser CORS since this runs server-side.
+// Server-side OG image fetcher - avoids browser CORS since this runs server-side.
 // Tries og:image first, then twitter:image as fallback.
 export async function GET(request: NextRequest) {
     const url = request.nextUrl.searchParams.get("url");

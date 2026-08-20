@@ -100,7 +100,7 @@ export function validateFormValues(fields: FormFieldConfig[], values: Record<str
   };
 }
 
-// Admin form-builder CRUD (P2-T8 UI backing) — the pieces getFormDefinitionWithFields/
+// Admin form-builder CRUD (P2-T8 UI backing) - the pieces getFormDefinitionWithFields/
 // submitFormData above didn't need but the admin list/create/edit UI does.
 
 export interface FormDefinitionSummary {
@@ -170,7 +170,7 @@ export async function deleteFormField(fieldId: string) {
   await db.delete(formFields).where(eq(formFields.id, fieldId));
 }
 
-// Bulk-sets sortOrder to match the given field ID order — the whole list is
+// Bulk-sets sortOrder to match the given field ID order - the whole list is
 // passed each time rather than a single up/down swap, since that's what a
 // drag-reorder or move-up/down UI naturally produces in one action.
 export async function reorderFormFields(formDefinitionId: string, orderedFieldIds: string[]) {
