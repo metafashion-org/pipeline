@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
 
@@ -360,8 +361,15 @@ export function PersonnelManager({
                     <TableCell>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm" disabled={p.id === currentPersonnelId}>
-                            Delete
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            disabled={p.id === currentPersonnelId}
+                            aria-label={`Delete ${p.name}`}
+                            title={p.id === currentPersonnelId ? "You can't delete your own account" : `Delete ${p.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
