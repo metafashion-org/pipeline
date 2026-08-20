@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -41,6 +42,7 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
 
@@ -163,11 +165,10 @@ export function MarketingTracker({
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-hidden">
+      {/* The toolbar filters and switches views, so it only exists once something has been logged. Until then the empty state below carries the single call to action. */}
+      {updates.length > 0 && (
       <div className="flex items-center justify-between gap-3 bg-muted/40 p-3 rounded-lg text-sm shrink-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Filters only narrow the logged activity, so they are pointless until something has been logged. */}
-          {updates.length > 0 && (
-            <>
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-1">Filter</span>
               <Badge
                 variant={quickFilter === "postedThisWeek" ? "default" : "outline"}
@@ -195,35 +196,30 @@ export function MarketingTracker({
                   Clear
                 </Button>
               )}
-            </>
-          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {updates.length > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground">
-                {visibleUpdates.length} of {updates.length} posts
-              </span>
-              <div className="flex gap-1">
-                <Button size="sm" variant={view === "status" ? "default" : "outline"} onClick={() => setView("status")}>
-                  By status
-                </Button>
-                <Button size="sm" variant={view === "asset" ? "default" : "outline"} onClick={() => setView("asset")}>
-                  By asset
-                </Button>
-              </div>
-            </>
-          )}
+          <span className="text-xs text-muted-foreground">
+            {visibleUpdates.length} of {updates.length} posts
+          </span>
+          <div className="flex gap-1">
+            <Button size="sm" variant={view === "status" ? "default" : "outline"} onClick={() => setView("status")}>
+              By status
+            </Button>
+            <Button size="sm" variant={view === "asset" ? "default" : "outline"} onClick={() => setView("asset")}>
+              By asset
+            </Button>
+          </div>
           <Button size="sm" onClick={() => openLogDialog()}>
             Log marketing activity
           </Button>
         </div>
       </div>
+      )}
 
       {/* The queue of assets that are live on Roblox but have no marketing yet. This is the actual to-do list for this page, so it is a list of rows with an action on each rather than a filter toggle hiding a row of badges. */}
       {unmarketedAssets.length > 0 && (
         <Card className={cardClass + " shrink-0"}>
-          <CardHeader className="pb-3">
+          <CardHeader className={showUnmarketed ? "pb-3" : "py-3"}>
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm">
                 Waiting on marketing
@@ -231,34 +227,39 @@ export function MarketingTracker({
                   {unmarketedAssets.length} uploaded to Roblox with nothing posted yet
                 </span>
               </CardTitle>
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowUnmarketed((v) => !v)}>
-                {showUnmarketed ? "Hide" : `Show all ${unmarketedAssets.length}`}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={() => setShowUnmarketed((v) => !v)}
+                aria-expanded={showUnmarketed}
+              >
+                {showUnmarketed ? "Hide" : "Show"}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showUnmarketed ? "rotate-180" : ""}`} />
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div className="divide-y">
-              {(showUnmarketed ? unmarketedAssets : unmarketedAssets.slice(0, 5)).map((a) => (
-                <div key={a.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{a.itemName}</p>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {a.sku}
-                      {a.category ? ` - ${a.category}` : ""}
-                    </p>
+          {showUnmarketed && (
+            <CardContent className="pt-0">
+              {/* Capped so a long queue scrolls inside the card instead of pushing the logged activity off screen. */}
+              <div className="divide-y max-h-64 overflow-y-auto">
+                {unmarketedAssets.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{a.itemName}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {a.sku}
+                        {a.category ? ` - ${a.category}` : ""}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => openLogDialog(a.sku)}>
+                      Log activity
+                    </Button>
                   </div>
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => openLogDialog(a.sku)}>
-                    Log activity
-                  </Button>
-                </div>
-              ))}
-            </div>
-            {!showUnmarketed && unmarketedAssets.length > 5 && (
-              <p className="pt-2 text-xs text-muted-foreground">
-                {unmarketedAssets.length - 5} more waiting.
-              </p>
-            )}
-          </CardContent>
+                ))}
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 
@@ -418,6 +419,8 @@ function LogMarketingDialog({
     if (open) setSku(initialSku);
   }, [open, initialSku]);
 
+  const assetNameBySku = useMemo(() => new Map(assetOptions.map((a) => [a.sku, a.itemName])), [assetOptions]);
+
   function reset() {
     setSku(null);
     setPlatform("");
@@ -493,15 +496,24 @@ function LogMarketingDialog({
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <Label>Asset</Label>
-            <Combobox value={sku} onValueChange={setSku}>
+            <Label>
+              Asset<span className="text-destructive"> *</span>
+            </Label>
+            <Combobox
+              value={sku}
+              onValueChange={setSku}
+              itemToStringLabel={(value) => assetNameBySku.get(value as string) ?? (value as string)}
+            >
               <ComboboxInput placeholder="Select an asset..." />
               <ComboboxContent>
                 <ComboboxList>
                   <ComboboxEmpty>No assets found.</ComboboxEmpty>
                   {assetOptions.map((a) => (
                     <ComboboxItem key={a.sku} value={a.sku}>
-                      {a.sku} - {a.itemName}
+                      <div className="flex flex-col">
+                        <span>{a.itemName}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{a.sku}</span>
+                      </div>
                     </ComboboxItem>
                   ))}
                 </ComboboxList>
@@ -509,22 +521,34 @@ function LogMarketingDialog({
             </Combobox>
           </div>
           <div>
-            <Label htmlFor="platform-input">Platform</Label>
+            <Label htmlFor="platform-input">
+              Platform<span className="text-destructive"> *</span>
+            </Label>
+            <div className="flex gap-1.5 flex-wrap mt-1 mb-1.5">
+              {/* Real buttons, not clickable spans, so the quick picks are reachable by keyboard like every other control in the form. */}
+              {COMMON_PLATFORMS.map((p) => (
+                <Button
+                  key={p}
+                  type="button"
+                  size="sm"
+                  variant={platform === p ? "default" : "outline"}
+                  className="h-7 rounded-full px-3 text-xs font-normal"
+                  aria-pressed={platform === p}
+                  onClick={() => setPlatform(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+            </div>
             <Input
               id="platform-input"
-              list="platform-suggestions"
-              placeholder="Pinterest, Instagram, ..."
+              placeholder="Or type another platform"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
             />
-            <datalist id="platform-suggestions">
-              {COMMON_PLATFORMS.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
           </div>
           <div>
-            <Label htmlFor="posturl-input">Post URL (optional)</Label>
+            <Label htmlFor="posturl-input">Post URL</Label>
             <Input
               id="posturl-input"
               type="url"
@@ -533,37 +557,39 @@ function LogMarketingDialog({
               onChange={(e) => setPostUrl(e.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="postedat-input">Posted date (optional)</Label>
-            <Input
-              id="postedat-input"
-              type="date"
-              value={postedAt}
-              onChange={(e) => setPostedAt(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="postedat-input">Posted date</Label>
+              <Input
+                id="postedat-input"
+                type="date"
+                value={postedAt}
+                onChange={(e) => setPostedAt(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={marketingStatus} onValueChange={setMarketingStatus}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Set automatically from whether a link is present" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusColumns.map((c) => (
+                    <SelectItem key={c.statusKey} value={c.statusKey}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div>
-            <Label>Status (optional)</Label>
-            <Select value={marketingStatus} onValueChange={setMarketingStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="Auto (based on post URL)" />
-              </SelectTrigger>
-              <SelectContent>
-                {statusColumns.map((c) => (
-                  <SelectItem key={c.statusKey} value={c.statusKey}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="caption-input">Caption</Label>
+            <Textarea id="caption-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="caption-input">Caption (optional)</Label>
-            <Input id="caption-input" value={caption} onChange={(e) => setCaption(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="notes-input">Notes (optional)</Label>
-            <Input id="notes-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Label htmlFor="notes-input">Notes</Label>
+            <Textarea id="notes-input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
         </div>
         <DialogFooter>
