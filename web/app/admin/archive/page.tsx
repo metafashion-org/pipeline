@@ -6,7 +6,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { paymentCycles } from "@/lib/db/schema/payment_cycles";
 import { paymentCycleItems } from "@/lib/db/schema/payment_cycle_items";
-import { eq, and, lte, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc } from "drizzle-orm";
 import {
     Table,
     TableBody,
@@ -22,6 +22,7 @@ import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { PendingPaymentControls } from "@/components/archive/PendingPaymentControls";
 import { ArchiveTable } from "@/components/archive/ArchiveTable";
+import { getArchivedAssets, getArchivedTotal } from "@/lib/archive/archive-service";
 import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -41,17 +42,6 @@ function formatFee(fee: string | null, currency: string | null): string {
   return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
 }
 
-interface ArchivedTask {
-    id: string;
-    sku: string;
-    title: string;
-    updatedAt: Date;
-    assignedTo: string | null;
-    feeAmount: string | null;
-    currency: string | null;
-    paymentReceiptUrl: string | null;
-}
-
 interface PendingPayment {
     id: string;
     sku: string;
@@ -64,7 +54,12 @@ interface PendingPayment {
     since: Date | null;
 }
 
-export default async function ArchivePage() {
+export default async function ArchivePage({
+    searchParams,
+}: {
+    searchParams: Promise<{ q?: string; month?: string }>;
+}) {
+    const filters = await searchParams;
     const session = await getServerSession(authOptions);
 
     if (!session || session.user?.role !== "admin") {
@@ -74,43 +69,15 @@ export default async function ArchivePage() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    let tasks: ArchivedTask[] = [];
-    const paidAtByAssetId = new Map<string, Date>();
+    let archive: Awaited<ReturnType<typeof getArchivedAssets>> = { rows: [], total: 0, months: [], truncated: false };
+    let archiveTotal: Awaited<ReturnType<typeof getArchivedTotal>> = { total: 0, currencies: [] };
     let pendingPayments: PendingPayment[] = [];
     let latestCycleDate: string | null = null;
     try {
-        const rows = await db
-            .select({
-                id: assets.id,
-                sku: assets.sku,
-                title: assets.itemName,
-                updatedAt: assets.updatedAt,
-                assignedTo: personnel.name,
-                feeAmount: assets.feeAmount,
-                currency: assets.currency,
-                paymentReceiptUrl: assets.paymentReceiptUrl,
-            })
-            .from(assets)
-            .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
-            .where(and(eq(assets.currentStatus, "payment_done"), lte(assets.updatedAt, sevenDaysAgo)));
-
-        tasks = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-        // When each asset actually reached payment_done, which is what the month filter should group by.
-        // assets.updatedAt only records the last time the row was touched for any reason.
-        if (rows.length > 0) {
-            const paidRows = await db
-                .select({ assetId: statusHistory.assetId, createdAt: statusHistory.createdAt })
-                .from(statusHistory)
-                .where(and(
-                    inArray(statusHistory.assetId, rows.map((r) => r.id)),
-                    eq(statusHistory.toStatus, "payment_done")
-                ))
-                .orderBy(desc(statusHistory.createdAt));
-            for (const row of paidRows) {
-                if (!paidAtByAssetId.has(row.assetId)) paidAtByAssetId.set(row.assetId, row.createdAt);
-            }
-        }
+        [archive, archiveTotal] = await Promise.all([
+            getArchivedAssets({ q: filters.q, month: filters.month }),
+            getArchivedTotal({ q: filters.q, month: filters.month }),
+        ]);
 
         // Pending Payments: who to pay, how much, and since when they entered
         // marked_for_payment/uploaded_to_roblox. This used to be a live continuous
@@ -255,17 +222,21 @@ export default async function ArchivePage() {
             <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="pt-6">
                 <ArchiveTable
-                    rows={tasks.map((t) => ({
-                        id: t.id,
-                        sku: t.sku,
-                        title: t.title,
-                        assignedTo: t.assignedTo,
-                        feeAmount: t.feeAmount,
-                        currency: t.currency,
-                        paymentReceiptUrl: t.paymentReceiptUrl,
-                        updatedAt: t.updatedAt.toISOString(),
-                        paidAt: paidAtByAssetId.get(t.id)?.toISOString() ?? null,
+                    rows={archive.rows.map((r) => ({
+                        id: r.id,
+                        sku: r.sku,
+                        title: r.title,
+                        assignedTo: r.assignedTo,
+                        feeAmount: r.feeAmount,
+                        currency: r.currency,
+                        paymentReceiptUrl: r.paymentReceiptUrl,
+                        paidAt: r.paidAt ? new Date(r.paidAt).toISOString() : null,
                     }))}
+                    total={archive.total}
+                    months={archive.months}
+                    truncated={archive.truncated}
+                    paidTotal={archiveTotal.total}
+                    paidCurrencies={archiveTotal.currencies}
                 />
                 </CardContent>
             </Card>

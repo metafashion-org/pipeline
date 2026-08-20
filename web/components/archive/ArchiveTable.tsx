@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
     Table,
     TableBody,
@@ -19,7 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ExternalLink, Search } from "lucide-react";
+import { ExternalLink, Loader2, Search } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 
 export interface ArchivedTaskRow {
@@ -27,7 +28,6 @@ export interface ArchivedTaskRow {
     sku: string;
     title: string;
     paidAt: string | null;
-    updatedAt: string;
     assignedTo: string | null;
     feeAmount: string | null;
     currency: string | null;
@@ -36,8 +36,8 @@ export interface ArchivedTaskRow {
 
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", INR: "₹", RUB: "₽" };
 
-function formatFee(fee: string | null, currency: string | null): string {
-    if (!fee) return "-";
+function formatFee(fee: string | number | null, currency: string | null): string {
+    if (fee === null || fee === "") return "-";
     const symbol = CURRENCY_SYMBOLS[currency || "USD"] || "";
     const amount = Number(fee);
     return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
@@ -46,48 +46,67 @@ function formatFee(fee: string | null, currency: string | null): string {
 const ALL_MONTHS = "all";
 
 /**
- * Turns a timestamp into the "2026-08" key the month filter groups by, and the label it shows.
- * Payment date is used when there is one, falling back to the last update for rows imported before status history was recorded.
+ * Turns a "2026-08" key into "August 2026".
+ * Built with Date.UTC rather than the local-time constructor: new Date(2026, 7, 1) is local midnight, which formatting in UTC then rolls back into the previous month for anyone east of Greenwich. That is how this label read "July" for August in IST.
  */
-function monthKey(row: ArchivedTaskRow): string {
-    return (row.paidAt || row.updatedAt).slice(0, 7);
-}
-
 function monthLabel(key: string): string {
     const [year, month] = key.split("-");
-    return `${new Date(Number(year), Number(month) - 1, 1).toLocaleString("en-GB", { month: "long", timeZone: "UTC" })} ${year}`;
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+    return `${date.toLocaleString("en-GB", { month: "long", timeZone: "UTC" })} ${year}`;
 }
 
 /**
- * The paid-out archive, with the two things it is actually consulted for: finding a specific item, and finding what was paid in a given month.
- * Filtering happens in the browser because the archive is a bounded set that the page already loads in full; adding a round trip per keystroke would be slower, not faster.
+ * The paid-out archive.
+ *
+ * Filtering runs in SQL rather than the browser, because the archive only ever grows: every asset that gets paid stays in it forever, so filtering client-side would mean shipping the entire history to every visitor. The controls write to the URL and the server component re-queries, which also makes any filtered view shareable and reloadable.
+ *
+ * Input: one capped page of matching rows plus the true totals behind them. Output: the table, the controls, and an honest note when more rows match than were loaded.
  */
-export function ArchiveTable({ rows }: { rows: ArchivedTaskRow[] }) {
-    const [query, setQuery] = useState("");
-    const [month, setMonth] = useState(ALL_MONTHS);
+export function ArchiveTable({
+    rows,
+    total,
+    months,
+    truncated,
+    paidTotal,
+    paidCurrencies,
+}: {
+    rows: ArchivedTaskRow[];
+    total: number;
+    months: string[];
+    truncated: boolean;
+    paidTotal: number;
+    paidCurrencies: string[];
+}) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [isPending, startTransition] = useTransition();
 
-    const months = useMemo(() => {
-        const keys = Array.from(new Set(rows.map(monthKey))).filter(Boolean);
-        return keys.sort().reverse();
-    }, [rows]);
+    const urlQuery = searchParams.get("q") || "";
+    const month = searchParams.get("month") || ALL_MONTHS;
+    const [query, setQuery] = useState(urlQuery);
 
-    const visible = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        return rows.filter((row) => {
-            if (month !== ALL_MONTHS && monthKey(row) !== month) return false;
-            if (!q) return true;
-            return (
-                row.sku.toLowerCase().includes(q) ||
-                row.title.toLowerCase().includes(q) ||
-                (row.assignedTo || "").toLowerCase().includes(q)
-            );
-        });
-    }, [rows, query, month]);
+    // Keep the box in step when the URL changes from elsewhere, such as the back button.
+    useEffect(() => setQuery(urlQuery), [urlQuery]);
 
-    const total = useMemo(
-        () => visible.reduce((sum, r) => sum + (Number(r.feeAmount) || 0), 0),
-        [visible]
-    );
+    function pushParams(next: { q?: string; month?: string }) {
+        const params = new URLSearchParams(searchParams.toString());
+        for (const [key, value] of Object.entries(next)) {
+            if (!value || value === ALL_MONTHS) params.delete(key);
+            else params.set(key, value);
+        }
+        const qs = params.toString();
+        startTransition(() => router.replace(qs ? `?${qs}` : "?", { scroll: false }));
+    }
+
+    // Typing should not fire a query per keystroke, so the URL is only updated once typing pauses.
+    useEffect(() => {
+        if (query === urlQuery) return;
+        const timer = setTimeout(() => pushParams({ q: query }), 300);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [query]);
+
+    const isFiltered = Boolean(urlQuery) || month !== ALL_MONTHS;
 
     return (
         <div className="space-y-3">
@@ -102,7 +121,7 @@ export function ArchiveTable({ rows }: { rows: ArchivedTaskRow[] }) {
                         aria-label="Search the archive"
                     />
                 </div>
-                <Select value={month} onValueChange={setMonth}>
+                <Select value={month} onValueChange={(v) => pushParams({ month: v })}>
                     <SelectTrigger className="h-9 w-[170px]" aria-label="Filter by month">
                         <SelectValue />
                     </SelectTrigger>
@@ -113,16 +132,27 @@ export function ArchiveTable({ rows }: { rows: ArchivedTaskRow[] }) {
                         ))}
                     </SelectContent>
                 </Select>
-                {(query || month !== ALL_MONTHS) && (
-                    <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setMonth(ALL_MONTHS); }}>
+                {isFiltered && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setQuery(""); startTransition(() => router.replace("?", { scroll: false })); }}
+                    >
                         Clear
                     </Button>
                 )}
-                <span className="ml-auto text-xs text-muted-foreground">
-                    {visible.length} of {rows.length}
-                    {total > 0 && <> paid, {formatFee(String(total), visible[0]?.currency || "USD")} total</>}
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {total} paid
+                    {paidTotal > 0 && paidCurrencies.length === 1 && <>, {formatFee(paidTotal, paidCurrencies[0])} total</>}
                 </span>
             </div>
+
+            {truncated && (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    Showing the {rows.length} most recent of {total} matches. Narrow the search or pick a month to see the rest.
+                </p>
+            )}
 
             <Table>
                 <TableHeader>
@@ -136,14 +166,14 @@ export function ArchiveTable({ rows }: { rows: ArchivedTaskRow[] }) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {visible.length === 0 ? (
+                    {rows.length === 0 ? (
                         <TableRow>
                             <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                {rows.length === 0 ? "No archived tasks yet." : "Nothing matches that search."}
+                                {isFiltered ? "Nothing matches that search." : "No archived tasks yet."}
                             </TableCell>
                         </TableRow>
                     ) : (
-                        visible.map((row) => (
+                        rows.map((row) => (
                             <TableRow key={row.id}>
                                 <TableCell className="font-mono text-xs">{row.sku}</TableCell>
                                 <TableCell className="font-medium">{row.title}</TableCell>
@@ -151,9 +181,7 @@ export function ArchiveTable({ rows }: { rows: ArchivedTaskRow[] }) {
                                 <TableCell className="text-right text-sm tabular-nums">
                                     {formatFee(row.feeAmount, row.currency)}
                                 </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                    {formatDate(row.paidAt || row.updatedAt)}
-                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{formatDate(row.paidAt)}</TableCell>
                                 <TableCell>
                                     {row.paymentReceiptUrl ? (
                                         <a
