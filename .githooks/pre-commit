@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pre-commit gate: the app must still build, and no dead code may be introduced.
+#
+# Enabled by `git config core.hooksPath .githooks`, which web/package.json's "prepare"
+# script runs automatically on install. No hook manager or extra dependency involved.
+#
+# Skip a single commit with `git commit --no-verify` when you genuinely need to.
+set -e
+
+# Nothing under web/ staged means nothing here can break, so don't spend the time.
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -q '^web/'; then
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)/web"
+
+echo "pre-commit: checking for dead code..."
+pnpm run --silent deadcode
+
+echo "pre-commit: building..."
+# The build reads env at build time; these are placeholders so a developer without a
+# populated .env.local still gets a meaningful build check rather than an env error.
+NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}" \
+NEXTAUTH_URL="${NEXTAUTH_URL:-http://localhost:3000}" \
+NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-dummy-nextauth-secret}" \
+GOOGLE_OAUTH_CLIENT_ID="${GOOGLE_OAUTH_CLIENT_ID:-dummy-client-id}" \
+GOOGLE_OAUTH_CLIENT_SECRET="${GOOGLE_OAUTH_CLIENT_SECRET:-dummy-client-secret}" \
+pnpm run --silent build
+
+echo "pre-commit: ok"

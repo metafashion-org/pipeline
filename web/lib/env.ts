@@ -17,10 +17,8 @@ const emailListSchema = z.string().min(1).transform((val) => val.split(",").map(
 const serverEnvSchema = z.object({
     GOOGLE_OAUTH_CLIENT_ID: z.string().min(1, "GOOGLE_OAUTH_CLIENT_ID is required"),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1, "GOOGLE_OAUTH_CLIENT_SECRET is required"),
-    // Service account creds for the Drive image proxy (app/api/assets/[skuId]/image) —
+    // Service account creds for the Drive image proxy (app/api/assets/[skuId]/image) -
     // unrelated to the removed Google Sheets integration, this is file storage.
-    GOOGLE_CLIENT_EMAIL: z.string().optional(),
-    GOOGLE_PRIVATE_KEY: z.string().optional(),
     NEXTAUTH_URL: z.url("NEXTAUTH_URL is required"),
     NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET is required"),
     ADMIN_EMAILS: z.string().optional().transform((val) => val ? val.split(",").map((e) => e.trim()) : []),

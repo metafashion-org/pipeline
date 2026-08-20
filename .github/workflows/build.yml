@@ -12,12 +12,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v3
       with:
@@ -34,10 +34,65 @@ jobs:
         NEXT_PUBLIC_APP_URL: "http://localhost:3000"
         GOOGLE_OAUTH_CLIENT_ID: "dummy-client-id"
         GOOGLE_OAUTH_CLIENT_SECRET: "dummy-client-secret"
-        GOOGLE_SPREADSHEET_ID: "dummy-spreadsheet-id"
-        GOOGLE_CLIENT_EMAIL: "dummy@example.com"
-        GOOGLE_PRIVATE_KEY: "dummy-private-key"
         NEXTAUTH_URL: "http://localhost:3000"
         NEXTAUTH_SECRET: "dummy-nextauth-secret"
         ADMIN_EMAILS: "admin@example.com"
         ARTIST_EMAILS: "artist@example.com"
+
+  deadcode:
+    name: Dead Code
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install Dependencies
+      working-directory: ./web
+      run: pnpm install
+
+    # Fails on files nothing imports, declared dependencies nothing uses, and imports of
+    # packages that are not declared. Configuration lives in web/knip.json.
+    #
+    # Unused *exports* are deliberately not part of this gate. The repo has a backlog of
+    # built-but-not-yet-wired functions (final deliverables, knowledge artifacts, publisher)
+    # that are planned work rather than mistakes, and failing on them would mean either
+    # deleting real features or permanently muting the check. Run `pnpm deadcode:all`
+    # locally to see those as well.
+    - name: Check for dead code
+      working-directory: ./web
+      run: pnpm run deadcode
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install Dependencies
+      working-directory: ./web
+      run: pnpm install
+
+    - name: Typecheck
+      working-directory: ./web
+      run: pnpm run typecheck
