@@ -12,46 +12,23 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { AssetFormFields, EMPTY_ASSET_FORM } from "./asset-form-fields";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
-const EMPTY_FORM = {
-    sku: "",
-    itemName: "",
-    category: "",
-    deadline: "",
-    feeAmount: "",
-    currency: "USD",
-    referenceImages: "",
-    recolorReferenceImages: "",
-};
-
-// USD is the schema default and what every existing asset uses; INR is here for the India-based freelancers.
-const CURRENCIES = ["USD", "INR", "EUR"];
-
 /**
  * Creates an asset at status "unassigned".
- * Covers the fields of the assets table that are actually set at creation time: identity, category, deadline, budget, and the reference links the board previews. Status, artist, Gmail threads, marketing and payment fields are all set later by their own flows, so they are deliberately absent here.
+ * Shares its fields with the edit dialog, so anything settable here can be corrected later and the two never drift apart. Status, artist, Gmail threads, marketing and payment fields are all set by their own flows and are deliberately absent.
  * Revalidates the board's "/api/assets" key on success, so it can sit anywhere on the page without being wired to the board component.
  */
 export function NewAssetDialog() {
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [form, setForm] = useState(EMPTY_FORM);
+    const [form, setForm] = useState(EMPTY_ASSET_FORM);
     const { mutate } = useSWRConfig();
 
     const handleOpenChange = (next: boolean) => {
-        if (!next) setForm(EMPTY_FORM);
+        if (!next) setForm(EMPTY_ASSET_FORM);
         setOpen(next);
     };
 
@@ -110,98 +87,7 @@ export function NewAssetDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid gap-3 py-2">
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="new-asset-item-name">Item name</Label>
-                        <Input
-                            id="new-asset-item-name"
-                            placeholder="Coquette Double Heart Necklace"
-                            value={form.itemName}
-                            onChange={(e) => setForm({ ...form, itemName: e.target.value })}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="new-asset-sku">SKU</Label>
-                            <Input
-                                id="new-asset-sku"
-                                placeholder="Auto-generated"
-                                value={form.sku}
-                                onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="new-asset-category">Category</Label>
-                            <Input
-                                id="new-asset-category"
-                                placeholder="Necklace, Vest, ..."
-                                value={form.category}
-                                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="grid gap-1.5 col-span-1">
-                            <Label htmlFor="new-asset-fee">Budget</Label>
-                            <Input
-                                id="new-asset-fee"
-                                type="number"
-                                inputMode="decimal"
-                                min="0"
-                                step="1"
-                                value={form.feeAmount}
-                                onChange={(e) => setForm({ ...form, feeAmount: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-1.5 col-span-1">
-                            <Label htmlFor="new-asset-currency">Currency</Label>
-                            <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
-                                <SelectTrigger id="new-asset-currency" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CURRENCIES.map((c) => (
-                                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5 col-span-1">
-                            <Label htmlFor="new-asset-deadline">Deadline</Label>
-                            <Input
-                                id="new-asset-deadline"
-                                type="date"
-                                value={form.deadline}
-                                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="new-asset-refs">Reference links</Label>
-                        <Textarea
-                            id="new-asset-refs"
-                            rows={2}
-                            placeholder="Paste Drive links, one per line"
-                            value={form.referenceImages}
-                            onChange={(e) => setForm({ ...form, referenceImages: e.target.value })}
-                        />
-                        <p className="text-[11px] text-muted-foreground">Shown as previews on the card and in the asset drawer.</p>
-                    </div>
-
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="new-asset-recolours">Recolour references</Label>
-                        <Textarea
-                            id="new-asset-recolours"
-                            rows={2}
-                            placeholder="Optional, one link per line"
-                            value={form.recolorReferenceImages}
-                            onChange={(e) => setForm({ ...form, recolorReferenceImages: e.target.value })}
-                        />
-                    </div>
-                </div>
+                <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku />
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => handleOpenChange(false)}>

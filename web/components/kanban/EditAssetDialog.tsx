@@ -13,34 +13,23 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import { toLinkText } from "@/lib/assets/file-store";
+import { AssetFormFields, AssetFormValues } from "./asset-form-fields";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
+import { toLinkText } from "@/lib/assets/file-store";
 import { toast } from "sonner";
 
-// USD is the schema default and what every existing asset uses; the others are here for artists paid elsewhere.
-const CURRENCIES = ["USD", "INR", "EUR"];
-
 /**
- * Edits the fields of one asset that people need to correct after creation: name, category, budget, currency, deadline and the reference links.
- * Deliberately absent: status, artist, and the marketing and payment fields, which each have their own flow that records more than a field change.
- * Every save goes through PATCH /api/assets/[sku], which records the before and after of each changed field in the audit log, so the change is visible afterwards in the asset's history rather than being a silent overwrite.
+ * Corrects the fields of an existing asset.
+ * Renders the same fields as the create dialog, minus SKU, which is assigned once and identifies the asset from then on.
+ * Every save goes through PATCH /api/assets/[sku], which records the before and after of each changed field in the audit log, so the change shows up in the asset's history rather than being a silent overwrite.
  */
 export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; onSaved?: () => void }) {
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const { mutate } = useSWRConfig();
 
-    const buildForm = () => ({
+    const buildForm = (): AssetFormValues => ({
+        sku: asset.sku,
         itemName: asset.itemName,
         category: asset.category || "",
         feeAmount: asset.feeAmount || "",
@@ -108,84 +97,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid gap-3 py-2">
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="edit-item-name">Item name</Label>
-                        <Input
-                            id="edit-item-name"
-                            value={form.itemName}
-                            onChange={(e) => setForm({ ...form, itemName: e.target.value })}
-                        />
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="edit-category">Category</Label>
-                        <Input
-                            id="edit-category"
-                            value={form.category}
-                            onChange={(e) => setForm({ ...form, category: e.target.value })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="edit-fee">Budget</Label>
-                            <Input
-                                id="edit-fee"
-                                type="number"
-                                inputMode="decimal"
-                                min="0"
-                                step="1"
-                                placeholder="Not set"
-                                value={form.feeAmount}
-                                onChange={(e) => setForm({ ...form, feeAmount: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="edit-currency">Currency</Label>
-                            <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
-                                <SelectTrigger id="edit-currency" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CURRENCIES.map((c) => (
-                                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="edit-deadline">Deadline</Label>
-                            <Input
-                                id="edit-deadline"
-                                type="date"
-                                value={form.deadline}
-                                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="edit-refs">Reference links</Label>
-                        <Textarea
-                            id="edit-refs"
-                            rows={2}
-                            placeholder="Paste Drive links, one per line"
-                            value={form.referenceImages}
-                            onChange={(e) => setForm({ ...form, referenceImages: e.target.value })}
-                        />
-                        <p className="text-[11px] text-muted-foreground">Shown as previews on the card and above.</p>
-                    </div>
-
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="edit-recolours">Recolour references</Label>
-                        <Textarea
-                            id="edit-recolours"
-                            rows={2}
-                            placeholder="Optional, one link per line"
-                            value={form.recolorReferenceImages}
-                            onChange={(e) => setForm({ ...form, recolorReferenceImages: e.target.value })}
-                        />
-                    </div>
-                </div>
+                <AssetFormFields values={form} onChange={setForm} idPrefix="edit" />
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setOpen(false)}>
