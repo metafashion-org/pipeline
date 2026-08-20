@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getKanbanBoardData, KanbanColumnData } from "@/lib/kanban/kanban-service";
 import { Board } from "@/components/kanban/Board";
+import { NewAssetDialog } from "@/components/kanban/NewAssetDialog";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { redirect } from "next/navigation";
@@ -33,6 +34,7 @@ export default async function AdminBoardPage() {
                     </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    <NewAssetDialog />
                     <ModeToggle />
                     <LogoutButton />
                 </div>

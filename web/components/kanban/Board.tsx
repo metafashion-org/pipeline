@@ -17,7 +17,6 @@ import { Loader2 } from "lucide-react";
 
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
-import { NewAssetDialog } from "./NewAssetDialog";
 import { toast } from "sonner";
 import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
@@ -134,11 +133,6 @@ export function Board({ initialColumns = [], role }: BoardProps) {
 
     return (
         <>
-            {role === "admin" && (
-                <div className="flex justify-end mb-3">
-                    <NewAssetDialog onCreated={() => mutate()} />
-                </div>
-            )}
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}
