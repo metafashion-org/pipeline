@@ -12,6 +12,7 @@ function testAssetDrawerRoleGating() {
     category: "Outerwear",
     currentStatus: "in_progress",
     feeAmount: "150",
+    currency: "USD",
     artistId: "artist-1",
     artistName: "Alice Smith",
     artistEmail: "alice@example.com",

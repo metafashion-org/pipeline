@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toFileStoreEntries, toLinkText } from "./file-store";
 
 export const UpdateAssetSchema = z.object({
   itemName: z.string().trim().min(1).optional(),
@@ -19,6 +20,9 @@ export const UpdateAssetSchema = z.object({
       message: "Invalid deadline date",
     }),
   paymentReceiptUrl: z.string().nullable().optional(),
+  // Pasted blocks of links, the same form the create dialog takes.
+  referenceImages: z.string().nullable().optional(),
+  recolorReferenceImages: z.string().nullable().optional(),
 });
 
 export type AssetUpdatePatch = z.infer<typeof UpdateAssetSchema>;
@@ -30,6 +34,8 @@ export interface AssetCurrentValues {
   currency: string | null;
   deadline: Date | null;
   paymentReceiptUrl: string | null;
+  referenceImages: unknown;
+  recolorReferenceImages: unknown;
 }
 
 export interface AssetChange {
@@ -93,6 +99,22 @@ export function computeAssetChanges(current: AssetCurrentValues, patch: AssetUpd
   if (patch.paymentReceiptUrl !== undefined && patch.paymentReceiptUrl !== current.paymentReceiptUrl) {
     changes.paymentReceiptUrl = { from: current.paymentReceiptUrl, to: patch.paymentReceiptUrl };
     updates.paymentReceiptUrl = patch.paymentReceiptUrl;
+  }
+
+  // Reference links are compared as the normalised URL list rather than the raw text, so reordering
+  // whitespace or re-pasting the same links in the same order is not recorded as an edit.
+  for (const field of ["referenceImages", "recolorReferenceImages"] as const) {
+    const incoming = patch[field];
+    if (incoming === undefined) continue;
+    const nextEntries = toFileStoreEntries(incoming);
+    const nextUrls = nextEntries.map((e) => e.externalId);
+    const currentUrls = toLinkText(current[field]).split("\n").filter(Boolean);
+    if (currentUrls.join("\n") === nextUrls.join("\n")) continue;
+    changes[field] = {
+      from: currentUrls.length ? `${currentUrls.length} link(s)` : "empty",
+      to: nextUrls.length ? `${nextUrls.length} link(s)` : "empty",
+    };
+    updates[field] = nextEntries;
   }
 
   return { changes, updates };

@@ -25,6 +25,7 @@ export interface KanbanAssetCard {
   category: string | null;
   currentStatus: string;
   feeAmount: string | null;
+  currency: string | null;
   artistId: string | null;
   artistName: string | null;
   artistEmail: string | null;
@@ -49,6 +50,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       category: assets.category,
       currentStatus: assets.currentStatus,
       feeAmount: assets.feeAmount,
+      currency: assets.currency,
       artistId: assets.currentArtistId,
       artistName: personnel.name,
       artistEmail: personnel.email,

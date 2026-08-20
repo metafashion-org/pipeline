@@ -10,7 +10,7 @@ function testFeeAmountNumericComparison() {
     feeAmount: "1000.00",
     currency: "USD",
     deadline: null,
-    paymentReceiptUrl: null,
+    paymentReceiptUrl: null, referenceImages: [], recolorReferenceImages: [],
   };
 
   // Same value, differently formatted (Postgres numeric round-trip vs a plain form input) -> no phantom change
@@ -55,7 +55,7 @@ function testNoFieldsSentMeansNoChange() {
     feeAmount: "1000.00",
     currency: "USD",
     deadline: new Date("2026-01-01T00:00:00.000Z"),
-    paymentReceiptUrl: null,
+    paymentReceiptUrl: null, referenceImages: [], recolorReferenceImages: [],
   };
 
   const result = computeAssetChanges(current, { itemName: "Test Item" });

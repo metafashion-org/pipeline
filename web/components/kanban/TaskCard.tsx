@@ -71,6 +71,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
         category: task.category || task.itemCategory || null,
         currentStatus,
         feeAmount: task.feeAmount || task.budget || null,
+        currency: task.currency || "USD",
         artistId: task.artistId || null,
         artistName,
         artistEmail: task.artistEmail || task.emailAddress || null,

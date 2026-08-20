@@ -35,7 +35,9 @@ export async function PATCH(
     feeAmount === undefined &&
     currency === undefined &&
     deadline === undefined &&
-    paymentReceiptUrl === undefined
+    paymentReceiptUrl === undefined &&
+    parseResult.data.referenceImages === undefined &&
+    parseResult.data.recolorReferenceImages === undefined
   ) {
     return NextResponse.json({ error: "At least one field is required" }, { status: 400 });
   }
@@ -54,8 +56,10 @@ export async function PATCH(
       currency: current.currency,
       deadline: current.deadline,
       paymentReceiptUrl: current.paymentReceiptUrl,
+      referenceImages: current.referenceImages,
+      recolorReferenceImages: current.recolorReferenceImages,
     },
-    { itemName, category, feeAmount, currency, deadline, paymentReceiptUrl }
+    parseResult.data
   );
 
   if (Object.keys(updates).length === 0) {

@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { nextSequentialSku } from "@/lib/assets/sku";
+import { toFileStoreEntries } from "@/lib/assets/file-store";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -22,18 +23,6 @@ const CreateAssetSchema = z.object({
   recolorReferenceImages: z.string().optional(),
 });
 
-/**
- * Turns a pasted block of links into the shape the reference columns store.
- * Input: text containing zero or more URLs separated by commas, newlines, or spaces. Output: one { provider, externalId } entry per URL, so parseDriveRefs reads them back the same way it reads sheet-imported rows.
- */
-function toFileStoreEntries(raw: string | undefined): { provider: string; externalId: string }[] {
-  if (!raw) return [];
-  return raw
-    .split(/[\s,]+/)
-    .map((token) => token.trim())
-    .filter((token) => /^https?:\/\//i.test(token))
-    .map((url) => ({ provider: url.includes("drive.google.com") ? "drive" : "filestore", externalId: url }));
-}
 
 export async function GET() {
   try {
