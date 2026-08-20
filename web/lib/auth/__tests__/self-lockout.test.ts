@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { isSelfLockoutAttempt } from "../self-lockout";
+import { isSelfLockoutAttempt, isSelfAdminRemovalAttempt } from "../self-lockout";
 
 // Tests the real guard function imported from lib/auth/self-lockout.ts, which
 // app/api/admin/personnel/[personnelId]/status/route.ts also imports and uses
@@ -33,5 +33,24 @@ function testSelfLockoutGuard() {
   console.log("✓ All self-lockout guard assertions passed cleanly!");
 }
 
+function testSelfAdminRemovalGuard() {
+  console.log("Verifying admin self-role-removal guard logic...");
+
+  const ADMIN_ID = "admin-personnel-id";
+  const OTHER_ID = "other-personnel-id";
+
+  // Self + dropping admin from own roles -> blocked
+  assert.strictEqual(isSelfAdminRemovalAttempt(ADMIN_ID, ADMIN_ID, ["operator"]), true, "Admin removing admin from own roles must be blocked");
+
+  // Self + keeping admin among other roles -> allowed
+  assert.strictEqual(isSelfAdminRemovalAttempt(ADMIN_ID, ADMIN_ID, ["admin", "operator"]), false, "Admin keeping admin in own roles must be allowed");
+
+  // Different personnel + dropping admin -> allowed (the whole point of the endpoint)
+  assert.strictEqual(isSelfAdminRemovalAttempt(ADMIN_ID, OTHER_ID, ["operator"]), false, "Admin demoting someone else must be allowed");
+
+  console.log("✓ All self-admin-removal guard assertions passed cleanly!");
+}
+
 testSelfLockoutGuard();
+testSelfAdminRemovalGuard();
 process.exit(0);
