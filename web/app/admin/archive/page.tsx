@@ -253,10 +253,7 @@ export default async function ArchivePage() {
             </Card>
 
             <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader>
-                    <CardTitle>Task Archive</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-6">
                 <ArchiveTable
                     rows={tasks.map((t) => ({
                         id: t.id,
@@ -273,47 +270,7 @@ export default async function ArchivePage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader>
-                    <CardTitle>Task Archive</CardTitle>
-                </CardHeader>
-                <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>Title</TableHead>
-                            <TableHead>Last Updated</TableHead>
-                            <TableHead>Assigned To</TableHead>
-                            <TableHead>Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {tasks.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="text-center h-24">
-                                    No archived tasks found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            tasks.map((task) => (
-                                <TableRow key={task.id}>
-                                    <TableCell className="font-mono text-sm">{task.sku}</TableCell>
-                                    <TableCell className="font-medium">{task.title}</TableCell>
-                                    <TableCell>{formatDate(task.updatedAt)}</TableCell>
-                                    <TableCell>{task.assignedTo || "Unassigned"}</TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                            Payment Done
-                                        </Badge>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-                </CardContent>
-            </Card>
+
             </main>
         </div>
     );
