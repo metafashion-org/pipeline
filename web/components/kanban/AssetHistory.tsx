@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { jsonFetcher } from "@/lib/fetcher";
 import type { AssetHistoryEntry } from "@/app/api/assets/[skuId]/history/route";
+import { formatDateTime } from "@/lib/format-date";
 
 // How many of the most recent entries the drawer shows inline. The rest stay one click away in the full log rather than turning the drawer into a scroll well.
 const INLINE_ENTRY_LIMIT = 6;
@@ -89,7 +90,7 @@ function HistoryList({ entries }: { entries: AssetHistoryEntry[] }) {
                             )}
                         </span>
                         <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {new Date(entry.at).toLocaleString()}
+                            {formatDateTime(entry.at)}
                         </span>
                     </div>
 

@@ -42,6 +42,7 @@ import {
   ComboboxEmpty,
 } from "@/components/ui/combobox";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format-date";
 
 const COMMON_PLATFORMS = ["Pinterest", "Instagram", "TikTok", "YouTube Shorts", "Twitter/X"];
 
@@ -54,7 +55,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   creative_in_progress: "secondary",
 };
 
-const cardClass = "shadow-sm hover:shadow-md transition-all";
+const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
 export interface MarketingUpdateRow {
   updateId: string;
@@ -131,6 +132,16 @@ export function MarketingTracker({
     if (quickFilter === "high_performing") return updates.filter((u) => u.marketingStatus === "high_performing");
     return updates;
   }, [updates, quickFilter]);
+
+  const updatesByStatus = useMemo(() => {
+    const map = new Map<string, MarketingUpdateRow[]>();
+    for (const u of visibleUpdates) {
+      const list = map.get(u.marketingStatus);
+      if (list) list.push(u);
+      else map.set(u.marketingStatus, [u]);
+    }
+    return map;
+  }, [visibleUpdates]);
 
   const assetGroups = useMemo(() => {
     const groups = new Map<string, { sku: string; itemName: string; updates: MarketingUpdateRow[] }>();
@@ -234,19 +245,20 @@ export function MarketingTracker({
         </div>
       ) : view === "status" ? (
         <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
-          {statusColumns.map((col) => (
+          {statusColumns.map((col) => {
+            const colUpdates = updatesByStatus.get(col.statusKey) || [];
+            return (
             <Card key={col.id} className={cardClass + " shrink-0 w-[280px] flex flex-col"}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xs uppercase tracking-wider">{col.label}</CardTitle>
                   <Badge variant="secondary">
-                    {visibleUpdates.filter((u) => u.marketingStatus === col.statusKey).length}
+                    {colUpdates.length}
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto space-y-2">
-                {visibleUpdates
-                  .filter((u) => u.marketingStatus === col.statusKey)
+                {colUpdates
                   .map((update) => (
                     <div key={update.updateId} className="p-2.5 bg-background border rounded-md text-xs space-y-1 shadow-sm">
                       <div className="flex justify-between font-mono font-bold">
@@ -259,7 +271,8 @@ export function MarketingTracker({
                   ))}
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -310,7 +323,7 @@ export function MarketingTracker({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {u.postedAt ? new Date(u.postedAt).toLocaleDateString() : "-"}
+                          {formatDate(u.postedAt)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
                           {u.notes || "-"}

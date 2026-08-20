@@ -11,6 +11,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History } from "lucide-react";
+import { formatDate } from "@/lib/format-date";
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -44,7 +45,8 @@ function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
         <DriveImage
           fileId={driveRef.fileId}
           alt="Reference"
-          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          sizes="96px"
+          className="object-cover transition-transform group-hover:scale-105"
           fallback={OPEN_IN_DRIVE}
         />
       ) : (
@@ -109,8 +111,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <div><span className="text-xs text-muted-foreground">SKU:</span> <p className="font-mono">{asset.sku}</p></div>
             <div><span className="text-xs text-muted-foreground">Category:</span> <p>{asset.category || "N/A"}</p></div>
             <div><span className="text-xs text-muted-foreground">Status:</span> <p className="capitalize">{asset.currentStatus}</p></div>
-            <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{asset.deadline ? new Date(asset.deadline).toLocaleDateString() : "Not set"}</p></div>
-            <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{new Date(asset.updatedAt).toLocaleDateString()}</p></div>
+            <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{formatDate(asset.deadline, "Not set")}</p></div>
+            <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{formatDate(asset.updatedAt)}</p></div>
           </div>
         </section>
 

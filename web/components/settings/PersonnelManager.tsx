@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -41,6 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format-date";
 
 const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "uploader", "marketing", "payment_admin"];
 
@@ -66,7 +67,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
   Blacklisted: "destructive",
 };
 
-const cardClass = "shadow-sm hover:shadow-md transition-all";
+const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
 export function PersonnelManager({
   currentPersonnelId,
@@ -83,6 +84,7 @@ export function PersonnelManager({
   const [addForm, setAddForm] = useState({ name: "", email: "", roles: [] as string[] });
   const [editRolesFor, setEditRolesFor] = useState<string | null>(null);
   const [editRoles, setEditRoles] = useState<string[]>([]);
+  const editRolesSet = useMemo(() => new Set(editRoles), [editRoles]);
 
   function toggleAddRole(role: string) {
     setAddForm((prev) => ({
@@ -216,7 +218,7 @@ export function PersonnelManager({
                     <TableCell>{(s.values.fullName as string) || "-"}</TableCell>
                     <TableCell className="text-sm">{s.submitterEmail || (s.values.email as string) || "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{(s.values.portfolioUrl as string) || "N/A"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{new Date(s.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{formatDate(s.createdAt)}</TableCell>
                     <TableCell>
                       <Button size="sm" onClick={() => approve(s.id)}>Approve</Button>
                     </TableCell>
@@ -319,7 +321,7 @@ export function PersonnelManager({
                             {ROLE_OPTIONS.map((role) => (
                               <Badge
                                 key={role}
-                                variant={editRoles.includes(role) ? "default" : "outline"}
+                                variant={editRolesSet.has(role) ? "default" : "outline"}
                                 className="cursor-pointer"
                                 onClick={() => toggleEditRole(role)}
                               >
@@ -337,7 +339,7 @@ export function PersonnelManager({
                       <Badge variant={STATUS_VARIANT[p.status] || "secondary"}>{p.status}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {p.dateOnboarded ? new Date(p.dateOnboarded).toLocaleDateString() : "N/A"}
+                      {formatDate(p.dateOnboarded, "N/A")}
                     </TableCell>
                     <TableCell>
                       <Select value={p.status} onValueChange={(v) => changeStatus(p.id, v)}>

@@ -25,6 +25,7 @@ import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton"
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -159,13 +160,13 @@ export default async function ArchivePage() {
             </header>
 
             <main className="flex-1 overflow-auto p-4 sm:p-6 flex flex-col gap-6">
-            <Card className="shadow-sm hover:shadow-md transition-all">
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-start justify-between gap-2">
                     <div>
                         <CardTitle>Pending Payments</CardTitle>
                         <p className="text-sm text-muted-foreground">
                             {latestCycleDate
-                                ? `Who to pay, how much, and since when - from the ${new Date(latestCycleDate).toLocaleDateString()} payout pull. Client pays out on the 15th and the last day of each month.`
+                                ? `Who to pay, how much, and since when - from the ${formatDate(latestCycleDate)} payout pull. Client pays out on the 15th and the last day of each month.`
                                 : "Who to pay, how much, and since when. Client pays out on the 15th and the last day of each month."}
                         </p>
                     </div>
@@ -215,7 +216,7 @@ export default async function ArchivePage() {
                                                 </Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm">{p.since ? p.since.toLocaleDateString() : "N/A"}</TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">{formatDate(p.since, "N/A")}</TableCell>
                                         <TableCell>
                                             <PendingPaymentControls sku={p.sku} currency={p.currency} paymentReceiptUrl={p.paymentReceiptUrl} />
                                         </TableCell>
@@ -227,7 +228,7 @@ export default async function ArchivePage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm hover:shadow-md transition-all">
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader>
                     <CardTitle>Task Archive</CardTitle>
                 </CardHeader>
@@ -254,7 +255,7 @@ export default async function ArchivePage() {
                                 <TableRow key={task.id}>
                                     <TableCell className="font-mono text-sm">{task.sku}</TableCell>
                                     <TableCell className="font-medium">{task.title}</TableCell>
-                                    <TableCell>{task.updatedAt.toLocaleDateString()}</TableCell>
+                                    <TableCell>{formatDate(task.updatedAt)}</TableCell>
                                     <TableCell>{task.assignedTo || "Unassigned"}</TableCell>
                                     <TableCell>
                                         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
