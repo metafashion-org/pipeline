@@ -49,6 +49,19 @@ function testRbacSystem() {
   const badOverrideCaps = getEffectiveCapabilities(["artist"], { canApprove: "true" as unknown as boolean });
   assert.strictEqual(badOverrideCaps.canApprove, false, "Non-boolean override must be ignored, not applied");
 
+  // 10. "uploader" is a live personnel.roles value not in SystemRole; it must alias to publisher's capabilities
+  const uploaderCaps = getEffectiveCapabilities(["uploader"]);
+  assert.strictEqual(uploaderCaps.canPublishToRoblox, true, "uploader must alias to publisher's canPublishToRoblox");
+
+  // 11. Real-world multi-role union from the live DB (Jayesh Singh: artist, operator, uploader)
+  const jayeshCaps = getEffectiveCapabilities(["artist", "operator", "uploader"]);
+  assert.strictEqual(jayeshCaps.canMoveToInProduction, true, "Should union in artist capability");
+  assert.strictEqual(jayeshCaps.canAssignArtists, true, "Should union in operator capability");
+  assert.strictEqual(jayeshCaps.canPublishToRoblox, true, "Should union in aliased uploader capability");
+
+  // 12. /publisher route must also admit the raw "uploader" role string, not just the capability
+  assert.strictEqual(isRouteAllowedForRoles("/publisher", ["uploader"]), true, "uploader must be allowed on /publisher route");
+
   console.log("✓ All P2-T6 7-Role RBAC assertions passed cleanly!");
 }
 
