@@ -7,6 +7,13 @@ export type SystemRole =
   | "marketing"
   | "payment_admin";
 
+// The live personnel.roles data uses "uploader" for the role the brief calls
+// "Uploader," which docs/PLAN.md §5 defines as this app's "publisher" role.
+// Alias it to publisher's capability set instead of duplicating it.
+export const ROLE_ALIASES: Record<string, SystemRole> = {
+  uploader: "publisher",
+};
+
 export interface CapabilitySet {
   canAssignArtists: boolean;
   canMoveToInProduction: boolean;
@@ -157,7 +164,8 @@ export function getEffectiveCapabilities(
 
   // Union capabilities granted by any assigned role
   for (const roleKey of roles) {
-    const rKey = roleKey.toLowerCase() as SystemRole;
+    const normalized = roleKey.toLowerCase();
+    const rKey = (ROLE_ALIASES[normalized] ?? normalized) as SystemRole;
     const defaults = ROLE_DEFAULT_CAPABILITIES[rKey];
     if (defaults) {
       for (const cap in defaults) {
@@ -197,7 +205,7 @@ export function isRouteAllowedForRoles(
     return roles.includes("artist") || caps.canMoveToInProduction;
   }
   if (pathname.startsWith("/publisher")) {
-    return caps.canPublishToRoblox || roles.includes("publisher");
+    return caps.canPublishToRoblox || roles.includes("publisher") || roles.includes("uploader");
   }
   if (pathname.startsWith("/marketing")) {
     return caps.canAccessMarketingTools || roles.includes("marketing");

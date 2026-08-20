@@ -11,3 +11,10 @@ TEST-hey.md
 
 # local Excel workbook exports, never committed
 *.xlsx
+
+# Playwright MCP browser session artifacts (snapshots, console logs, screenshots)
+.playwright-mcp/
+
+# GitButler installs its own managed hooks locally and chains ours as pre-commit-user
+.githooks/pre-commit-user
+.githooks/post-checkout

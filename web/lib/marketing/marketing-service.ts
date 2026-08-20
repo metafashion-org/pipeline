@@ -18,12 +18,12 @@ export const INITIAL_MARKETING_STATUSES = [
 ];
 
 export async function seedMarketingStatuses() {
-  for (const item of INITIAL_MARKETING_STATUSES) {
-    await db
-      .insert(marketingStatusConfig)
-      .values(item)
-      .onConflictDoNothing({ target: marketingStatusConfig.statusKey });
-  }
+  // Independent rows, each insert a no-op when it already exists, so ordering carries no meaning.
+  await Promise.all(
+    INITIAL_MARKETING_STATUSES.map((item) =>
+      db.insert(marketingStatusConfig).values(item).onConflictDoNothing({ target: marketingStatusConfig.statusKey })
+    )
+  );
 }
 
 export interface AddMarketingUpdateOptions {

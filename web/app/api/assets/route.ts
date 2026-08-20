@@ -5,7 +5,8 @@ import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { generateAssetSku } from "@/lib/curation/curation-service";
+import { nextSequentialSku } from "@/lib/assets/sku";
+import { toFileStoreEntries } from "@/lib/assets/file-store";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,12 @@ const CreateAssetSchema = z.object({
   category: z.string().trim().min(1).optional(),
   deadline: z.string().trim().min(1).optional(),
   feeAmount: z.string().trim().min(1).optional(),
+  currency: z.string().trim().min(1).optional(),
+  // Free text holding one or more links, the same shape the reference columns already hold in the database.
+  referenceImages: z.string().optional(),
+  recolorReferenceImages: z.string().optional(),
 });
+
 
 export async function GET() {
   try {
@@ -57,8 +63,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
   }
 
-  const { itemName, category, feeAmount } = parseResult.data;
-  const sku = parseResult.data.sku || generateAssetSku("ADMIN");
+  const { itemName, category, feeAmount, currency } = parseResult.data;
+  // Continues the MF-<year>-<nnnn> sequence the rest of the table already uses. A concurrent create could pick the same number, which the unique constraint on assets.sku rejects and the 23505 branch below reports.
+  let sku = parseResult.data.sku;
+  if (!sku) {
+    const existing = await db.select({ sku: assets.sku }).from(assets);
+    sku = nextSequentialSku(existing.map((a) => a.sku), new Date().getFullYear());
+  }
 
   let deadline: Date | null = null;
   if (parseResult.data.deadline) {
@@ -78,6 +89,9 @@ export async function POST(request: NextRequest) {
         currentStatus: "unassigned",
         deadline,
         feeAmount: feeAmount || null,
+        currency: currency || "USD",
+        referenceImages: toFileStoreEntries(parseResult.data.referenceImages),
+        recolorReferenceImages: toFileStoreEntries(parseResult.data.recolorReferenceImages),
       })
       .returning();
 

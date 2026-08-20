@@ -14,12 +14,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ personnelId: string }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const [session, { personnelId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { personnelId } = await params;
   const body = await request.json();
   const parseResult = StatusSchema.safeParse(body);
   if (!parseResult.success) {

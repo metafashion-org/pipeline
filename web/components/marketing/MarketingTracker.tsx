@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Card,
   CardHeader,
@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -25,9 +26,25 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format-date";
 
 const COMMON_PLATFORMS = ["Pinterest", "Instagram", "TikTok", "YouTube Shorts", "Twitter/X"];
 
@@ -40,7 +57,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   creative_in_progress: "secondary",
 };
 
-const cardClass = "shadow-sm hover:shadow-md transition-all";
+const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
 export interface MarketingUpdateRow {
   updateId: string;
@@ -91,6 +108,20 @@ export function MarketingTracker({
   const [view, setView] = useState<"status" | "asset">("status");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
   const [showUnmarketed, setShowUnmarketed] = useState(false);
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logDialogSku, setLogDialogSku] = useState<string | null>(null);
+
+  function openLogDialog(sku?: string) {
+    setLogDialogSku(sku ?? null);
+    setLogDialogOpen(true);
+  }
+
+  const assetOptions = useMemo(() => {
+    const bySku = new Map<string, string>();
+    for (const a of unmarketedAssets) bySku.set(a.sku, a.itemName);
+    for (const u of updates) if (!bySku.has(u.sku)) bySku.set(u.sku, u.itemName);
+    return Array.from(bySku.entries()).map(([sku, itemName]) => ({ sku, itemName }));
+  }, [unmarketedAssets, updates]);
 
   const statusLabel = useMemo(() => {
     const map = new Map(statusColumns.map((c) => [c.statusKey, c.label]));
@@ -103,6 +134,16 @@ export function MarketingTracker({
     if (quickFilter === "high_performing") return updates.filter((u) => u.marketingStatus === "high_performing");
     return updates;
   }, [updates, quickFilter]);
+
+  const updatesByStatus = useMemo(() => {
+    const map = new Map<string, MarketingUpdateRow[]>();
+    for (const u of visibleUpdates) {
+      const list = map.get(u.marketingStatus);
+      if (list) list.push(u);
+      else map.set(u.marketingStatus, [u]);
+    }
+    return map;
+  }, [visibleUpdates]);
 
   const assetGroups = useMemo(() => {
     const groups = new Map<string, { sku: string; itemName: string; updates: MarketingUpdateRow[] }>();
@@ -124,93 +165,141 @@ export function MarketingTracker({
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-hidden">
-      <div className="flex items-center justify-between bg-muted/40 p-3 rounded-lg text-sm shrink-0">
+      {/* The toolbar filters and switches views, so it only exists once something has been logged. Until then the empty state below carries the single call to action. */}
+      {updates.length > 0 && (
+      <div className="flex items-center justify-between gap-3 bg-muted/40 p-3 rounded-lg text-sm shrink-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold mr-1">Quick Filters:</span>
-          <Badge
-            variant={showUnmarketed ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => setShowUnmarketed((v) => !v)}
-          >
-            Uploaded Not Marketed ({unmarketedAssets.length})
-          </Badge>
-          <Badge
-            variant={quickFilter === "postedThisWeek" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("postedThisWeek")}
-          >
-            Posted This Week
-          </Badge>
-          <Badge
-            variant={quickFilter === "needs_repost" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("needs_repost")}
-          >
-            Needs Repost
-          </Badge>
-          <Badge
-            variant={quickFilter === "high_performing" ? "default" : "outline"}
-            className="cursor-pointer"
-            onClick={() => toggleQuickFilter("high_performing")}
-          >
-            High Performing
-          </Badge>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider mr-1">Filter</span>
+              <Badge
+                variant={quickFilter === "postedThisWeek" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("postedThisWeek")}
+              >
+                Posted this week
+              </Badge>
+              <Badge
+                variant={quickFilter === "needs_repost" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("needs_repost")}
+              >
+                Needs repost
+              </Badge>
+              <Badge
+                variant={quickFilter === "high_performing" ? "default" : "outline"}
+                className="cursor-pointer"
+                onClick={() => toggleQuickFilter("high_performing")}
+              >
+                High performing
+              </Badge>
+              {quickFilter && (
+                <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setQuickFilter(null)}>
+                  Clear
+                </Button>
+              )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-xs text-muted-foreground">
-            Showing {visibleUpdates.length} of {updates.length} campaign logs
+            {visibleUpdates.length} of {updates.length} posts
           </span>
           <div className="flex gap-1">
             <Button size="sm" variant={view === "status" ? "default" : "outline"} onClick={() => setView("status")}>
-              By Status
+              By status
             </Button>
             <Button size="sm" variant={view === "asset" ? "default" : "outline"} onClick={() => setView("asset")}>
-              By Asset
+              By asset
             </Button>
           </div>
+          <Button size="sm" onClick={() => openLogDialog()}>
+            Log marketing activity
+          </Button>
         </div>
       </div>
+      )}
 
-      {showUnmarketed && (
+      {/* The queue of assets that are live on Roblox but have no marketing yet. This is the actual to-do list for this page, so it is a list of rows with an action on each rather than a filter toggle hiding a row of badges. */}
+      {unmarketedAssets.length > 0 && (
         <Card className={cardClass + " shrink-0"}>
-          <CardHeader>
-            <CardTitle className="text-sm">Uploaded, Not Yet Marketed</CardTitle>
+          <CardHeader className={showUnmarketed ? "pb-3" : "py-3"}>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">
+                Waiting on marketing
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {unmarketedAssets.length} uploaded to Roblox with nothing posted yet
+                </span>
+              </CardTitle>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1 text-xs"
+                onClick={() => setShowUnmarketed((v) => !v)}
+                aria-expanded={showUnmarketed}
+              >
+                {showUnmarketed ? "Hide" : "Show"}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showUnmarketed ? "rotate-180" : ""}`} />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
-            {unmarketedAssets.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing waiting on marketing right now.</p>
-            ) : (
-              <div className="flex gap-2 flex-wrap">
+          {showUnmarketed && (
+            <CardContent className="pt-0">
+              {/* Capped so a long queue scrolls inside the card instead of pushing the logged activity off screen. */}
+              <div className="divide-y max-h-64 overflow-y-auto">
                 {unmarketedAssets.map((a) => (
-                  <Badge key={a.id} variant="outline">
-                    {a.sku} - {a.itemName}
-                  </Badge>
+                  <div key={a.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{a.itemName}</p>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {a.sku}
+                        {a.category ? ` - ${a.category}` : ""}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" className="shrink-0" onClick={() => openLogDialog(a.sku)}>
+                      Log activity
+                    </Button>
+                  </div>
                 ))}
               </div>
-            )}
-          </CardContent>
+            </CardContent>
+          )}
         </Card>
       )}
 
       {visibleUpdates.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-sm text-muted-foreground">
-          No marketing updates match the current filters.
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-center">
+          {updates.length === 0 ? (
+            <>
+              <p className="text-sm font-medium">No marketing activity logged yet</p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Every post, platform and link recorded here is tied to an asset. Start with one of the assets waiting above.
+              </p>
+              <Button size="sm" className="mt-1" onClick={() => openLogDialog()}>
+                Log marketing activity
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Nothing matches this filter</p>
+              <Button size="sm" variant="outline" className="mt-1" onClick={() => setQuickFilter(null)}>
+                Clear filter
+              </Button>
+            </>
+          )}
         </div>
       ) : view === "status" ? (
         <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
-          {statusColumns.map((col) => (
+          {statusColumns.map((col) => {
+            const colUpdates = updatesByStatus.get(col.statusKey) || [];
+            return (
             <Card key={col.id} className={cardClass + " shrink-0 w-[280px] flex flex-col"}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xs uppercase tracking-wider">{col.label}</CardTitle>
                   <Badge variant="secondary">
-                    {visibleUpdates.filter((u) => u.marketingStatus === col.statusKey).length}
+                    {colUpdates.length}
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto space-y-2">
-                {visibleUpdates
-                  .filter((u) => u.marketingStatus === col.statusKey)
+                {colUpdates
                   .map((update) => (
                     <div key={update.updateId} className="p-2.5 bg-background border rounded-md text-xs space-y-1 shadow-sm">
                       <div className="flex justify-between font-mono font-bold">
@@ -223,7 +312,8 @@ export function MarketingTracker({
                   ))}
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -234,7 +324,9 @@ export function MarketingTracker({
                   <CardTitle className="text-sm">
                     <span className="font-mono">{group.sku}</span> - {group.itemName}
                   </CardTitle>
-                  <AddPlatformDialog sku={group.sku} itemName={group.itemName} onAdded={onUpdateAdded} />
+                  <Button size="sm" variant="outline" onClick={() => openLogDialog(group.sku)}>
+                    + Platform
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -272,7 +364,7 @@ export function MarketingTracker({
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {u.postedAt ? new Date(u.postedAt).toLocaleDateString() : "-"}
+                          {formatDate(u.postedAt)}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
                           {u.notes || "-"}
@@ -286,25 +378,64 @@ export function MarketingTracker({
           ))}
         </div>
       )}
+
+      <LogMarketingDialog
+        open={logDialogOpen}
+        onOpenChange={setLogDialogOpen}
+        initialSku={logDialogSku}
+        assetOptions={assetOptions}
+        statusColumns={statusColumns}
+        onAdded={onUpdateAdded}
+      />
     </div>
   );
 }
 
-function AddPlatformDialog({
-  sku,
-  itemName,
+function LogMarketingDialog({
+  open,
+  onOpenChange,
+  initialSku,
+  assetOptions,
+  statusColumns,
   onAdded,
 }: {
-  sku: string;
-  itemName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialSku: string | null;
+  assetOptions: { sku: string; itemName: string }[];
+  statusColumns: StatusColumn[];
   onAdded: (update: MarketingUpdateRow) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [sku, setSku] = useState<string | null>(null);
   const [platform, setPlatform] = useState("");
   const [postUrl, setPostUrl] = useState("");
+  const [postedAt, setPostedAt] = useState("");
+  const [marketingStatus, setMarketingStatus] = useState("");
+  const [caption, setCaption] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (open) setSku(initialSku);
+  }, [open, initialSku]);
+
+  const assetNameBySku = useMemo(() => new Map(assetOptions.map((a) => [a.sku, a.itemName])), [assetOptions]);
+
+  function reset() {
+    setSku(null);
+    setPlatform("");
+    setPostUrl("");
+    setPostedAt("");
+    setMarketingStatus("");
+    setCaption("");
+    setNotes("");
+  }
+
   async function submit() {
+    if (!sku) {
+      toast.error("Select an asset");
+      return;
+    }
     if (!platform.trim()) {
       toast.error("Platform is required");
       return;
@@ -314,18 +445,27 @@ function AddPlatformDialog({
       const res = await fetch("/api/admin/marketing/updates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku, platform: platform.trim(), postUrl: postUrl.trim() }),
+        body: JSON.stringify({
+          sku,
+          platform: platform.trim(),
+          postUrl: postUrl.trim(),
+          postedAt: postedAt || undefined,
+          marketingStatus: marketingStatus || undefined,
+          caption: caption.trim() || undefined,
+          notes: notes.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error || "Failed to add platform");
+        toast.error(data.error || "Failed to log marketing activity");
         return;
       }
+      const asset = assetOptions.find((a) => a.sku === sku);
       onAdded({
         updateId: data.update.id,
         assetId: data.update.assetId,
         sku,
-        itemName,
+        itemName: asset?.itemName || sku,
         platform: data.update.platform,
         postUrl: data.update.postUrl,
         caption: data.update.caption,
@@ -334,44 +474,81 @@ function AddPlatformDialog({
         notes: data.update.notes,
         createdAt: data.update.createdAt,
       });
-      setPlatform("");
-      setPostUrl("");
-      setOpen(false);
-      toast.success(`${platform} added for ${sku}`);
+      toast.success(`${platform} logged for ${sku}`);
+      reset();
+      onOpenChange(false);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          + Platform
-        </Button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) reset();
+        onOpenChange(v);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Track a new platform for {sku}</DialogTitle>
+          <DialogTitle>Log marketing activity</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <Label htmlFor="platform-input">Platform</Label>
+            <Label>
+              Asset<span className="text-destructive"> *</span>
+            </Label>
+            <Combobox
+              value={sku}
+              onValueChange={setSku}
+              itemToStringLabel={(value) => assetNameBySku.get(value as string) ?? (value as string)}
+            >
+              <ComboboxInput placeholder="Select an asset..." />
+              <ComboboxContent>
+                <ComboboxList>
+                  <ComboboxEmpty>No assets found.</ComboboxEmpty>
+                  {assetOptions.map((a) => (
+                    <ComboboxItem key={a.sku} value={a.sku}>
+                      <div className="flex flex-col">
+                        <span>{a.itemName}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{a.sku}</span>
+                      </div>
+                    </ComboboxItem>
+                  ))}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
+          </div>
+          <div>
+            <Label htmlFor="platform-input">
+              Platform<span className="text-destructive"> *</span>
+            </Label>
+            <div className="flex gap-1.5 flex-wrap mt-1 mb-1.5">
+              {/* Real buttons, not clickable spans, so the quick picks are reachable by keyboard like every other control in the form. */}
+              {COMMON_PLATFORMS.map((p) => (
+                <Button
+                  key={p}
+                  type="button"
+                  size="sm"
+                  variant={platform === p ? "default" : "outline"}
+                  className="h-7 rounded-full px-3 text-xs font-normal"
+                  aria-pressed={platform === p}
+                  onClick={() => setPlatform(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+            </div>
             <Input
               id="platform-input"
-              list="platform-suggestions"
-              placeholder="Pinterest, Instagram, ..."
+              placeholder="Or type another platform"
               value={platform}
               onChange={(e) => setPlatform(e.target.value)}
             />
-            <datalist id="platform-suggestions">
-              {COMMON_PLATFORMS.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
           </div>
           <div>
-            <Label htmlFor="posturl-input">Post URL (optional)</Label>
+            <Label htmlFor="posturl-input">Post URL</Label>
             <Input
               id="posturl-input"
               type="url"
@@ -380,10 +557,44 @@ function AddPlatformDialog({
               onChange={(e) => setPostUrl(e.target.value)}
             />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="postedat-input">Posted date</Label>
+              <Input
+                id="postedat-input"
+                type="date"
+                value={postedAt}
+                onChange={(e) => setPostedAt(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={marketingStatus} onValueChange={setMarketingStatus}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Set automatically from whether a link is present" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusColumns.map((c) => (
+                    <SelectItem key={c.statusKey} value={c.statusKey}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="caption-input">Caption</Label>
+            <Textarea id="caption-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="notes-input">Notes</Label>
+            <Textarea id="notes-input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={submitting}>
-            {submitting ? "Adding..." : "Add"}
+            {submitting ? "Logging..." : "Log activity"}
           </Button>
         </DialogFooter>
       </DialogContent>

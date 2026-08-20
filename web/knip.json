@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/**/page.tsx",
+    "app/**/layout.tsx",
+    "app/**/route.ts",
+    "app/**/{error,loading,not-found}.tsx",
+    "**/__tests__/**/*.test.ts",
+    "tests/**/*.ts",
+    "lib/db/run-migrations.ts",
+    "scripts/**"
+  ],
+  "project": [
+    "**/*.{ts,tsx}"
+  ],
+  "ignore": [
+    "components/ui/**",
+    "lib/guidelines/guidelines-service.ts",
+    "lib/publisher/publisher-service.ts"
+  ],
+  "ignoreDependencies": [
+    "tw-animate-css",
+    "tailwindcss",
+    "shadcn"
+  ],
+  "ignoreExportsUsedInFile": true
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -29,9 +29,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format-date";
 
-const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "marketing", "payment_admin"];
+const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "uploader", "marketing", "payment_admin"];
 
 interface PersonnelRow {
   id: string;
@@ -55,7 +68,7 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
   Blacklisted: "destructive",
 };
 
-const cardClass = "shadow-sm hover:shadow-md transition-all";
+const cardClass = "shadow-sm hover:shadow-md transition-shadow";
 
 export function PersonnelManager({
   currentPersonnelId,
@@ -70,6 +83,9 @@ export function PersonnelManager({
   const [pending, setPending] = useState(initialPendingSubmissions);
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", email: "", roles: [] as string[] });
+  const [editRolesFor, setEditRolesFor] = useState<string | null>(null);
+  const [editRoles, setEditRoles] = useState<string[]>([]);
+  const editRolesSet = useMemo(() => new Set(editRoles), [editRoles]);
 
   function toggleAddRole(role: string) {
     setAddForm((prev) => ({
@@ -100,6 +116,46 @@ export function PersonnelManager({
     setAddForm({ name: "", email: "", roles: [] });
     setAddOpen(false);
     toast.success(`${data.personnel.name} added`);
+  }
+
+  function openEditRoles(p: PersonnelRow) {
+    setEditRoles(p.roles);
+    setEditRolesFor(p.id);
+  }
+
+  function toggleEditRole(role: string) {
+    setEditRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
+  }
+
+  async function saveRoles(id: string) {
+    if (editRoles.length === 0) {
+      toast.error("At least one role is required");
+      return;
+    }
+    const res = await fetch(`/api/admin/personnel/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roles: editRoles }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error || "Failed to update roles");
+      return;
+    }
+    setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, roles: data.personnel.roles } : p)));
+    setEditRolesFor(null);
+    toast.success("Roles updated");
+  }
+
+  async function deletePersonnel(id: string) {
+    const res = await fetch(`/api/admin/personnel/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error || "Failed to delete personnel");
+      return;
+    }
+    setPeople((prev) => prev.filter((p) => p.id !== id));
+    toast.success("Personnel deleted");
   }
 
   async function changeStatus(id: string, status: string) {
@@ -163,7 +219,7 @@ export function PersonnelManager({
                     <TableCell>{(s.values.fullName as string) || "-"}</TableCell>
                     <TableCell className="text-sm">{s.submitterEmail || (s.values.email as string) || "-"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{(s.values.portfolioUrl as string) || "N/A"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{new Date(s.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{formatDate(s.createdAt)}</TableCell>
                     <TableCell>
                       <Button size="sm" onClick={() => approve(s.id)}>Approve</Button>
                     </TableCell>
@@ -229,12 +285,13 @@ export function PersonnelManager({
                 <TableHead>Status</TableHead>
                 <TableHead>Onboarded</TableHead>
                 <TableHead>Access</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
               {people.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
                     No personnel yet.
                   </TableCell>
                 </TableRow>
@@ -244,17 +301,46 @@ export function PersonnelManager({
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-sm">{p.email}</TableCell>
                     <TableCell>
-                      <div className="flex gap-1 flex-wrap">
+                      <button
+                        type="button"
+                        className="flex gap-1 flex-wrap text-left cursor-pointer hover:opacity-80"
+                        onClick={() => openEditRoles(p)}
+                      >
                         {p.roles.map((r) => (
                           <Badge key={r} variant="secondary">{r}</Badge>
                         ))}
-                      </div>
+                      </button>
+                      <Dialog
+                        open={editRolesFor === p.id}
+                        onOpenChange={(v) => !v && setEditRolesFor(null)}
+                      >
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Edit roles for {p.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {ROLE_OPTIONS.map((role) => (
+                              <Badge
+                                key={role}
+                                variant={editRolesSet.has(role) ? "default" : "outline"}
+                                className="cursor-pointer"
+                                onClick={() => toggleEditRole(role)}
+                              >
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
+                          <DialogFooter>
+                            <Button onClick={() => saveRoles(p.id)}>Save</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[p.status] || "secondary"}>{p.status}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {p.dateOnboarded ? new Date(p.dateOnboarded).toLocaleDateString() : "N/A"}
+                      {formatDate(p.dateOnboarded, "N/A")}
                     </TableCell>
                     <TableCell>
                       <Select value={p.status} onValueChange={(v) => changeStatus(p.id, v)}>
@@ -271,6 +357,34 @@ export function PersonnelManager({
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            disabled={p.id === currentPersonnelId}
+                            aria-label={`Delete ${p.name}`}
+                            title={p.id === currentPersonnelId ? "You can't delete your own account" : `Delete ${p.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This can&apos;t be undone. If they have pipeline history (assigned assets, uploads, marketing activity), the delete will be refused - set them to Inactive instead.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deletePersonnel(p.id)}>Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))

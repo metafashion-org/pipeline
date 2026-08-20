@@ -12,3 +12,17 @@ export function isSelfLockoutAttempt(
   const isRevoking = newStatus === "Inactive" || newStatus === "Blacklisted";
   return isSelf && isRevoking;
 }
+
+/**
+ * Checks whether a roles update would strip the "admin" role from the acting admin's own row.
+ * Input: the acting admin's personnel id, the personnel id being updated, and the new roles array being set.
+ * Output: true if the change targets the acting admin's own row and the new roles no longer include "admin", false otherwise.
+ */
+export function isSelfAdminRemovalAttempt(
+  actingPersonnelId: string | undefined,
+  targetPersonnelId: string,
+  newRoles: string[]
+): boolean {
+  const isSelf = actingPersonnelId === targetPersonnelId;
+  return isSelf && !newRoles.includes("admin");
+}

@@ -10,11 +10,11 @@ import { seedOnboardingFormDefinition, ARTIST_ACCESS_FORM_KEY } from "@/lib/form
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
 
-const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "marketing", "payment_admin"] as const;
+const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "uploader", "marketing", "payment_admin"] as const;
 
 const AddPersonnelSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   roles: z.array(z.enum(ROLE_OPTIONS)).min(1),
 });
 

@@ -1,5 +1,17 @@
+# This app is the only package here, but the file exists for the settings below,
+# and pnpm refuses to install from a workspace root without a packages list.
+packages:
+  - "."
+
+# Supply-chain hardening.
+# minimumReleaseAge holds back versions published in the last 7 days, which is the window in which
+# a hijacked-maintainer malware publish is typically caught and unpublished.
+# trustPolicy: no-downgrade refuses a package whose provenance or signature signals get weaker between updates.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: false
   msw: true
   sharp: true
   unrs-resolver: true

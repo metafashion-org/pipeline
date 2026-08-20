@@ -6,7 +6,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { paymentCycles } from "@/lib/db/schema/payment_cycles";
 import { paymentCycleItems } from "@/lib/db/schema/payment_cycle_items";
-import { eq, and, lte, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc } from "drizzle-orm";
 import {
     Table,
     TableBody,
@@ -21,10 +21,13 @@ import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { PendingPaymentControls } from "@/components/archive/PendingPaymentControls";
+import { ArchiveTable } from "@/components/archive/ArchiveTable";
+import { getArchivedAssets, getArchivedTotal } from "@/lib/archive/archive-service";
 import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -39,14 +42,6 @@ function formatFee(fee: string | null, currency: string | null): string {
   return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
 }
 
-interface ArchivedTask {
-    id: string;
-    sku: string;
-    title: string;
-    updatedAt: Date;
-    assignedTo: string | null;
-}
-
 interface PendingPayment {
     id: string;
     sku: string;
@@ -59,7 +54,12 @@ interface PendingPayment {
     since: Date | null;
 }
 
-export default async function ArchivePage() {
+export default async function ArchivePage({
+    searchParams,
+}: {
+    searchParams: Promise<{ q?: string; month?: string }>;
+}) {
+    const filters = await searchParams;
     const session = await getServerSession(authOptions);
 
     if (!session || session.user?.role !== "admin") {
@@ -69,28 +69,20 @@ export default async function ArchivePage() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    let tasks: ArchivedTask[] = [];
+    let archive: Awaited<ReturnType<typeof getArchivedAssets>> = { rows: [], total: 0, months: [], truncated: false };
+    let archiveTotal: Awaited<ReturnType<typeof getArchivedTotal>> = { total: 0, currencies: [] };
     let pendingPayments: PendingPayment[] = [];
     let latestCycleDate: string | null = null;
     try {
-        const rows = await db
-            .select({
-                id: assets.id,
-                sku: assets.sku,
-                title: assets.itemName,
-                updatedAt: assets.updatedAt,
-                assignedTo: personnel.name,
-            })
-            .from(assets)
-            .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
-            .where(and(eq(assets.currentStatus, "payment_done"), lte(assets.updatedAt, sevenDaysAgo)));
-
-        tasks = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        [archive, archiveTotal] = await Promise.all([
+            getArchivedAssets({ q: filters.q, month: filters.month }),
+            getArchivedTotal({ q: filters.q, month: filters.month }),
+        ]);
 
         // Pending Payments: who to pay, how much, and since when they entered
         // marked_for_payment/uploaded_to_roblox. This used to be a live continuous
         // query, but the client only pays out on a scheduled pull (the 15th and the
-        // last day of the month, see lib/payments/payment-cycle-service.ts) — so this
+        // last day of the month, see lib/payments/payment-cycle-service.ts) - so this
         // now reads the latest payment_cycles run's items instead, joined against
         // current asset data for fee/receipt-attached status since payment can still
         // be marked done after the pull ran.
@@ -159,13 +151,13 @@ export default async function ArchivePage() {
             </header>
 
             <main className="flex-1 overflow-auto p-4 sm:p-6 flex flex-col gap-6">
-            <Card className="shadow-sm hover:shadow-md transition-all">
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardHeader className="flex flex-row items-start justify-between gap-2">
                     <div>
                         <CardTitle>Pending Payments</CardTitle>
                         <p className="text-sm text-muted-foreground">
                             {latestCycleDate
-                                ? `Who to pay, how much, and since when — from the ${new Date(latestCycleDate).toLocaleDateString()} payout pull. Client pays out on the 15th and the last day of each month.`
+                                ? `Who to pay, how much, and since when - from the ${formatDate(latestCycleDate)} payout pull. Client pays out on the 15th and the last day of each month.`
                                 : "Who to pay, how much, and since when. Client pays out on the 15th and the last day of each month."}
                         </p>
                     </div>
@@ -215,7 +207,7 @@ export default async function ArchivePage() {
                                                 </Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm">{p.since ? p.since.toLocaleDateString() : "N/A"}</TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">{formatDate(p.since, "N/A")}</TableCell>
                                         <TableCell>
                                             <PendingPaymentControls sku={p.sku} currency={p.currency} paymentReceiptUrl={p.paymentReceiptUrl} />
                                         </TableCell>
@@ -227,47 +219,29 @@ export default async function ArchivePage() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm hover:shadow-md transition-all">
-                <CardHeader>
-                    <CardTitle>Task Archive</CardTitle>
-                </CardHeader>
-                <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>Title</TableHead>
-                            <TableHead>Last Updated</TableHead>
-                            <TableHead>Assigned To</TableHead>
-                            <TableHead>Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {tasks.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="text-center h-24">
-                                    No archived tasks found.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            tasks.map((task) => (
-                                <TableRow key={task.id}>
-                                    <TableCell className="font-mono text-sm">{task.sku}</TableCell>
-                                    <TableCell className="font-medium">{task.title}</TableCell>
-                                    <TableCell>{task.updatedAt.toLocaleDateString()}</TableCell>
-                                    <TableCell>{task.assignedTo || "Unassigned"}</TableCell>
-                                    <TableCell>
-                                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                            Payment Done
-                                        </Badge>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="pt-6">
+                <ArchiveTable
+                    rows={archive.rows.map((r) => ({
+                        id: r.id,
+                        sku: r.sku,
+                        title: r.title,
+                        assignedTo: r.assignedTo,
+                        feeAmount: r.feeAmount,
+                        currency: r.currency,
+                        paymentReceiptUrl: r.paymentReceiptUrl,
+                        paidAt: r.paidAt ? new Date(r.paidAt).toISOString() : null,
+                    }))}
+                    total={archive.total}
+                    months={archive.months}
+                    truncated={archive.truncated}
+                    paidTotal={archiveTotal.total}
+                    paidCurrencies={archiveTotal.currencies}
+                />
                 </CardContent>
             </Card>
+
+
             </main>
         </div>
     );

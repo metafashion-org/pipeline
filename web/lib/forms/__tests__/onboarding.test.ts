@@ -45,7 +45,7 @@ async function testApproveArtistAccessSubmission() {
     console.log("Caught expected error for non-existent submission:", message);
   }
 
-  // Real approve flow needs a real form_definitions row to attach to — reuse
+  // Real approve flow needs a real form_definitions row to attach to - reuse
   // the actual seeding function rather than hand-rolling a fake definition.
   await seedOnboardingFormDefinition();
   const [def] = await db

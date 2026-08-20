@@ -5,10 +5,27 @@ import { formSubmissions } from "@/lib/db/schema/form_submissions";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq } from "drizzle-orm";
+import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
 
 export const ARTIST_ACCESS_FORM_KEY = "artist_access_request";
 
-export async function seedOnboardingFormDefinition() {
+// The seed is idempotent but not free: it runs five sequential round trips to confirm rows that, after the first run, always already exist.
+// Page renders and API handlers call it defensively on every request, which cost roughly 1.6 seconds per /admin/personnel load against a remote database.
+// Holding the in-flight promise collapses that to once per server process, and concurrent callers await the same run rather than racing five duplicate ones.
+let onboardingSeedPromise: Promise<void> | null = null;
+
+export function seedOnboardingFormDefinition(): Promise<void> {
+  if (!onboardingSeedPromise) {
+    // A failed seed must not be cached, or every later request inherits the failure without retrying.
+    onboardingSeedPromise = runOnboardingSeed().catch((error) => {
+      onboardingSeedPromise = null;
+      throw error;
+    });
+  }
+  return onboardingSeedPromise;
+}
+
+async function runOnboardingSeed() {
   const existing = await db
     .select()
     .from(formDefinitions)
@@ -41,7 +58,9 @@ export async function seedOnboardingFormDefinition() {
     { fieldKey: "notes", label: "Skills & Background", fieldType: "textarea", sortOrder: 4, isRequired: false },
   ];
 
-  for (const f of fields) {
+  // Each field is keyed independently, so the check-and-insert pairs do not interact and run concurrently.
+  await Promise.all(
+    fields.map(async (f) => {
     const existingField = await db
       .select()
       .from(formFields)
@@ -58,7 +77,8 @@ export async function seedOnboardingFormDefinition() {
         isRequired: f.isRequired,
       });
     }
-  }
+    })
+  );
 }
 
 export async function approveArtistAccessSubmission(
@@ -128,6 +148,8 @@ export async function approveArtistAccessSubmission(
     payload: { submissionId, email, name },
   });
 
+  invalidatePersonnelAuthCache(email);
+
   return { personnelId: pId, email, status: "Active" };
 }
 
@@ -157,6 +179,10 @@ export async function setPersonnelStatus(
     actorId: actorId || null,
     payload: { oldStatus, newStatus, reason: reason || "Admin status update" },
   });
+
+  // Auth lookups are cached briefly for performance, so a revoked login would otherwise keep working until that window lapsed.
+  // Dropping the entry here makes revoking access take effect on the very next request in this process.
+  invalidatePersonnelAuthCache(existing[0].email);
 
   return { personnelId, oldStatus, newStatus };
 }

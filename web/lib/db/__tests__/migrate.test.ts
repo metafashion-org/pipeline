@@ -4,7 +4,7 @@ import assert from "node:assert";
 // via drizzle-kit but never actually pushed to the live database. Confirms
 // every table drizzle-kit knows about, marketing/guidelines included, is
 // actually queryable against DATABASE_URL. Deliberately does not swallow
-// connection errors — a failed connection here is exactly the class of bug
+// connection errors - a failed connection here is exactly the class of bug
 // this test exists to catch, not something to log and pass past.
 async function testAllSchemaTablesAreLive() {
   const postgres = (await import("postgres")).default;
@@ -15,13 +15,13 @@ async function testAllSchemaTablesAreLive() {
   const liveTables = rows.map((r) => r.tablename);
 
   for (const table of expectedTables) {
-    assert.ok(liveTables.includes(table), `Expected live table '${table}' not found — migration not applied?`);
+    assert.ok(liveTables.includes(table), `Expected live table '${table}' not found - migration not applied?`);
   }
 
   const columns = await sql<{ column_name: string }[]>`select column_name from information_schema.columns where table_name = 'marketing_updates'`;
   const columnNames = columns.map((c) => c.column_name);
   for (const col of ["platform", "caption", "marketing_status", "channel", "creative", "posted_at", "next_action"]) {
-    assert.ok(columnNames.includes(col), `Expected column '${col}' on marketing_updates — P4-T3's full field list not applied?`);
+    assert.ok(columnNames.includes(col), `Expected column '${col}' on marketing_updates - P4-T3's full field list not applied?`);
   }
 
   await sql.end();

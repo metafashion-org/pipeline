@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { getActivePersonnelByEmail } from "../personnel-auth";
+import { getActivePersonnelByEmail, invalidatePersonnelAuthCache } from "../personnel-auth";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { eq } from "drizzle-orm";
@@ -43,13 +43,19 @@ async function testPersonnelAuthLogic() {
     assert.strictEqual(activeMixedCase.isAllowed, true, "Email match must be case/whitespace-insensitive");
 
     // 4. Inactive personnel -> denied
+    // These updates go straight to the table, bypassing setPersonnelStatus, which is what normally drops the
+    // auth cache entry. Without invalidating here the next lookup would legitimately serve the cached Active
+    // result, so the call below is part of what the test asserts: a status change is only visible once the
+    // cache entry for that email has been dropped.
     await db.update(personnel).set({ status: "Inactive" }).where(eq(personnel.email, TEST_EMAIL));
+    invalidatePersonnelAuthCache(TEST_EMAIL);
     const inactive = await getActivePersonnelByEmail(TEST_EMAIL);
     assert.strictEqual(inactive.isAllowed, false, "Inactive personnel must be denied");
     assert.strictEqual(inactive.status, "Inactive", "Denied result should still report the real status");
 
     // 5. Blacklisted personnel -> denied
     await db.update(personnel).set({ status: "Blacklisted" }).where(eq(personnel.email, TEST_EMAIL));
+    invalidatePersonnelAuthCache(TEST_EMAIL);
     const blacklisted = await getActivePersonnelByEmail(TEST_EMAIL);
     assert.strictEqual(blacklisted.isAllowed, false, "Blacklisted personnel must be denied");
     assert.strictEqual(blacklisted.status, "Blacklisted", "Denied result should still report the real status");

@@ -5,7 +5,7 @@ import { statuses } from "@/lib/db/schema/statuses";
 import { statusTransitionRules } from "@/lib/db/schema/status_transition_rules";
 import { eq, and } from "drizzle-orm";
 
-// Uses clearly-marked test keys and cleans them up itself — other agents are
+// Uses clearly-marked test keys and cleans them up itself - other agents are
 // writing to these same live shared tables concurrently this session, so
 // this avoids both leaving junk rows behind and relying on total-row-count
 // deltas that a concurrent writer elsewhere could make flaky.

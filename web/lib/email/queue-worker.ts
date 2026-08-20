@@ -31,7 +31,10 @@ export async function enqueueEmail(options: EnqueueEmailOptions) {
     .values({
       assetId: assetId || null,
       toEmail: toEmail.trim().toLowerCase(),
-      ccEmails: ccEmails.map((e) => e.trim().toLowerCase()).filter(Boolean),
+      ccEmails: ccEmails.flatMap((e) => {
+        const normalized = e.trim().toLowerCase();
+        return normalized ? [normalized] : [];
+      }),
       subject,
       bodyHtml,
       gmailThreadId: threadIdToUse,

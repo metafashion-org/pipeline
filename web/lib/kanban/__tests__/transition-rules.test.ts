@@ -19,7 +19,7 @@ async function testTransitionRulesEnforcement() {
 
   // Seed a real asset directly at "uploaded_to_roblox" so we can test the payment gate
   // (Uploaded to Roblox -> Marked for Payment is allowed; Uploaded to Roblox -> Payment Done
-  // directly is not, per PLAN.md §4/§9 — this is the actual business rule P2-T23 depends on.)
+  // directly is not, per PLAN.md §4/§9 - this is the actual business rule P2-T23 depends on.)
   await db.delete(assets).where(eq(assets.sku, TEST_SKU));
   await db.insert(assets).values({
     sku: TEST_SKU,
@@ -59,7 +59,7 @@ async function testTransitionRulesEnforcement() {
   }
 
   // Admin override: a normal (non-payment-gated) transition with no matching rule row
-  // should now succeed for admin — this is the actual bug being fixed here.
+  // should now succeed for admin - this is the actual bug being fixed here.
   await db.delete(assets).where(eq(assets.sku, TEST_SKU));
   await db.insert(assets).values({
     sku: TEST_SKU,
@@ -88,7 +88,7 @@ async function testTransitionRulesEnforcement() {
   }
 
   // Receipt gate: payment_done requires a payment receipt already attached to the
-  // asset, for every role including admin — same structural "can't be bypassed"
+  // asset, for every role including admin - same structural "can't be bypassed"
   // spirit as the payment gate tested above.
   await db.delete(assets).where(eq(assets.sku, TEST_SKU));
   await db.insert(assets).values({
@@ -98,7 +98,7 @@ async function testTransitionRulesEnforcement() {
   });
   try {
     // marked_for_payment -> payment_done has a real seeded rule, but no receipt is
-    // attached yet, so it should still be rejected — even for admin.
+    // attached yet, so it should still be rejected - even for admin.
     try {
       await updateAssetStatusInKanban(TEST_SKU, "payment_done", "admin");
       assert.fail("payment_done should be rejected with no receipt attached, even for admin");

@@ -14,12 +14,11 @@ const UpdatePaymentDetailsSchema = z
   });
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ skuId: string }> }) {
-  const session = await getServerSession(authOptions);
+  const [session, { skuId }] = await Promise.all([getServerSession(authOptions), params]);
   if (!session || session.user?.role !== "admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { skuId } = await params;
   const body = await request.json();
   const parseResult = UpdatePaymentDetailsSchema.safeParse(body);
   if (!parseResult.success) {
