@@ -31,13 +31,13 @@ const EMPTY_FORM = {
     category: "",
     deadline: "",
     feeAmount: "",
-    currency: "INR",
+    currency: "USD",
     referenceImages: "",
     recolorReferenceImages: "",
 };
 
-// The live data uses these two, with fees recorded in rupees for the freelance artists.
-const CURRENCIES = ["INR", "USD"];
+// USD is the schema default and what every existing asset uses; INR is here for the India-based freelancers.
+const CURRENCIES = ["USD", "INR", "EUR"];
 
 /**
  * Creates an asset at status "unassigned".
