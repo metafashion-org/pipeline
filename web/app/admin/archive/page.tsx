@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
 import { PendingPaymentControls } from "@/components/archive/PendingPaymentControls";
+import { ArchiveTable } from "@/components/archive/ArchiveTable";
 import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -46,6 +47,9 @@ interface ArchivedTask {
     title: string;
     updatedAt: Date;
     assignedTo: string | null;
+    feeAmount: string | null;
+    currency: string | null;
+    paymentReceiptUrl: string | null;
 }
 
 interface PendingPayment {
@@ -71,6 +75,7 @@ export default async function ArchivePage() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     let tasks: ArchivedTask[] = [];
+    const paidAtByAssetId = new Map<string, Date>();
     let pendingPayments: PendingPayment[] = [];
     let latestCycleDate: string | null = null;
     try {
@@ -81,12 +86,31 @@ export default async function ArchivePage() {
                 title: assets.itemName,
                 updatedAt: assets.updatedAt,
                 assignedTo: personnel.name,
+                feeAmount: assets.feeAmount,
+                currency: assets.currency,
+                paymentReceiptUrl: assets.paymentReceiptUrl,
             })
             .from(assets)
             .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
             .where(and(eq(assets.currentStatus, "payment_done"), lte(assets.updatedAt, sevenDaysAgo)));
 
         tasks = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+        // When each asset actually reached payment_done, which is what the month filter should group by.
+        // assets.updatedAt only records the last time the row was touched for any reason.
+        if (rows.length > 0) {
+            const paidRows = await db
+                .select({ assetId: statusHistory.assetId, createdAt: statusHistory.createdAt })
+                .from(statusHistory)
+                .where(and(
+                    inArray(statusHistory.assetId, rows.map((r) => r.id)),
+                    eq(statusHistory.toStatus, "payment_done")
+                ))
+                .orderBy(desc(statusHistory.createdAt));
+            for (const row of paidRows) {
+                if (!paidAtByAssetId.has(row.assetId)) paidAtByAssetId.set(row.assetId, row.createdAt);
+            }
+        }
 
         // Pending Payments: who to pay, how much, and since when they entered
         // marked_for_payment/uploaded_to_roblox. This used to be a live continuous
@@ -225,6 +249,27 @@ export default async function ArchivePage() {
                             )}
                         </TableBody>
                     </Table>
+                </CardContent>
+            </Card>
+
+            <Card className="shadow-sm hover:shadow-md transition-shadow">
+                <CardHeader>
+                    <CardTitle>Task Archive</CardTitle>
+                </CardHeader>
+                <CardContent>
+                <ArchiveTable
+                    rows={tasks.map((t) => ({
+                        id: t.id,
+                        sku: t.sku,
+                        title: t.title,
+                        assignedTo: t.assignedTo,
+                        feeAmount: t.feeAmount,
+                        currency: t.currency,
+                        paymentReceiptUrl: t.paymentReceiptUrl,
+                        updatedAt: t.updatedAt.toISOString(),
+                        paidAt: paidAtByAssetId.get(t.id)?.toISOString() ?? null,
+                    }))}
+                />
                 </CardContent>
             </Card>
 

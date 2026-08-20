@@ -10,9 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
-const CURRENCIES = ["USD", "EUR", "RUB"] as const;
+const CURRENCIES = ["USD", "INR", "EUR"] as const;
 
 export function PendingPaymentControls({
   sku,
@@ -51,7 +52,7 @@ export function PendingPaymentControls({
   return (
     <div className="flex items-center gap-1.5">
       <Select value={selectedCurrency} onValueChange={setSelectedCurrency}>
-        <SelectTrigger className="w-[72px] h-8">
+        <SelectTrigger className="h-8 w-[86px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -71,6 +72,13 @@ export function PendingPaymentControls({
       <Button size="sm" variant={saved ? "outline" : "default"} disabled={saving || !receiptUrl} onClick={save}>
         {saved ? "Update" : "Attach"}
       </Button>
+      {saved && receiptUrl && (
+        <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" asChild title="Open receipt">
+          <a href={receiptUrl} target="_blank" rel="noopener noreferrer" aria-label="Open receipt">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+      )}
     </div>
   );
 }
