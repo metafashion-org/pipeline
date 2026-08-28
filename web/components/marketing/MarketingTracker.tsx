@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Card,
   CardHeader,
@@ -42,19 +42,22 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { Switch } from "@/components/ui/switch";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
 
 const COMMON_PLATFORMS = ["Pinterest", "Instagram", "TikTok", "YouTube Shorts", "Twitter/X"];
+const COMMON_POST_TYPES = ["Reel", "Story", "Carousel", "Video", "Static Post"];
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  done: "default",
   posted: "default",
-  high_performing: "default",
+  boosted_promoted: "default",
   needs_repost: "destructive",
-  rejected: "destructive",
   scheduled: "secondary",
-  creative_in_progress: "secondary",
+  planned: "secondary",
+  creative_needed: "secondary",
 };
 
 const cardClass = "shadow-sm hover:shadow-md transition-shadow";
@@ -64,12 +67,17 @@ export interface MarketingUpdateRow {
   assetId: string;
   sku: string;
   itemName: string;
+  campaign: string | null;
   platform: string;
+  postType: string | null;
   postUrl: string | null;
+  creative: string | null;
   caption: string | null;
   marketingStatus: string;
   postedAt: string | null;
+  highPerforming: boolean;
   notes: string | null;
+  nextAction: string | null;
   createdAt: string;
 }
 
@@ -131,7 +139,8 @@ export function MarketingTracker({
   const visibleUpdates = useMemo(() => {
     if (quickFilter === "postedThisWeek") return updates.filter(isPostedThisWeek);
     if (quickFilter === "needs_repost") return updates.filter((u) => u.marketingStatus === "needs_repost");
-    if (quickFilter === "high_performing") return updates.filter((u) => u.marketingStatus === "high_performing");
+    // highPerforming is a real flag independent of lifecycle status - see marketing_updates.ts.
+    if (quickFilter === "high_performing") return updates.filter((u) => u.highPerforming);
     return updates;
   }, [updates, quickFilter]);
 
@@ -304,10 +313,17 @@ export function MarketingTracker({
                     <div key={update.updateId} className="p-2.5 bg-background border rounded-md text-xs space-y-1 shadow-sm">
                       <div className="flex justify-between font-mono font-bold">
                         <span>{update.sku}</span>
-                        <span className="uppercase text-[10px] text-muted-foreground">{update.platform}</span>
+                        <span className="uppercase text-[10px] text-muted-foreground">
+                          {update.platform}
+                          {update.postType ? ` · ${update.postType}` : ""}
+                        </span>
                       </div>
                       <p className="font-medium text-foreground">{update.itemName}</p>
+                      {update.campaign && <p className="text-muted-foreground truncate">Campaign: {update.campaign}</p>}
                       {update.caption && <p className="text-muted-foreground italic truncate">{update.caption}</p>}
+                      {update.highPerforming && (
+                        <Badge variant="default" className="text-[9px] h-4 px-1.5">High performing</Badge>
+                      )}
                     </div>
                   ))}
               </CardContent>
@@ -333,7 +349,8 @@ export function MarketingTracker({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Platform</TableHead>
+                      <TableHead>Platform / Type</TableHead>
+                      <TableHead>Campaign</TableHead>
                       <TableHead>Link</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Posted</TableHead>
@@ -343,7 +360,11 @@ export function MarketingTracker({
                   <TableBody>
                     {group.updates.map((u) => (
                       <TableRow key={u.updateId}>
-                        <TableCell className="font-medium">{u.platform}</TableCell>
+                        <TableCell className="font-medium">
+                          {u.platform}
+                          {u.postType && <span className="text-muted-foreground font-normal"> · {u.postType}</span>}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{u.campaign || "-"}</TableCell>
                         <TableCell>
                           {u.postUrl ? (
                             <a
@@ -359,9 +380,12 @@ export function MarketingTracker({
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={STATUS_VARIANT[u.marketingStatus] || "outline"}>
-                            {statusLabel(u.marketingStatus)}
-                          </Badge>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <Badge variant={STATUS_VARIANT[u.marketingStatus] || "outline"}>
+                              {statusLabel(u.marketingStatus)}
+                            </Badge>
+                            {u.highPerforming && <Badge variant="outline" className="text-[10px]">High performing</Badge>}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {formatDate(u.postedAt)}
@@ -407,28 +431,44 @@ function LogMarketingDialog({
   onAdded: (update: MarketingUpdateRow) => void;
 }) {
   const [sku, setSku] = useState<string | null>(null);
+  const [campaign, setCampaign] = useState("");
   const [platform, setPlatform] = useState("");
+  const [postType, setPostType] = useState("");
   const [postUrl, setPostUrl] = useState("");
+  const [creative, setCreative] = useState("");
   const [postedAt, setPostedAt] = useState("");
   const [marketingStatus, setMarketingStatus] = useState("");
+  const [highPerforming, setHighPerforming] = useState(false);
   const [caption, setCaption] = useState("");
   const [notes, setNotes] = useState("");
+  const [nextAction, setNextAction] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  // Adjusted during render on the open transition rather than in an effect
+  // (React's own recommended pattern for "reset state when a prop changes")
+  // - avoids the extra render an effect-based setState would otherwise
+  // trigger every time the dialog opens.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) setSku(initialSku);
-  }, [open, initialSku]);
+  }
 
   const assetNameBySku = useMemo(() => new Map(assetOptions.map((a) => [a.sku, a.itemName])), [assetOptions]);
 
   function reset() {
     setSku(null);
+    setCampaign("");
     setPlatform("");
+    setPostType("");
     setPostUrl("");
+    setCreative("");
     setPostedAt("");
     setMarketingStatus("");
+    setHighPerforming(false);
     setCaption("");
     setNotes("");
+    setNextAction("");
   }
 
   async function submit() {
@@ -447,12 +487,17 @@ function LogMarketingDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sku,
+          campaign: campaign.trim() || undefined,
           platform: platform.trim(),
+          postType: postType.trim() || undefined,
           postUrl: postUrl.trim(),
+          creative: creative.trim() || undefined,
           postedAt: postedAt || undefined,
           marketingStatus: marketingStatus || undefined,
+          highPerforming,
           caption: caption.trim() || undefined,
           notes: notes.trim() || undefined,
+          nextAction: nextAction.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -466,12 +511,17 @@ function LogMarketingDialog({
         assetId: data.update.assetId,
         sku,
         itemName: asset?.itemName || sku,
+        campaign: data.update.campaign,
         platform: data.update.platform,
+        postType: data.update.postType,
         postUrl: data.update.postUrl,
+        creative: data.update.creative,
         caption: data.update.caption,
         marketingStatus: data.update.marketingStatus,
         postedAt: data.update.postedAt,
+        highPerforming: data.update.highPerforming,
         notes: data.update.notes,
+        nextAction: data.update.nextAction,
         createdAt: data.update.createdAt,
       });
       toast.success(`${platform} logged for ${sku}`);
@@ -520,32 +570,68 @@ function LogMarketingDialog({
               </ComboboxContent>
             </Combobox>
           </div>
-          <div>
-            <Label htmlFor="platform-input">
-              Platform<span className="text-destructive"> *</span>
-            </Label>
-            <div className="flex gap-1.5 flex-wrap mt-1 mb-1.5">
-              {/* Real buttons, not clickable spans, so the quick picks are reachable by keyboard like every other control in the form. */}
-              {COMMON_PLATFORMS.map((p) => (
-                <Button
-                  key={p}
-                  type="button"
-                  size="sm"
-                  variant={platform === p ? "default" : "outline"}
-                  className="h-7 rounded-full px-3 text-xs font-normal"
-                  aria-pressed={platform === p}
-                  onClick={() => setPlatform(p)}
-                >
-                  {p}
-                </Button>
-              ))}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="platform-input">
+                Platform<span className="text-destructive"> *</span>
+              </Label>
+              <div className="flex gap-1.5 flex-wrap mt-1 mb-1.5">
+                {/* Real buttons, not clickable spans, so the quick picks are reachable by keyboard like every other control in the form. */}
+                {COMMON_PLATFORMS.map((p) => (
+                  <Button
+                    key={p}
+                    type="button"
+                    size="sm"
+                    variant={platform === p ? "default" : "outline"}
+                    className="h-7 rounded-full px-3 text-xs font-normal"
+                    aria-pressed={platform === p}
+                    onClick={() => setPlatform(p)}
+                  >
+                    {p}
+                  </Button>
+                ))}
+              </div>
+              <Input
+                id="platform-input"
+                placeholder="Or type another platform"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+              />
             </div>
-            <Input
-              id="platform-input"
-              placeholder="Or type another platform"
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-            />
+            <div>
+              <Label htmlFor="posttype-input">Post / channel type</Label>
+              <div className="flex gap-1.5 flex-wrap mt-1 mb-1.5">
+                {COMMON_POST_TYPES.map((p) => (
+                  <Button
+                    key={p}
+                    type="button"
+                    size="sm"
+                    variant={postType === p ? "default" : "outline"}
+                    className="h-7 rounded-full px-3 text-xs font-normal"
+                    aria-pressed={postType === p}
+                    onClick={() => setPostType(p)}
+                  >
+                    {p}
+                  </Button>
+                ))}
+              </div>
+              <Input
+                id="posttype-input"
+                placeholder="Or type another type"
+                value={postType}
+                onChange={(e) => setPostType(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="campaign-input">Campaign</Label>
+              <Input id="campaign-input" value={campaign} onChange={(e) => setCampaign(e.target.value)} placeholder="e.g. Summer drop" />
+            </div>
+            <div>
+              <Label htmlFor="creative-input">Creative used</Label>
+              <Input id="creative-input" value={creative} onChange={(e) => setCreative(e.target.value)} placeholder="Which asset/creative" />
+            </div>
           </div>
           <div>
             <Label htmlFor="posturl-input">Post URL</Label>
@@ -584,12 +670,24 @@ function LogMarketingDialog({
             </div>
           </div>
           <div>
-            <Label htmlFor="caption-input">Caption</Label>
+            <Label htmlFor="caption-input">Caption / angle</Label>
             <Textarea id="caption-input" rows={2} value={caption} onChange={(e) => setCaption(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="nextaction-input">Next marketing action</Label>
+            <Input id="nextaction-input" value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="e.g. Repost with new creative next Tuesday" />
           </div>
           <div>
             <Label htmlFor="notes-input">Notes</Label>
             <Textarea id="notes-input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <div>
+              <Label htmlFor="highperforming-toggle">High performing</Label>
+              {/* A judgment call about performance, independent of the lifecycle status above — see marketing_updates.ts. */}
+              <p className="text-xs text-muted-foreground">Flags it for the &ldquo;High performing&rdquo; filter, regardless of status.</p>
+            </div>
+            <Switch id="highperforming-toggle" checked={highPerforming} onCheckedChange={setHighPerforming} />
           </div>
         </div>
         <DialogFooter>

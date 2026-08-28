@@ -129,13 +129,13 @@ export async function getArchivedAssets(query: ArchiveQuery = {}): Promise<Archi
 export async function getArchivedTotal(query: ArchiveQuery = {}): Promise<{ total: number; currencies: string[] }> {
   const rows = await db
     .select({
-      currency: sql<string>`coalesce(${assets.currency}, 'USD')`,
+      currency: sql<string>`coalesce(${assets.currency}, 'INR')`,
       sum: sql<number>`coalesce(sum(${assets.feeAmount}), 0)::float`,
     })
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
     .where(and(...archiveConditions(query)))
-    .groupBy(sql`coalesce(${assets.currency}, 'USD')`);
+    .groupBy(sql`coalesce(${assets.currency}, 'INR')`);
 
   return {
     total: rows.reduce((sum, r) => sum + Number(r.sum), 0),

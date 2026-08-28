@@ -8,16 +8,23 @@ import { asc, eq, inArray } from "drizzle-orm";
 // INITIAL_MARKETING_STATUSES in ../marketing-service - comparing the seed's source array to itself
 // would pass even if the seed function wrote nothing at all. This is the one check that actually
 // catches the seed drifting from what the app expects.
+//
+// This literal list itself used to drift from the brief's §10 suggested statuses
+// (it had "Uploaded Not Marketed"/"High Performing"/"Archived Campaign"/"Paused"/
+// "Rejected", none of which the brief lists) — a real bug this test faithfully
+// verified for the wrong requirement. Corrected to the brief's own list,
+// verbatim. "High Performing" deliberately isn't a status - see the
+// highPerforming column on marketing_updates.
 const EXPECTED = [
-  { statusKey: "uploaded_not_marketed", label: "Uploaded Not Marketed" },
-  { statusKey: "creative_in_progress", label: "Creative in Progress" },
+  { statusKey: "not_planned", label: "Not Planned" },
+  { statusKey: "planned", label: "Planned" },
+  { statusKey: "creative_needed", label: "Creative Needed" },
   { statusKey: "scheduled", label: "Scheduled" },
   { statusKey: "posted", label: "Posted" },
-  { statusKey: "high_performing", label: "High Performing" },
+  { statusKey: "boosted_promoted", label: "Boosted / Promoted" },
+  { statusKey: "performance_reviewed", label: "Performance Reviewed" },
   { statusKey: "needs_repost", label: "Needs Repost" },
-  { statusKey: "archived_campaign", label: "Archived Campaign" },
-  { statusKey: "paused", label: "Paused" },
-  { statusKey: "rejected", label: "Rejected" },
+  { statusKey: "done", label: "Done" },
 ];
 const EXPECTED_KEYS = EXPECTED.map((s) => s.statusKey);
 

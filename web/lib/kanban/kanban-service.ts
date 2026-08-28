@@ -29,6 +29,11 @@ export interface KanbanAssetCard {
   artistId: string | null;
   artistName: string | null;
   artistEmail: string | null;
+  // Full deep-link (https://discord.com/channels/{guild}/{channel}), built
+  // server-side so the client never needs the guild id as a public env var.
+  // Null when the artist hasn't been linked to a Discord channel yet — see
+  // HANDOFF.md's Discord/personnel migration notes.
+  artistDiscordUrl: string | null;
   gmailThreadId: string | null;
   deadline: Date | null;
   updatedAt: Date;
@@ -54,6 +59,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       artistId: assets.currentArtistId,
       artistName: personnel.name,
       artistEmail: personnel.email,
+      artistDiscordChannelId: personnel.discordChannelId,
       gmailThreadId: assets.gmailThreadId,
       deadline: assets.deadline,
       updatedAt: assets.updatedAt,
@@ -64,7 +70,15 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id)),
   ]);
 
-  let allAssets = fetchedAssets;
+  const guildId = process.env.DISCORD_GUILD_ID;
+
+  // Maps the raw query row (which selected the artist's discordChannelId, an
+  // internal id) into the public KanbanAssetCard shape (a full deep-link URL,
+  // built here so the client never needs the guild id as a public env var).
+  let allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
+    ...rest,
+    artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
+  }));
 
   if (artistEmail) {
     allAssets = allAssets.filter(

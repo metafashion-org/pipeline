@@ -3,23 +3,30 @@ import { curationFieldConfig } from "@/lib/db/schema/curation_field_config";
 import { curationItemIdeas } from "@/lib/db/schema/curation_item_ideas";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and } from "drizzle-orm";
+import { nextSequentialSku } from "@/lib/assets/sku";
+
+export type CurationFieldType = "text" | "textarea" | "select" | "multi_select" | "url" | "image" | "number";
 
 export interface CreateCurationFieldOptions {
   fieldKey: string;
   displayName: string;
+  fieldType?: CurationFieldType;
+  options?: string[];
   includeInArtistEmail?: boolean;
   sortOrder?: number;
 }
 
 export async function addCurationFieldConfig(options: CreateCurationFieldOptions) {
-  const { fieldKey, displayName, includeInArtistEmail = true, sortOrder = 0 } = options;
+  const { fieldKey, displayName, fieldType = "text", options: choices = [], includeInArtistEmail = true, sortOrder = 0 } = options;
 
   const [field] = await db
     .insert(curationFieldConfig)
     .values({
       fieldKey,
       displayName,
+      fieldType,
+      options: choices,
       includeInArtistEmail,
       sortOrder,
     })
@@ -28,8 +35,12 @@ export async function addCurationFieldConfig(options: CreateCurationFieldOptions
   return field;
 }
 
-export async function getCurationFieldConfigs() {
-  return await db.select().from(curationFieldConfig).orderBy(asc(curationFieldConfig.sortOrder));
+// Pass includeInactive when the caller needs to RESOLVE historical values
+// (e.g. rendering a past idea that used a since-retired field) rather than
+// render a blank form for new input, which should only offer live fields.
+export async function getCurationFieldConfigs(includeInactive = false) {
+  const rows = await db.select().from(curationFieldConfig).orderBy(asc(curationFieldConfig.sortOrder));
+  return includeInactive ? rows : rows.filter((r) => r.isActive);
 }
 
 export interface UpdateCurationFieldConfigInput {
@@ -68,30 +79,63 @@ export interface BriefField {
 
 // Returns the ordered list of optional brief fields to include in an assignment
 // email for this asset, per the admin-toggleable curation_field_config table.
+// Resolves every curation field flagged includeInArtistEmail for a real
+// asset. Two sources, asset columns preferred: a handful of fields
+// (deadline, recolor instructions) have a real backing column on `assets`
+// that can change after curation — an artist manager editing the deadline
+// post-assignment should show up in the brief, not the value captured at
+// curation time. Every other dynamic field (rig, tech specs, target wearer,
+// etc.) only ever lived in the originating curation idea's fieldValues
+// JSONB, found via curationItemIdeas.assetId — see submitCurationItemIdea.
 export async function getBriefFieldsForAsset(assetId: string): Promise<BriefField[]> {
   const [asset] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
   if (!asset) throw new Error(`Asset '${assetId}' not found`);
 
+  const [idea] = await db.select().from(curationItemIdeas).where(eq(curationItemIdeas.assetId, assetId)).limit(1);
+  const ideaFieldValues = (idea?.fieldValues as Record<string, unknown>) || {};
+
   const configs = await db
     .select()
     .from(curationFieldConfig)
-    .where(eq(curationFieldConfig.includeInArtistEmail, true))
+    .where(and(eq(curationFieldConfig.includeInArtistEmail, true), eq(curationFieldConfig.isActive, true)))
     .orderBy(asc(curationFieldConfig.sortOrder));
 
   const fields: BriefField[] = [];
   for (const config of configs) {
     const accessor = ASSET_FIELD_ACCESSORS[config.fieldKey];
-    if (!accessor) continue; // no known backing column for this field yet
-    const value = accessor(asset);
+    const accessorValue = accessor ? accessor(asset) : null;
+    if (accessorValue) {
+      fields.push({ key: config.fieldKey, displayName: config.displayName, value: accessorValue });
+      continue;
+    }
+    const raw = ideaFieldValues[config.fieldKey];
+    if (raw === undefined || raw === null || raw === "") continue;
+    const value = Array.isArray(raw) ? raw.join(", ") : String(raw);
     if (value) fields.push({ key: config.fieldKey, displayName: config.displayName, value });
   }
   return fields;
 }
 
+// Seeded from the brief's §6 field list as real starting data. Admin-editable
+// from here on (add / rename / retire), which is the actual point — this is a
+// starting set, not a fixed one. includeInArtistEmail is set per the brief's
+// own distinction: internal strategy fields (trend reasoning, why it will
+// sell, comparable items) stay hidden from artists; production fields (rig,
+// tech specs, recolor directions, budget) go in the brief.
 export async function seedDefaultCurationFieldConfig() {
   const defaults: CreateCurationFieldOptions[] = [
-    { fieldKey: "deadline", displayName: "Deadline", includeInArtistEmail: true, sortOrder: 1 },
-    { fieldKey: "recolorInstructions", displayName: "Recolor Instructions", includeInArtistEmail: true, sortOrder: 2 },
+    { fieldKey: "sourcePlatform", displayName: "Source Platform", fieldType: "text", includeInArtistEmail: false, sortOrder: 1 },
+    { fieldKey: "trendReasoning", displayName: "Trend Reasoning", fieldType: "textarea", includeInArtistEmail: false, sortOrder: 2 },
+    { fieldKey: "whyItWillSell", displayName: "Why The Item Will Sell", fieldType: "textarea", includeInArtistEmail: false, sortOrder: 3 },
+    { fieldKey: "targetWearer", displayName: "Target Wearer / Aesthetic", fieldType: "text", includeInArtistEmail: true, sortOrder: 4 },
+    { fieldKey: "seasonality", displayName: "Seasonality", fieldType: "select", options: ["Year-round", "Spring", "Summer", "Autumn", "Winter", "Holiday", "Event-specific"], includeInArtistEmail: true, sortOrder: 5 },
+    { fieldKey: "comparableItems", displayName: "Comparable Roblox Items", fieldType: "textarea", includeInArtistEmail: false, sortOrder: 6 },
+    { fieldKey: "budget", displayName: "Budget", fieldType: "number", includeInArtistEmail: true, sortOrder: 7 },
+    { fieldKey: "rig", displayName: "Rig", fieldType: "text", includeInArtistEmail: true, sortOrder: 8 },
+    { fieldKey: "technicalSpecs", displayName: "Technical Specs", fieldType: "textarea", includeInArtistEmail: true, sortOrder: 9 },
+    { fieldKey: "recolorDirections", displayName: "Recolor Directions", fieldType: "textarea", includeInArtistEmail: true, sortOrder: 10 },
+    { fieldKey: "deadline", displayName: "Deadline", fieldType: "text", includeInArtistEmail: true, sortOrder: 11 },
+    { fieldKey: "notes", displayName: "Notes", fieldType: "textarea", includeInArtistEmail: true, sortOrder: 12 },
   ];
   for (const field of defaults) {
     const existing = await db
@@ -105,40 +149,83 @@ export async function seedDefaultCurationFieldConfig() {
   }
 }
 
-// Generates a unique-enough SKU for an asset created outside the historical import flow.
-// Shared by curation item ideas and admin-created assets so there is one SKU scheme, not two.
-export function generateAssetSku(prefix: string): string {
-  return `SKU-${prefix}-${Date.now().toString().slice(-6)}`;
-}
-
 export interface SubmitItemIdeaOptions {
   ideaTitle: string;
   category?: string;
   trendReasoning?: string;
   sourceLinks?: string[];
   moodboardUrls?: string[];
+  // Values for the dynamic fields defined in curation_field_config, keyed by
+  // fieldKey. Not validated against the config here on purpose: a field
+  // retired between form render and submit should still save rather than
+  // hard-fail the curator's work.
+  fieldValues?: Record<string, unknown>;
   submitterId?: string;
+  // When submitting from an existing draft (see lib/curation/draft-service.ts),
+  // the draft row IS converted in place (status draft -> approved) rather
+  // than inserted as a second, separate row - a draft and its final
+  // submission are the same idea, not two records that both need cleaning up.
+  draftId?: string;
 }
 
 export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
-  const { ideaTitle, category, trendReasoning, sourceLinks = [], moodboardUrls = [], submitterId } = options;
+  const { ideaTitle, category, trendReasoning, sourceLinks = [], moodboardUrls = [], fieldValues = {}, submitterId, draftId } = options;
 
-  // 1. Record item idea
-  const [idea] = await db
-    .insert(curationItemIdeas)
-    .values({
-      ideaTitle,
-      category: category || null,
-      trendReasoning: trendReasoning || null,
-      sourceLinks,
-      moodboardUrls,
-      submittedBy: submitterId || null,
-      status: "approved",
-    })
-    .returning();
+  // 1. Record item idea - convert the existing draft row in place if one was
+  // supplied (and really belongs to this submitter and is still a draft),
+  // otherwise insert fresh, exactly as before drafts existed.
+  let idea: typeof curationItemIdeas.$inferSelect;
+  if (draftId) {
+    const [existingDraft] = await db
+      .select()
+      .from(curationItemIdeas)
+      .where(and(eq(curationItemIdeas.id, draftId), eq(curationItemIdeas.status, "draft")))
+      .limit(1);
+    if (!existingDraft) throw new Error("Draft not found or already submitted");
+    if (submitterId && existingDraft.submittedBy && existingDraft.submittedBy !== submitterId) {
+      throw new Error("This draft belongs to someone else");
+    }
+    const [converted] = await db
+      .update(curationItemIdeas)
+      .set({
+        ideaTitle,
+        category: category || null,
+        trendReasoning: trendReasoning || null,
+        sourceLinks,
+        moodboardUrls,
+        fieldValues,
+        submittedBy: submitterId || existingDraft.submittedBy,
+        status: "approved",
+        updatedAt: new Date(),
+      })
+      .where(eq(curationItemIdeas.id, draftId))
+      .returning();
+    idea = converted;
+  } else {
+    const [inserted] = await db
+      .insert(curationItemIdeas)
+      .values({
+        ideaTitle,
+        category: category || null,
+        trendReasoning: trendReasoning || null,
+        sourceLinks,
+        moodboardUrls,
+        fieldValues,
+        submittedBy: submitterId || null,
+        status: "approved",
+      })
+      .returning();
+    idea = inserted;
+  }
 
-  // 2. Auto-generate SKU and create asset at 'unassigned'
-  const sku = generateAssetSku("IDEA");
+  // 2. Auto-generate SKU and create asset at 'unassigned'.
+  // Uses the SAME sequential scheme as every other asset (MF-<year>-<4 digits>)
+  // rather than the old `SKU-IDEA-<timestamp>` format this used to produce —
+  // that matched neither the live SKUs nor the admin-created ones, which is
+  // exactly the bug lib/assets/sku.ts was written to fix for the admin path
+  // and which curation was silently left behind on.
+  const existing = await db.select({ sku: assets.sku }).from(assets);
+  const sku = nextSequentialSku(existing.map((a) => a.sku), new Date().getFullYear());
   const [asset] = await db
     .insert(assets)
     .values({
@@ -146,9 +233,23 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
       itemName: ideaTitle,
       category: category || null,
       currentStatus: "unassigned",
+      // The brief's §6 lists Budget and Deadline as curation fields, and the
+      // Kanban card reads them off the asset — carry them across at creation
+      // so a curated idea arrives on the board already showing them.
+      feeAmount: typeof fieldValues.budget === "number" || typeof fieldValues.budget === "string"
+        ? String(fieldValues.budget)
+        : null,
+      deadline: typeof fieldValues.deadline === "string" && fieldValues.deadline
+        ? new Date(fieldValues.deadline)
+        : null,
       referenceImages: moodboardUrls.map((url) => ({ provider: "filestore", externalId: url })),
     })
     .returning();
+
+  // 2b. Link the idea back to the asset it created — this is what lets
+  // getBriefFieldsForAsset find this idea's dynamic field values again once
+  // only the asset (not the idea) is visible from the Kanban side.
+  await db.update(curationItemIdeas).set({ assetId: asset.id }).where(eq(curationItemIdeas.id, idea.id));
 
   // 3. Log audit event
   await db.insert(auditLog).values({
@@ -201,7 +302,7 @@ export async function updateRecolorReferenceImages(
   };
 }
 
-export const SUPPORTED_CURRENCIES = ["USD", "EUR", "RUB"] as const;
+export const SUPPORTED_CURRENCIES = ["INR", "USD", "EUR", "RUB"] as const;
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
 export interface UpdateAssetPaymentDetailsInput {

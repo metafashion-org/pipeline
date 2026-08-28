@@ -216,3 +216,20 @@ export function isRouteAllowedForRoles(
 
   return true;
 }
+
+// Discord Team Manager's two-tier access, ported from Catalog Intel's own
+// DISCORD_ROLE_RANK (manager: 1, admin: 2). That version needed a
+// Discord-specific role field because it had no real RBAC of its own; this
+// app already has one, so the tiers map onto existing roles instead of
+// introducing a parallel permission dimension: "Manager" tier (view,
+// onboard, archive/restore, temp access) = admin or operator, matching who
+// already manages production day-to-day; "Admin" tier (permission-bit
+// edits, permanent channel deletion, kicks) = admin only, the same
+// higher-privilege boundary canManageSystemConfig already draws elsewhere.
+export function isDiscordManagerTier(roles: (SystemRole | string)[]): boolean {
+  return roles.includes("admin") || roles.includes("operator");
+}
+
+export function isDiscordAdminTier(roles: (SystemRole | string)[]): boolean {
+  return roles.includes("admin");
+}

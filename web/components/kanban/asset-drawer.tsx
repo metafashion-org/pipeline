@@ -10,7 +10,9 @@ import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
-import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History } from "lucide-react";
+import { LinkedArtifacts } from "./LinkedArtifacts";
+import { SubmitFinalFilesDialog, NotifyUploaderButton } from "./FinalFilesActions";
+import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 
 export interface AssetDrawerProps {
@@ -76,8 +78,15 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   const isAdminOrOperator = userRoles.includes("admin") || userRoles.includes("operator");
   const isCurator = userRoles.includes("curator") || isAdminOrOperator;
   const isPaymentAdmin = userRoles.includes("payment_admin") || isAdminOrOperator;
-  // Client-side gate only, to decide whether to show the button. The assign endpoint re-checks the same capability server-side.
+  // Client-side gates only, to decide what to show. Every endpoint these
+  // buttons call re-checks the real permission server-side — for Submit
+  // Final Files that also means checking the caller is actually the
+  // assigned artist, which this component has no way to know (it only gets
+  // a role list, not the viewer's personnelId), so it shows the button to
+  // any artist and lets the route reject a non-assignee.
   const canAssignArtists = getEffectiveCapabilities(userRoles).canAssignArtists;
+  const canNotifyUploader = getEffectiveCapabilities(userRoles).canAssignPublisher;
+  const canSubmitFinalFiles = isAdminOrOperator || userRoles.includes("artist");
   // Editing an asset's name, category, budget or deadline is the same production-management right as assigning its artist, so it rides on the same capability rather than inventing a second one.
   const canEdit = canAssignArtists;
 
@@ -157,6 +166,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
+        <LinkedArtifacts sku={asset.sku} enabled={open} />
+
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -178,6 +189,30 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             </div>
           </section>
         )}
+
+        {/* 6. Final Files & Delivery */}
+        {(canSubmitFinalFiles || canNotifyUploader) &&
+          (asset.currentStatus === "approved" || asset.currentStatus === "final_files_received") && (
+            <section className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <UploadCloud className="h-3.5 w-3.5" /> 6. Final Files & Delivery
+              </h4>
+              <div className="bg-muted/30 p-3 rounded-md text-sm flex items-center justify-between gap-2 flex-wrap">
+                {canSubmitFinalFiles && asset.currentStatus === "approved" && (
+                  <>
+                    <p className="text-xs text-muted-foreground">Approved — ready for the artist&apos;s final files.</p>
+                    <SubmitFinalFilesDialog sku={asset.sku} />
+                  </>
+                )}
+                {canNotifyUploader && asset.currentStatus === "final_files_received" && (
+                  <>
+                    <p className="text-xs text-muted-foreground">Final files received — notify the uploader when ready.</p>
+                    <NotifyUploaderButton sku={asset.sku} />
+                  </>
+                )}
+              </div>
+            </section>
+          )}
 
         {/* 8. Gmail Thread & Communications */}
         {asset.gmailThreadId && (

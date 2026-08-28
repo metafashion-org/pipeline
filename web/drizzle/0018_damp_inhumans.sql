@@ -1,0 +1,1 @@
+ALTER TABLE "personnel" ADD COLUMN "discord_channel_id" text;

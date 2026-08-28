@@ -31,7 +31,7 @@ async function testUpdateAssetPaymentDetails() {
   });
 
   try {
-    // Currency outside USD/EUR/RUB must be rejected, and rejected before any write happens.
+    // Currency outside INR/USD/EUR/RUB must be rejected, and rejected before any write happens.
     try {
       // @ts-expect-error deliberately passing an unsupported currency to verify the runtime guard
       await updateAssetPaymentDetails(TEST_SKU, { currency: "GBP" });
@@ -43,10 +43,10 @@ async function testUpdateAssetPaymentDetails() {
     }
 
     const [unchanged] = await db.select().from(assets).where(eq(assets.sku, TEST_SKU)).limit(1);
-    assert.strictEqual(unchanged.currency, "USD", "Rejected currency update must not have written anything (default stays USD)");
+    assert.strictEqual(unchanged.currency, "INR", "Rejected currency update must not have written anything (default stays INR)");
 
     // Each supported currency should be accepted and actually persisted.
-    for (const currency of ["USD", "EUR", "RUB"] as const) {
+    for (const currency of ["INR", "USD", "EUR", "RUB"] as const) {
       const result = await updateAssetPaymentDetails(TEST_SKU, { currency }, undefined, "test note");
       assert.strictEqual(result.currency, currency, `Result should echo back currency ${currency}`);
       assert.strictEqual(result.sku, TEST_SKU);
@@ -62,7 +62,7 @@ async function testUpdateAssetPaymentDetails() {
     const [rowWithReceipt] = await db.select().from(assets).where(eq(assets.sku, TEST_SKU)).limit(1);
     assert.strictEqual(rowWithReceipt.paymentReceiptUrl, "https://example.com/receipt.pdf");
 
-    console.log("Confirmed all supported currencies (USD/EUR/RUB) and paymentReceiptUrl persist correctly");
+    console.log("Confirmed all supported currencies (INR/USD/EUR/RUB) and paymentReceiptUrl persist correctly");
   } finally {
     await cleanup();
   }

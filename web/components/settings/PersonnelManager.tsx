@@ -40,7 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
 
@@ -171,6 +171,7 @@ export function PersonnelManager({
     }
     setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, status: status as PersonnelRow["status"] } : p)));
     toast.success(`Access ${status === "Active" ? "restored" : "revoked"}`);
+    if (data.result?.discordSyncWarning) toast.warning(data.result.discordSyncWarning);
   }
 
   async function approve(submissionId: string) {
@@ -192,8 +193,22 @@ export function PersonnelManager({
   return (
     <div className="flex flex-col gap-6">
       <Card className={cardClass}>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Pending Access Requests</CardTitle>
+          {/* /apply has no session and isn't in any internal nav by design
+              (it's for people who don't have an account yet) — this is the
+              one place an admin would naturally look for how to actually
+              send someone the link, so it lives here rather than nowhere. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/apply`);
+              toast.success("Application link copied");
+            }}
+          >
+            <Link2 className="h-3.5 w-3.5" /> Copy application link
+          </Button>
         </CardHeader>
         <CardContent>
           <Table>

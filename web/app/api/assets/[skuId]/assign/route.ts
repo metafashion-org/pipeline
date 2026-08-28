@@ -12,6 +12,7 @@ import { z } from "zod";
 const AssignSchema = z.object({
   artistId: z.uuid(),
   feeAmount: z.string().trim().min(1).optional(),
+  deadline: z.string().trim().min(1).optional(),
   ccEmails: z.array(z.email()).optional(),
   reason: z.string().trim().min(1).optional(),
 });
@@ -56,6 +57,7 @@ export async function POST(
       assetId: assetRecord[0].id,
       artistId: parseResult.data.artistId,
       feeAmount: parseResult.data.feeAmount,
+      deadline: parseResult.data.deadline,
       ccEmails: parseResult.data.ccEmails || [],
       actorId: session.user.personnelId,
       reason: parseResult.data.reason,

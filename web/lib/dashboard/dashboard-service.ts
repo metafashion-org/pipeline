@@ -156,10 +156,10 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     // Money is grouped by currency and never summed across them: adding dollars to rupees produces a number that means nothing.
     db.execute(sql`
-      select coalesce(currency, 'USD') as currency,
+      select coalesce(currency, 'INR') as currency,
              count(*)::int as assets,
              coalesce(sum(fee_amount) filter (where current_status = 'payment_done'), 0)::float as paid
-      from assets group by coalesce(currency, 'USD') order by assets desc
+      from assets group by coalesce(currency, 'INR') order by assets desc
     `),
 
     db.execute(sql`

@@ -178,10 +178,46 @@ async function testSetPersonnelStatus() {
   console.log("✓ setPersonnelStatus() assertions passed cleanly!");
 }
 
+// setPersonnelStatus now also tries to archive/restore this person's
+// Discord channel on Active<->Inactive/Blacklisted transitions (see
+// syncDiscordChannelForStatusChange), so "our bot only shows Jayesh who's
+// actually active" holds without a manual Archive-tab click every time.
+// This dev environment has no Discord bot token configured, so the real
+// Discord API call can't run here - what this DOES verify locally is the
+// no-op path every currently unlinked personnel record takes (no
+// discordChannelId set), and that it never throws or blocks the real
+// status change either way. The live archive/restore call itself was
+// verified directly against the real Discord API and the real VM.
+async function testSetPersonnelStatusDiscordSyncNoOp() {
+  console.log("Verifying setPersonnelStatus() is a clean no-op for Discord sync when there's no linked channel...");
+
+  await cleanup();
+  const [p] = await db
+    .insert(personnel)
+    .values({ name: "Test Status Discord Sync Personnel", email: TEST_EMAIL, roles: ["artist"], status: "Active" })
+    .returning();
+  personnelId = p.id;
+
+  try {
+    const deactivated = await setPersonnelStatus(personnelId, "Inactive");
+    assert.strictEqual(deactivated.discordSyncWarning, undefined, "No linked Discord channel -> no sync attempted, no warning");
+
+    const reactivated = await setPersonnelStatus(personnelId, "Active");
+    assert.strictEqual(reactivated.discordSyncWarning, undefined, "Same on the way back to Active");
+
+    console.log("Confirmed the Discord sync step no-ops cleanly for personnel with no linked channel, in both directions");
+  } finally {
+    await cleanup();
+  }
+
+  console.log("✓ setPersonnelStatus() Discord-sync no-op path passed cleanly!");
+}
+
 async function main() {
   testOnboardingConstants();
   await testApproveArtistAccessSubmission();
   await testSetPersonnelStatus();
+  await testSetPersonnelStatusDiscordSyncNoOp();
   console.log("✓ All onboarding.ts assertions passed cleanly!");
 }
 
