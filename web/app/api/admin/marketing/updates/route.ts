@@ -8,10 +8,19 @@ const MARKETING_STATUS_KEYS = INITIAL_MARKETING_STATUSES.map((s) => s.statusKey)
 
 const CreateMarketingUpdateSchema = z.object({
   sku: z.string().min(1),
+  campaign: z.string().optional(),
   platform: z.string().min(1),
+  // Post/channel type (e.g. Reel, Story, Carousel, Video) — the brief lists
+  // this separately from platform. Was accepted by neither this schema nor
+  // addMarketingUpdate itself before this round, despite the column
+  // existing on marketing_updates.
+  postType: z.string().optional(),
   postUrl: z.url().optional().or(z.literal("")),
+  creative: z.string().optional(),
   caption: z.string().optional(),
   notes: z.string().optional(),
+  nextAction: z.string().optional(),
+  highPerforming: z.boolean().optional(),
   postedAt: z
     .string()
     .optional()
@@ -34,19 +43,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
   }
 
-  const { sku, platform, postUrl, caption, notes, postedAt, marketingStatus } = parseResult.data;
+  const { sku, campaign, platform, postType, postUrl, creative, caption, notes, nextAction, highPerforming, postedAt, marketingStatus } =
+    parseResult.data;
 
   try {
     const update = await addMarketingUpdate({
       sku,
+      campaign: campaign || undefined,
       platform,
+      postType: postType || undefined,
       postUrl: postUrl || undefined,
+      creative: creative || undefined,
       caption: caption || undefined,
       notes: notes || undefined,
+      nextAction: nextAction || undefined,
+      highPerforming,
       postedAt: postedAt ? new Date(postedAt) : undefined,
       // Explicit status wins; otherwise default by whether a link was given -
-      // a link means it's already live, no link yet means creative work is still in progress.
-      marketingStatus: marketingStatus || (postUrl ? "posted" : "creative_in_progress"),
+      // a link means it's already live and posted, no link yet means it's
+      // at least been logged/planned (not planned at all would mean not
+      // logging anything here in the first place).
+      marketingStatus: marketingStatus || (postUrl ? "posted" : "planned"),
       responsiblePersonId: session.user.personnelId,
     });
     return NextResponse.json({ success: true, update });

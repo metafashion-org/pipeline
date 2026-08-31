@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, Maximize2 } from "lucide-react";
+import { Copy, Maximize2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AssetDrawer } from "./asset-drawer";
@@ -40,6 +40,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
     const itemName = task.itemName || "Unnamed Asset";
     const currentStatus = task.currentStatus || task.productionStatus || "unassigned";
     const artistName = task.artistName || task.artist || null;
+    const artistDiscordUrl = task.artistDiscordUrl || null;
 
     const {
         attributes,
@@ -71,10 +72,11 @@ export function TaskCard({ task, role }: TaskCardProps) {
         category: task.category || task.itemCategory || null,
         currentStatus,
         feeAmount: task.feeAmount || task.budget || null,
-        currency: task.currency || "USD",
+        currency: task.currency || "INR",
         artistId: task.artistId || null,
         artistName,
         artistEmail: task.artistEmail || task.emailAddress || null,
+        artistDiscordUrl: artistDiscordUrl,
         gmailThreadId: task.gmailThreadId || task.assignmentThreadId || null,
         deadline: task.deadline ? new Date(task.deadline) : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
@@ -152,9 +154,23 @@ export function TaskCard({ task, role }: TaskCardProps) {
                         </span>
                     </div>
                     {artistName && (
-                        <p className="text-[11px] text-muted-foreground truncate" title={artistName}>
-                            Artist: {artistName}
-                        </p>
+                        <div className="flex items-center justify-between gap-1">
+                            <p className="text-[11px] text-muted-foreground truncate" title={artistName}>
+                                Artist: {artistName}
+                            </p>
+                            {artistDiscordUrl && (
+                                <a
+                                    href={artistDiscordUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Open ${artistName}'s Discord channel`}
+                                    className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                    <MessageCircle className="h-3 w-3" />
+                                </a>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

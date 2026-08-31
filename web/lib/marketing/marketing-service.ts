@@ -5,16 +5,23 @@ import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, desc } from "drizzle-orm";
 
+// The brief's §10 own suggested status list, verbatim — what was seeded
+// before this (Uploaded Not Marketed / Creative in Progress / High
+// Performing / Archived Campaign / Paused / Rejected) didn't match it and
+// was never actually run against production (marketing_status_config had
+// zero rows live, confirmed directly — the Marketing Kanban's "by status"
+// view had zero columns to render into). "High Performing" is deliberately
+// NOT a status here — see marketing_updates.ts's highPerforming column.
 export const INITIAL_MARKETING_STATUSES = [
-  { statusKey: "uploaded_not_marketed", label: "Uploaded Not Marketed", sortOrder: 1 },
-  { statusKey: "creative_in_progress", label: "Creative in Progress", sortOrder: 2 },
-  { statusKey: "scheduled", label: "Scheduled", sortOrder: 3 },
-  { statusKey: "posted", label: "Posted", sortOrder: 4 },
-  { statusKey: "high_performing", label: "High Performing", sortOrder: 5 },
-  { statusKey: "needs_repost", label: "Needs Repost", sortOrder: 6 },
-  { statusKey: "archived_campaign", label: "Archived Campaign", sortOrder: 7 },
-  { statusKey: "paused", label: "Paused", sortOrder: 8 },
-  { statusKey: "rejected", label: "Rejected", sortOrder: 9 },
+  { statusKey: "not_planned", label: "Not Planned", sortOrder: 1 },
+  { statusKey: "planned", label: "Planned", sortOrder: 2 },
+  { statusKey: "creative_needed", label: "Creative Needed", sortOrder: 3 },
+  { statusKey: "scheduled", label: "Scheduled", sortOrder: 4 },
+  { statusKey: "posted", label: "Posted", sortOrder: 5 },
+  { statusKey: "boosted_promoted", label: "Boosted / Promoted", sortOrder: 6 },
+  { statusKey: "performance_reviewed", label: "Performance Reviewed", sortOrder: 7 },
+  { statusKey: "needs_repost", label: "Needs Repost", sortOrder: 8 },
+  { statusKey: "done", label: "Done", sortOrder: 9 },
 ];
 
 export async function seedMarketingStatuses() {
@@ -30,18 +37,36 @@ export interface AddMarketingUpdateOptions {
   sku: string;
   platform: string;
   marketingStatus: string;
+  campaign?: string;
+  postType?: string;
   postUrl?: string;
   creative?: string;
   caption?: string;
   postedAt?: Date;
   metrics?: Record<string, unknown>;
+  highPerforming?: boolean;
   notes?: string;
   nextAction?: string;
   responsiblePersonId?: string;
 }
 
 export async function addMarketingUpdate(options: AddMarketingUpdateOptions) {
-  const { sku, platform, marketingStatus, postUrl, creative, caption, postedAt, metrics = {}, notes, nextAction, responsiblePersonId } = options;
+  const {
+    sku,
+    platform,
+    marketingStatus,
+    campaign,
+    postType,
+    postUrl,
+    creative,
+    caption,
+    postedAt,
+    metrics = {},
+    highPerforming = false,
+    notes,
+    nextAction,
+    responsiblePersonId,
+  } = options;
 
   const assetRecord = await db.select().from(assets).where(eq(assets.sku, sku)).limit(1);
   if (assetRecord.length === 0) throw new Error(`Asset with SKU '${sku}' not found`);
@@ -63,13 +88,16 @@ export async function addMarketingUpdate(options: AddMarketingUpdateOptions) {
     .insert(marketingUpdates)
     .values({
       assetId: asset.id,
+      campaign: campaign || null,
       platform,
+      postType: postType || null,
       postUrl: postUrl || null,
       creative: creative || null,
       caption: caption || null,
       postedAt: postedAt || null,
       marketingStatus,
       metrics,
+      highPerforming,
       notes: notes || null,
       nextAction: nextAction || null,
       responsiblePersonId: responsiblePersonId || null,

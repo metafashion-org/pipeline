@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         currentStatus: "unassigned",
         deadline,
         feeAmount: feeAmount || null,
-        currency: currency || "USD",
+        currency: currency || "INR",
         referenceImages: toFileStoreEntries(parseResult.data.referenceImages),
         recolorReferenceImages: toFileStoreEntries(parseResult.data.recolorReferenceImages),
       })

@@ -38,7 +38,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "â‚¬", INR: "â
 
 function formatFee(fee: string | number | null, currency: string | null): string {
     if (fee === null || fee === "") return "-";
-    const symbol = CURRENCY_SYMBOLS[currency || "USD"] || "";
+    const symbol = CURRENCY_SYMBOLS[currency || "INR"] || "";
     const amount = Number(fee);
     return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
 }

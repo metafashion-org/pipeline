@@ -10,7 +10,7 @@ export const assets = pgTable("assets", {
   currentArtistId: uuid("current_artist_id").references(() => personnel.id),
   deadline: timestamp("deadline", { withTimezone: true }),
   feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }),
-  currency: text("currency").default("USD"),
+  currency: text("currency").default("INR"), // MetaFashion pays in INR by default; USD/EUR/RUB stay selectable for artists paid elsewhere.
   paymentReceiptUrl: text("payment_receipt_url"),
   marketingStatus: text("marketing_status"),
   lastMarketingUpdate: timestamp("last_marketing_update", { withTimezone: true }),

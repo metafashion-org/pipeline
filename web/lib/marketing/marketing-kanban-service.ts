@@ -11,6 +11,7 @@ export interface MarketingFilterOptions {
   marketerId?: string;
   campaignKeyword?: string;
   postedThisWeekOnly?: boolean;
+  highPerformingOnly?: boolean;
 }
 
 export async function getMarketingKanbanData(filters: MarketingFilterOptions = {}) {
@@ -25,13 +26,17 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
       itemName: assets.itemName,
       category: assets.category,
       platform: marketingUpdates.platform,
+      postType: marketingUpdates.postType,
       postUrl: marketingUpdates.postUrl,
+      creative: marketingUpdates.creative,
       caption: marketingUpdates.caption,
       marketingStatus: marketingUpdates.marketingStatus,
       postedAt: marketingUpdates.postedAt,
       campaign: marketingUpdates.campaign,
       metrics: marketingUpdates.metrics,
+      highPerforming: marketingUpdates.highPerforming,
       notes: marketingUpdates.notes,
+      nextAction: marketingUpdates.nextAction,
       responsiblePersonId: marketingUpdates.responsiblePersonId,
       responsiblePersonName: personnel.name,
       createdAt: marketingUpdates.createdAt,
@@ -72,6 +77,13 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
     filtered = filtered.filter((u) => u.marketingStatus === "posted" && new Date(u.createdAt) >= sevenDaysAgo);
   }
 
+  // A real flag (see marketing_updates.ts), not a status — a Posted or
+  // Boosted/Promoted item can independently be flagged high-performing
+  // without leaving its actual lifecycle status.
+  if (filters.highPerformingOnly) {
+    filtered = filtered.filter((u) => u.highPerforming);
+  }
+
   // Assets uploaded to Roblox or later, but not yet assigned a active marketing campaign
   const unmarketedAssets = await db
     .select({
@@ -86,7 +98,7 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
     .where(
       or(
         isNull(assets.marketingStatus),
-        eq(assets.marketingStatus, "uploaded_not_marketed")
+        eq(assets.marketingStatus, "not_planned")
       )
     );
 

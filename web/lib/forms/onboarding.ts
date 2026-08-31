@@ -6,6 +6,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq } from "drizzle-orm";
 import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
+import { isConfigured as isDiscordConfigured, archiveChannel, restoreChannel } from "@/lib/discord/team-service";
 
 export const ARTIST_ACCESS_FORM_KEY = "artist_access_request";
 
@@ -153,6 +154,8 @@ export async function approveArtistAccessSubmission(
   return { personnelId: pId, email, status: "Active" };
 }
 
+const DEACTIVATED_STATUSES = new Set(["Inactive", "Blacklisted"]);
+
 export async function setPersonnelStatus(
   personnelId: string,
   newStatus: "Active" | "Blacklisted" | "Inactive",
@@ -184,5 +187,52 @@ export async function setPersonnelStatus(
   // Dropping the entry here makes revoking access take effect on the very next request in this process.
   invalidatePersonnelAuthCache(existing[0].email);
 
-  return { personnelId, oldStatus, newStatus };
+  const discordSyncWarning = await syncDiscordChannelForStatusChange(existing[0], oldStatus, newStatus);
+
+  return { personnelId, oldStatus, newStatus, discordSyncWarning };
+}
+
+// Keeps a person's Discord channel out of Jayesh's (or any manager's)
+// active-coordination view once they're no longer Active — archived
+// (moved to "📦 Archive", read-only, still visible for record-keeping —
+// nothing is ever deleted) on the way to Inactive/Blacklisted, restored
+// to wherever it came from on the way back to Active. Only acts when this
+// person actually has a linked Discord channel; most personnel records
+// predate the Discord link and simply have nothing to do here. Never
+// throws — a Discord hiccup (bot down, channel deleted by hand, etc.)
+// must not block the actual status change, which is the real action the
+// admin asked for. Returns a warning string for the caller to surface if
+// the Discord side didn't go through, or undefined if there was nothing
+// to do or it succeeded.
+async function syncDiscordChannelForStatusChange(
+  personnelRow: typeof personnel.$inferSelect,
+  oldStatus: string,
+  newStatus: string
+): Promise<string | undefined> {
+  const channelId = personnelRow.discordChannelId;
+  if (!channelId || !isDiscordConfigured()) return undefined;
+
+  const wasActive = oldStatus === "Active";
+  const wasDeactivated = DEACTIVATED_STATUSES.has(oldStatus);
+  const isNowActive = newStatus === "Active";
+  const isNowDeactivated = DEACTIVATED_STATUSES.has(newStatus);
+
+  try {
+    if (wasActive && isNowDeactivated) {
+      const { priorCategoryId } = await archiveChannel(channelId);
+      if (priorCategoryId) {
+        await db.update(personnel).set({ discordPriorCategoryId: priorCategoryId }).where(eq(personnel.id, personnelRow.id));
+      }
+    } else if (wasDeactivated && isNowActive) {
+      if (personnelRow.discordPriorCategoryId) {
+        await restoreChannel(channelId, personnelRow.discordPriorCategoryId);
+        await db.update(personnel).set({ discordPriorCategoryId: null }).where(eq(personnel.id, personnelRow.id));
+      }
+    }
+    return undefined;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    console.error("[discord] Failed to sync channel for personnel status change:", msg);
+    return `Status updated, but syncing their Discord channel failed: ${msg}`;
+  }
 }

@@ -7,8 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -47,7 +48,11 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* ── Light Theme ───────────────────────────────────── */
+/* ── Light theme ───────────────────────────────────────────────────────────
+   Kept for completeness (shadcn's default), but unreachable in normal use —
+   this app forces dark below in layout.tsx (defaultTheme="dark",
+   enableSystem={false}) because Catalog Intel has no light mode at all, and
+   the point of this palette is to look like one product, not two. */
 :root {
   --radius: 0.625rem;
   --background: #ffffff;
@@ -83,39 +88,46 @@
   --sidebar-ring: #0a0a0a;
 }
 
-/* ── Dark Theme (Vercel / Next.js inspired) ────────── */
+/* ── Dark theme — Catalog Intel's actual palette, not shadcn's stock one ───
+   Every value below was pulled directly from App.tsx / index.html, not
+   approximated: #2962ff is Catalog Intel's one accent color (used nowhere
+   else), #0a0c12 / #0f1117 / #13161e are its real three-level dark surface
+   stack (sidebar / main / elevated-card), and the semantic colors match its
+   existing green/amber/red usage exactly. This is the theme that actually
+   renders — see the note on :root above for why. */
 .dark {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #141414;
-  --card-foreground: #fafafa;
-  --popover: #141414;
-  --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #0a0a0a;
-  --secondary: #262626;
-  --secondary-foreground: #fafafa;
-  --muted: #262626;
-  --muted-foreground: #a3a3a3;
-  --accent: #262626;
-  --accent-foreground: #fafafa;
-  --destructive: #dc2626;
-  --border: #262626;
-  --input: #262626;
-  --ring: #d4d4d4;
-  --chart-1: #3b82f6;
+  --radius: 0.5rem;
+  --background: #0f1117;
+  --foreground: #d1d5db;
+  --card: #13161e;
+  --card-foreground: #d1d5db;
+  --popover: #13161e;
+  --popover-foreground: #d1d5db;
+  --primary: #2962ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1f29;
+  --secondary-foreground: #d1d5db;
+  --muted: #1a1f29;
+  --muted-foreground: #6b7280;
+  --accent: #181c25;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #2962ff;
+  --chart-1: #2962ff;
   --chart-2: #22c55e;
-  --chart-3: #f59e0b;
-  --chart-4: #a855f7;
-  --chart-5: #ec4899;
-  --sidebar: #0a0a0a;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #fafafa;
-  --sidebar-primary-foreground: #0a0a0a;
-  --sidebar-accent: #262626;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #262626;
-  --sidebar-ring: #d4d4d4;
+  --chart-3: #fbbf24;
+  --chart-4: #f50057;
+  --chart-5: #00e5ff;
+  --sidebar: #0a0c12;
+  --sidebar-foreground: #9ca3af;
+  --sidebar-primary: #2962ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(41, 98, 255, 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #2962ff;
 }
 
 @layer base {
@@ -124,7 +136,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
 }
 

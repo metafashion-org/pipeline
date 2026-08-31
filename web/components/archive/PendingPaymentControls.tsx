@@ -13,7 +13,7 @@ import {
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
-const CURRENCIES = ["USD", "INR", "EUR"] as const;
+const CURRENCIES = ["INR", "USD", "EUR"] as const;
 
 export function PendingPaymentControls({
   sku,
@@ -24,7 +24,7 @@ export function PendingPaymentControls({
   currency: string | null;
   paymentReceiptUrl: string | null;
 }) {
-  const [selectedCurrency, setSelectedCurrency] = useState(currency || "USD");
+  const [selectedCurrency, setSelectedCurrency] = useState(currency || "INR");
   const [receiptUrl, setReceiptUrl] = useState(paymentReceiptUrl || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(Boolean(paymentReceiptUrl));

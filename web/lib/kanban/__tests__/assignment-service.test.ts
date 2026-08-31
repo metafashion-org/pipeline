@@ -155,9 +155,49 @@ async function testAssignAndReassignFlow() {
   }
 }
 
+// Real bug fix, verified: feeAmount/deadline passed to assignArtistToAsset
+// used to be used only transiently (the assignment record, the email render)
+// and never written back to assets.feeAmount/assets.deadline — the columns
+// the Kanban card actually reads. A fee set at assignment time wouldn't have
+// shown up on the card until someone separately edited the asset.
+async function testFeeAndDeadlinePersistToAsset() {
+  console.log("Verifying feeAmount/deadline set at assignment time actually persist to the asset, not just the assignment record...");
+  await cleanup();
+
+  const [artist] = await db.insert(personnel).values({ name: "Test Assignment Artist", email: ARTIST_EMAIL, roles: ["artist"] }).returning();
+  const [asset] = await db
+    .insert(assets)
+    .values({ sku: TEST_SKU, itemName: "Test Fee/Deadline Asset", currentStatus: "unassigned" })
+    .returning();
+  assetId = asset.id;
+
+  try {
+    await assignArtistToAsset({
+      assetId,
+      artistId: artist.id,
+      feeAmount: "425.00",
+      deadline: "2026-09-15",
+    });
+
+    const [assetAfter] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+    assert.strictEqual(assetAfter.feeAmount, "425.00", "assets.feeAmount must be updated by assignment, not just the assignment row");
+    assert.ok(assetAfter.deadline, "assets.deadline must be set");
+    assert.strictEqual(
+      new Date(assetAfter.deadline!).toISOString().slice(0, 10),
+      "2026-09-15",
+      "assets.deadline must match the date passed to assignArtistToAsset"
+    );
+
+    console.log("Confirmed feeAmount and deadline both persist to the asset itself");
+  } finally {
+    await cleanup();
+  }
+}
+
 async function main() {
   await testAssetNotFoundThrows();
   await testAssignAndReassignFlow();
+  await testFeeAndDeadlinePersistToAsset();
   console.log("✓ All assignment-service.ts assertions passed cleanly!");
 }
 

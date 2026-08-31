@@ -18,8 +18,8 @@ import {
  * SKU is the only field either dialog has alone, since it is assigned once at creation and identifies the asset from then on.
  */
 
-// USD is the schema default and what every existing asset uses; the others are here for artists paid elsewhere.
-export const CURRENCIES = ["USD", "INR", "EUR"];
+// INR is the schema default (MetaFashion's own currency); the others are here for artists paid elsewhere.
+export const CURRENCIES = ["INR", "USD", "EUR"];
 
 export interface AssetFormValues {
     sku: string;
@@ -37,7 +37,7 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
     itemName: "",
     category: "",
     feeAmount: "",
-    currency: "USD",
+    currency: "INR",
     deadline: "",
     referenceImages: "",
     recolorReferenceImages: "",

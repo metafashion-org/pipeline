@@ -13,13 +13,14 @@ export interface AssignArtistOptions {
   assetId: string;
   artistId: string;
   feeAmount?: string;
+  deadline?: string; // ISO date string
   ccEmails?: string[];
   actorId?: string;
   reason?: string;
 }
 
 export async function assignArtistToAsset(options: AssignArtistOptions) {
-  const { assetId, artistId, feeAmount, ccEmails = [], actorId, reason } = options;
+  const { assetId, artistId, feeAmount, deadline, ccEmails = [], actorId, reason } = options;
 
   // 1. Verify asset and artist exist
   const assetRecord = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
@@ -67,11 +68,17 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
       })
   );
 
-  // 5. Update asset record
+  // 5. Update asset record — feeAmount/deadline were previously only used
+  // transiently for the assignment record and the email render, never
+  // written back to the asset itself. Real bug: the Kanban card reads
+  // assets.feeAmount directly, so a fee set here wouldn't have shown up on
+  // the card at all until someone separately edited the asset.
   await db
     .update(assets)
     .set({
       currentArtistId: artistId,
+      ...(feeAmount ? { feeAmount } : {}),
+      ...(deadline ? { deadline: new Date(deadline) } : {}),
       updatedAt: new Date(),
     })
     .where(eq(assets.id, assetId));

@@ -1,63 +1,51 @@
 import { db } from "@/lib/db/client";
 import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
+import { artifactTypeConfig } from "@/lib/db/schema/artifact_type_config";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, like, sql } from "drizzle-orm";
+import { eq, asc, and, SQL } from "drizzle-orm";
+import { claimNextArtifactId } from "./artifact-id-service";
 
-const ARTIFACT_PREFIX_MAP: Record<string, string> = {
-  tech_spec: "SPEC",
-  mannequin_rig: "RIG",
-  recruiting_faq: "FAQ",
-  style_guide: "STYLE",
-};
+// Replaces the old hardcoded 4-type prefix map (tech_spec/mannequin_rig/
+// recruiting_faq/style_guide) and the old ID format ("SPEC-0001", found by
+// re-parsing existing titles for the highest number). Per the brief's §7:
+// the prefix list is admin-configurable (artifact_type_config), IDs are a
+// real dedicated column (not embedded in the title text), and the number
+// is claimed atomically (see artifact-id-service.ts) rather than found by
+// scanning. See HANDOFF.md for the full writeup of what was wrong before.
 
-export function getArtifactPrefix(artifactType: string): string {
-  if (ARTIFACT_PREFIX_MAP[artifactType]) return ARTIFACT_PREFIX_MAP[artifactType];
-  const cleanType = artifactType.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-  return cleanType.slice(0, 4) || "ART";
-}
-
-export async function generateTypedArtifactId(artifactType: string): Promise<string> {
-  const prefix = getArtifactPrefix(artifactType);
-  const prefixPattern = `${prefix}-%`;
-
-  // Query highest existing sequence number for this prefix
-  const existing = await db
-    .select({ title: knowledgeArtifacts.title })
-    .from(knowledgeArtifacts)
-    .where(like(knowledgeArtifacts.title, prefixPattern));
-
-  const maxSeq = existing.reduce((max, item) => {
-    const parts = item.title.split("-");
-    const num = parseInt(parts[1], 10);
-    return !isNaN(num) && num > max ? num : max;
-  }, 0);
-
-  const nextSeq = maxSeq + 1;
-  const padded = String(nextSeq).padStart(4, "0");
-  return `${prefix}-${padded}`;
+export async function listArtifactTypes() {
+  return db.select().from(artifactTypeConfig).orderBy(asc(artifactTypeConfig.sortOrder));
 }
 
 export interface CreateArtifactOptions {
-  title?: string;
-  artifactType: string;
-  fileUrl: string;
+  artifactTypeId: string;
+  title: string;
   description?: string;
+  source?: string;
+  fileUrl?: string;
+  tags?: string[];
+  addedBy?: string;
+  usageNotes?: string;
   actorId?: string;
 }
 
 export async function createKnowledgeArtifact(options: CreateArtifactOptions) {
-  const { artifactType, fileUrl, description, actorId } = options;
+  const { artifactTypeId, title, description, source, fileUrl, tags, addedBy, usageNotes, actorId } = options;
 
-  const generatedId = await generateTypedArtifactId(artifactType);
-  const title = options.title ? `${generatedId}: ${options.title}` : generatedId;
+  const generatedId = await claimNextArtifactId(artifactTypeId);
 
   const [artifact] = await db
     .insert(knowledgeArtifacts)
     .values({
+      artifactId: generatedId,
+      artifactTypeId,
       title,
-      artifactType,
-      fileUrl,
       description: description || null,
+      source: source || null,
+      fileUrl: fileUrl || null,
+      tags: tags || [],
+      addedBy: addedBy || null,
+      usageNotes: usageNotes || null,
     })
     .returning();
 
@@ -66,18 +54,32 @@ export async function createKnowledgeArtifact(options: CreateArtifactOptions) {
     entityType: "knowledge_artifact",
     entityId: artifact.id,
     actorId: actorId || null,
-    payload: { generatedId, artifactType, fileUrl },
+    payload: { generatedId, artifactTypeId, title },
   });
 
-  return { ...artifact, generatedId };
+  return artifact;
 }
 
-export async function getKnowledgeArtifacts(artifactType?: string) {
-  if (artifactType) {
-    return await db
-      .select()
-      .from(knowledgeArtifacts)
-      .where(eq(knowledgeArtifacts.artifactType, artifactType));
-  }
-  return await db.select().from(knowledgeArtifacts);
+export async function getKnowledgeArtifacts(artifactTypeId?: string) {
+  const conditions: SQL[] = [];
+  if (artifactTypeId) conditions.push(eq(knowledgeArtifacts.artifactTypeId, artifactTypeId));
+
+  return db
+    .select({
+      id: knowledgeArtifacts.id,
+      artifactId: knowledgeArtifacts.artifactId,
+      title: knowledgeArtifacts.title,
+      description: knowledgeArtifacts.description,
+      source: knowledgeArtifacts.source,
+      fileUrl: knowledgeArtifacts.fileUrl,
+      tags: knowledgeArtifacts.tags,
+      usageNotes: knowledgeArtifacts.usageNotes,
+      createdAt: knowledgeArtifacts.createdAt,
+      typeLabel: artifactTypeConfig.label,
+      typePrefix: artifactTypeConfig.prefix,
+    })
+    .from(knowledgeArtifacts)
+    .innerJoin(artifactTypeConfig, eq(knowledgeArtifacts.artifactTypeId, artifactTypeConfig.id))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(asc(knowledgeArtifacts.createdAt));
 }

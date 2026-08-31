@@ -13,13 +13,16 @@ import {
     closestCorners,
 } from "@dnd-kit/core";
 import useSWR from "swr";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { toast } from "sonner";
 import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface BoardProps {
     initialColumns?: KanbanColumnData[];
@@ -36,9 +39,41 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         refreshInterval: 20000,
     });
 
-    const columns: KanbanColumnData[] = swrResponse?.data || initialColumns || [];
+    const allColumns: KanbanColumnData[] = swrResponse?.data || initialColumns || [];
     const [activeTask, setActiveTask] = useState<KanbanAssetCard | null>(null);
     const [mounted, setMounted] = useState(false);
+
+    // Filters — artist-wise and deadline-date-wise, both requested from the
+    // team meeting notes. Purely client-side: the data's already loaded, so
+    // filtering it again over the network would just be added latency for
+    // no reason. "Deadline from/to" rather than a single date, since a
+    // range covers both "what's due this week" and "what's due today"
+    // without needing two different controls.
+    const [artistFilter, setArtistFilter] = useState<string>("all");
+    const [deadlineFrom, setDeadlineFrom] = useState<string>("");
+    const [deadlineTo, setDeadlineTo] = useState<string>("");
+
+    const allArtists = Array.from(
+        new Set(allColumns.flatMap((c) => c.assets.map((a) => a.artistName).filter((n): n is string => !!n)))
+    ).sort();
+
+    const hasActiveFilters = artistFilter !== "all" || deadlineFrom !== "" || deadlineTo !== "";
+
+    const columns: KanbanColumnData[] = hasActiveFilters
+        ? allColumns.map((col) => ({
+              ...col,
+              assets: col.assets.filter((a) => {
+                  if (artistFilter !== "all" && a.artistName !== artistFilter) return false;
+                  if (deadlineFrom || deadlineTo) {
+                      if (!a.deadline) return false;
+                      const d = new Date(a.deadline);
+                      if (deadlineFrom && d < new Date(deadlineFrom)) return false;
+                      if (deadlineTo && d > new Date(`${deadlineTo}T23:59:59`)) return false;
+                  }
+                  return true;
+              }),
+          }))
+        : allColumns;
 
     useEffect(() => {
         setMounted(true);
@@ -125,7 +160,12 @@ export function Board({ initialColumns = [], role }: BoardProps) {
             return;
         }
 
-        const previousColumns = [...columns];
+        // Rollback snapshot must be the *unfiltered* data — the SWR cache always
+        // holds the true full board, and filtering is display-only. Using the
+        // filtered `columns` here would, on a failed update, overwrite the cache
+        // with only the currently-visible subset and silently drop every other
+        // artist's/date's cards until the next revalidation.
+        const previousColumns = [...allColumns];
         await submitStatusUpdate(draggedTask.sku, newStatus, previousColumns);
     };
 
@@ -133,6 +173,53 @@ export function Board({ initialColumns = [], role }: BoardProps) {
 
     return (
         <>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+                <Select value={artistFilter} onValueChange={setArtistFilter}>
+                    <SelectTrigger className="w-[160px] h-8 text-xs">
+                        <SelectValue placeholder="All artists" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All artists</SelectItem>
+                        {allArtists.map((name) => (
+                            <SelectItem key={name} value={name}>
+                                {name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <Input
+                    type="date"
+                    value={deadlineFrom}
+                    onChange={(e) => setDeadlineFrom(e.target.value)}
+                    className="w-[140px] h-8 text-xs"
+                    aria-label="Deadline from"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                    type="date"
+                    value={deadlineTo}
+                    onChange={(e) => setDeadlineTo(e.target.value)}
+                    className="w-[140px] h-8 text-xs"
+                    aria-label="Deadline to"
+                />
+
+                {hasActiveFilters && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs text-muted-foreground"
+                        onClick={() => {
+                            setArtistFilter("all");
+                            setDeadlineFrom("");
+                            setDeadlineTo("");
+                        }}
+                    >
+                        <X className="h-3 w-3 mr-1" /> Clear filters
+                    </Button>
+                )}
+            </div>
+
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCorners}

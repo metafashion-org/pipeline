@@ -33,7 +33,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
         itemName: asset.itemName,
         category: asset.category || "",
         feeAmount: asset.feeAmount || "",
-        currency: asset.currency || "USD",
+        currency: asset.currency || "INR",
         deadline: asset.deadline ? new Date(asset.deadline).toISOString().slice(0, 10) : "",
         referenceImages: toLinkText(asset.referenceImages),
         recolorReferenceImages: toLinkText(asset.recolorReferenceImages),
