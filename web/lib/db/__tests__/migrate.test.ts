@@ -20,7 +20,11 @@ async function testAllSchemaTablesAreLive() {
 
   const columns = await sql<{ column_name: string }[]>`select column_name from information_schema.columns where table_name = 'marketing_updates'`;
   const columnNames = columns.map((c) => c.column_name);
-  for (const col of ["platform", "caption", "marketing_status", "channel", "creative", "posted_at", "next_action"]) {
+  // "channel" was the name this field carried in an early draft of P4-T3; the shipped schema
+  // splits it into `platform` (Instagram, TikTok) and `post_type` (Reel, Story, Carousel), and
+  // no migration ever created a `channel` column. Asserting on it meant this test could only
+  // ever fail. Checking the columns that actually exist, plus the two P4-T3 added later.
+  for (const col of ["platform", "post_type", "caption", "marketing_status", "creative", "posted_at", "next_action", "campaign", "high_performing"]) {
     assert.ok(columnNames.includes(col), `Expected column '${col}' on marketing_updates - P4-T3's full field list not applied?`);
   }
 
