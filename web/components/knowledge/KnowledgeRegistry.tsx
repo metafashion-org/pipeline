@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiCall } from "@/lib/api-client";
+import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
 import { Plus, ExternalLink, Link2 } from "lucide-react";
 import { ArtifactLinksDialog } from "./ArtifactLinksDialog";
@@ -85,10 +87,9 @@ export function KnowledgeRegistry({
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/knowledge/artifacts", {
+      const { ok, data } = await apiCall<{ artifact: Artifact }>("/api/admin/knowledge/artifacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           artifactTypeId: form.artifactTypeId,
           title: form.title.trim(),
           description: form.description.trim() || undefined,
@@ -97,10 +98,9 @@ export function KnowledgeRegistry({
           tags: form.tags.trim() ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
           category: form.category.trim() || undefined,
           usageNotes: form.usageNotes.trim() || undefined,
-        }),
+        },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create artifact");
+      if (!ok) throw new Error(data.error || "Failed to create artifact");
 
       const type = artifactTypes.find((t) => t.id === form.artifactTypeId)!;
       setArtifacts((prev) => [
@@ -144,9 +144,9 @@ export function KnowledgeRegistry({
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+                <label htmlFor="artifact-type" className="text-xs text-muted-foreground mb-1 block">Type</label>
                 <Select value={form.artifactTypeId} onValueChange={(v) => setForm({ ...form, artifactTypeId: v })}>
-                  <SelectTrigger>
+                  <SelectTrigger id="artifact-type">
                     <SelectValue placeholder="Select a type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -159,36 +159,36 @@ export function KnowledgeRegistry({
                 </Select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Title</label>
-                <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Q3 streetwear color trends" />
+                <label htmlFor="artifact-title" className="text-xs text-muted-foreground mb-1 block">Title</label>
+                <Input id="artifact-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Q3 streetwear color trends" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Description</label>
-                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+                <label htmlFor="artifact-description" className="text-xs text-muted-foreground mb-1 block">Description</label>
+                <Textarea id="artifact-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Source</label>
-                  <Input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="Where this came from" />
+                  <label htmlFor="artifact-source" className="text-xs text-muted-foreground mb-1 block">Source</label>
+                  <Input id="artifact-source" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="Where this came from" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">File / Link</label>
-                  <Input value={form.fileUrl} onChange={(e) => setForm({ ...form, fileUrl: e.target.value })} placeholder="https://..." />
+                  <label htmlFor="artifact-file-url" className="text-xs text-muted-foreground mb-1 block">File / Link</label>
+                  <Input id="artifact-file-url" value={form.fileUrl} onChange={(e) => setForm({ ...form, fileUrl: e.target.value })} placeholder="https://..." />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
-                  <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="streetwear, y2k" />
+                  <label htmlFor="artifact-tags" className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
+                  <Input id="artifact-tags" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="streetwear, y2k" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Category (links this artifact to it)</label>
-                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Outerwear" />
+                  <label htmlFor="artifact-category" className="text-xs text-muted-foreground mb-1 block">Category (links this artifact to it)</label>
+                  <Input id="artifact-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Outerwear" />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Usage Notes</label>
-                <Textarea value={form.usageNotes} onChange={(e) => setForm({ ...form, usageNotes: e.target.value })} rows={2} />
+                <label htmlFor="artifact-usage-notes" className="text-xs text-muted-foreground mb-1 block">Usage Notes</label>
+                <Textarea id="artifact-usage-notes" value={form.usageNotes} onChange={(e) => setForm({ ...form, usageNotes: e.target.value })} rows={2} />
               </div>
             </div>
             <DialogFooter>
@@ -235,7 +235,7 @@ export function KnowledgeRegistry({
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-muted-foreground text-xs">{new Date(a.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-2 text-muted-foreground text-xs">{formatDate(a.createdAt)}</td>
                   <td className="px-4 py-2">
                     {a.fileUrl && (
                       <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">

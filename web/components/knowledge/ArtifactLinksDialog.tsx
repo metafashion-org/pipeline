@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { apiCall } from "@/lib/api-client";
+import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
 import { X, Link2 } from "lucide-react";
 
@@ -86,9 +88,8 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
   const totalLinks = links.skus.length + links.categories.length + links.guidelines.length + links.styleSystems.length + links.campaigns.length + links.assignments.length;
 
   async function refresh() {
-    const res = await fetch(`/api/admin/knowledge/artifacts/${artifactId}/links`);
-    const data = await res.json();
-    if (res.ok) {
+    const { ok, data } = await apiCall<{ links: LinksState }>(`/api/admin/knowledge/artifacts/${artifactId}/links`);
+    if (ok) {
       setLinks(data.links);
       onLinksChanged?.(
         data.links.skus.length + data.links.categories.length + data.links.guidelines.length + data.links.styleSystems.length + data.links.campaigns.length + data.links.assignments.length
@@ -103,9 +104,8 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
     // but can't trace that same guarantee through a call to a separately
     // defined function, even though refresh() itself only awaits before
     // ever calling setState.
-    fetch(`/api/admin/knowledge/artifacts/${artifactId}/links`)
-      .then((r) => r.json())
-      .then((data) => {
+    apiCall<{ links: LinksState }>(`/api/admin/knowledge/artifacts/${artifactId}/links`)
+      .then(({ data }) => {
         if (data.links) {
           setLinks(data.links);
           onLinksChanged?.(
@@ -115,9 +115,8 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
       })
       .catch(() => {});
     Promise.all([
-      fetch("/api/assets")
-        .then((r) => r.json())
-        .then((d) => {
+      apiCall<{ data?: Array<{ assets?: Array<{ sku: string; id: string; itemName: string }> }> }>("/api/assets")
+        .then(({ data: d }) => {
           const options: AssetOption[] = [];
           for (const col of d.data || []) {
             for (const a of col.assets || []) options.push({ sku: a.sku, id: a.id, itemName: a.itemName });
@@ -125,13 +124,11 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
           setAssetOptions(options);
         })
         .catch(() => {}),
-      fetch("/api/admin/knowledge/guidelines")
-        .then((r) => r.json())
-        .then((d) => setGuidelineOptions(d.guidelines || []))
+      apiCall<{ guidelines?: { id: string; title: string }[] }>("/api/admin/knowledge/guidelines")
+        .then(({ data: d }) => setGuidelineOptions(d.guidelines || []))
         .catch(() => {}),
-      fetch("/api/admin/knowledge/style-systems")
-        .then((r) => r.json())
-        .then((d) => setStyleSystemOptions(d.styleSystems || []))
+      apiCall<{ styleSystems?: { id: string; name: string }[] }>("/api/admin/knowledge/style-systems")
+        .then(({ data: d }) => setStyleSystemOptions(d.styleSystems || []))
         .catch(() => {}),
     ]).finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,13 +137,11 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
   async function addLink(type: string, value: string) {
     if (!value) return;
     try {
-      const res = await fetch(`/api/admin/knowledge/artifacts/${artifactId}/links`, {
+      const { ok, data } = await apiCall<{ links: LinksState }>(`/api/admin/knowledge/artifacts/${artifactId}/links`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, value }),
+        body: { type, value },
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!ok) throw new Error(data.error);
       setLinks(data.links);
       onLinksChanged?.(
         data.links.skus.length + data.links.categories.length + data.links.guidelines.length + data.links.styleSystems.length + data.links.campaigns.length + data.links.assignments.length
@@ -159,9 +154,8 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
 
   async function removeLink(type: string, linkId: string) {
     try {
-      const res = await fetch(`/api/admin/knowledge/artifacts/${artifactId}/links/${type}/${linkId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await apiCall(`/api/admin/knowledge/artifacts/${artifactId}/links/${type}/${linkId}`, { method: "DELETE" });
+      if (!ok) throw new Error(data.error);
       await refresh();
     } catch (e) {
       toast.error(errMessage(e, "Failed to remove link"));
@@ -197,13 +191,11 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
         createLabel="+ New style system"
         onSelect={(id) => addLink("styleSystem", id)}
         onCreate={async (name) => {
-          const res = await fetch("/api/admin/knowledge/style-systems", {
+          const { ok, data } = await apiCall<{ styleSystem: { id: string; name: string } }>("/api/admin/knowledge/style-systems", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name }),
+            body: { name },
           });
-          const data = await res.json();
-          if (res.ok) {
+          if (ok) {
             setStyleSystemOptions((prev) => [...prev, { id: data.styleSystem.id, name: data.styleSystem.name }]);
             await addLink("styleSystem", data.styleSystem.id);
           } else {
@@ -230,13 +222,11 @@ function ArtifactLinksContent({ artifactId, onLinksChanged }: { artifactId: stri
         createLabel="+ New guideline"
         onSelect={(id) => addLink("guideline", id)}
         onCreate={async (title) => {
-          const res = await fetch("/api/admin/knowledge/guidelines", {
+          const { ok, data } = await apiCall<{ guideline: { id: string; title: string } }>("/api/admin/knowledge/guidelines", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title }),
+            body: { title },
           });
-          const data = await res.json();
-          if (res.ok) {
+          if (ok) {
             setGuidelineOptions((prev) => [...prev, { id: data.guideline.id, title: data.guideline.title }]);
             await addLink("guideline", data.guideline.id);
           } else {
@@ -412,8 +402,7 @@ function AssignmentAdder({ assetOptions, onSelect }: { assetOptions: AssetOption
     setAssetId(id);
     setLoadingAssignments(true);
     try {
-      const res = await fetch(`/api/admin/knowledge/assignments?assetId=${encodeURIComponent(id)}`);
-      const data = await res.json();
+      const { data } = await apiCall<{ assignments?: { id: string; artistName: string | null; assignedAt: string; isActive: boolean }[] }>(`/api/admin/knowledge/assignments?assetId=${encodeURIComponent(id)}`);
       setAssignmentOptions(data.assignments || []);
     } finally {
       setLoadingAssignments(false);
@@ -445,7 +434,7 @@ function AssignmentAdder({ assetOptions, onSelect }: { assetOptions: AssetOption
         <SelectContent>
           {assignmentOptions.map((a) => (
             <SelectItem key={a.id} value={a.id}>
-              {a.artistName || "Unassigned"} — {new Date(a.assignedAt).toLocaleDateString()}
+              {a.artistName || "Unassigned"} — {formatDate(a.assignedAt)}
               {a.isActive ? " (active)" : ""}
             </SelectItem>
           ))}

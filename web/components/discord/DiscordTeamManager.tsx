@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiCall } from "@/lib/api-client";
+import { formatDate } from "@/lib/format-date";
 import { toast } from "sonner";
 import {
   Users,
@@ -92,17 +94,16 @@ export interface TempAccessGrant {
 }
 
 const BUCKET_LABEL: Record<string, string> = { admin: "Admin", manager: "Manager", curator: "Curator", artist: "Artist" };
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+// Was a local copy that formatted in whatever locale/zone the renderer happened to be in.
+const fmtDate = (iso: string) => formatDate(iso);
 
-async function postJson(url: string, body?: unknown, method = "POST") {
-  const res = await fetch(url, {
-    method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
+// Kept as a thin throwing wrapper because this file's ~20 call sites are all written around
+// try/catch. The fetch, the defensive body read and the status check now live in
+// lib/api-client.ts, which is the same logic six other components were each carrying by hand.
+async function postJson<T = unknown>(url: string, body?: unknown, method = "POST"): Promise<T> {
+  const { ok, status, data } = await apiCall<Record<string, unknown>>(url, { method, body });
+  if (!ok) throw new Error(data.error || `Request failed (${status})`);
+  return data as T;
 }
 
 function errMessage(e: unknown, fallback: string): string {
@@ -140,8 +141,8 @@ export function DiscordTeamManager({
     setRefreshing(true);
     try {
       const [ov, ta] = await Promise.all([
-        postJson("/api/admin/discord/overview", undefined, "GET"),
-        isManagerTier ? postJson("/api/admin/discord/temp-access", undefined, "GET") : Promise.resolve({ grants: tempGrants }),
+        postJson<Overview>("/api/admin/discord/overview", undefined, "GET"),
+        isManagerTier ? postJson<{ grants: TempAccessGrant[] }>("/api/admin/discord/temp-access", undefined, "GET") : Promise.resolve({ grants: tempGrants }),
       ]);
       setOverview(ov);
       setTempGrants(ta.grants);
@@ -400,7 +401,7 @@ function OnboardTab({
     setSubmitting(true);
     setResult(null);
     try {
-      const data = await postJson("/api/admin/discord/onboard", {
+      const data = await postJson<{ channel: { url: string; name: string }; role: { name: string } }>("/api/admin/discord/onboard", {
         name: name.trim(),
         username: username.trim(),
         department,
@@ -594,7 +595,7 @@ function ChannelPermissionDetail({ channelId, isAdminTier, onChanged }: { channe
   // fresh per open, so there's no later channelId change to reset it for -
   // no setState needed at the top of the effect itself.
   useEffect(() => {
-    postJson(`/api/admin/discord/channel/${channelId}/permissions`, undefined, "GET")
+    postJson<{ rows: { roleId: string; roleName: string; isEveryone: boolean; bits: Record<string, boolean> }[] }>(`/api/admin/discord/channel/${channelId}/permissions`, undefined, "GET")
       .then((d) => setRows(d.rows))
       .catch((e) => toast.error(errMessage(e, "Failed to load permission detail")))
       .finally(() => setLoading(false));
@@ -836,10 +837,7 @@ function ArchiveTab({ overview, isAdminTier, onChanged }: { overview: Overview; 
   async function deletePermanently(channel: OverviewChannel) {
     setBusyKey(channel.id);
     try {
-      await fetch(`/api/admin/discord/channel/${channel.id}`, { method: "DELETE" }).then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Failed to delete channel");
-      });
+      await postJson(`/api/admin/discord/channel/${channel.id}`, undefined, "DELETE");
       toast.success(`#${channel.name} permanently deleted`);
       onChanged();
     } catch (e) {

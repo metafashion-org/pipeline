@@ -59,9 +59,16 @@ export function TaskCard({ task, role }: TaskCardProps) {
 
     const gradient = getGradient(sku);
 
-    const copySku = (e: React.MouseEvent) => {
+    const copySku = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(sku);
+        try {
+            await navigator.clipboard.writeText(sku);
+        } catch {
+            // Clipboard access is refused outside a secure context; say so rather than claiming
+            // a copy that did not happen.
+            toast.error("Couldn't copy — select the SKU and copy it by hand.");
+            return;
+        }
         toast.success("SKU copied to clipboard");
     };
 
@@ -142,13 +149,22 @@ export function TaskCard({ task, role }: TaskCardProps) {
 
                 <div className="px-3 py-2 flex flex-col gap-1">
                     <div className="flex items-center justify-between text-xs">
-                        <span
-                            className="font-mono text-[10px] text-muted-foreground hover:underline cursor-pointer"
+                        {/* A real button rather than a span with onClick: copying the SKU is an
+                            action, and as a span it was mouse-only — no focus, no Enter/Space.
+                            The browser gives all of that for free here.
+                            ponytail: this does sit inside the card's own role="button", which is
+                            nested interactive content. Resolving that properly means dropping the
+                            whole-card click target in favour of an explicit open affordance —
+                            a board redesign, not a fix. */}
+                        <button
+                            type="button"
+                            className="font-mono text-[10px] text-muted-foreground hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             onClick={copySku}
                             title="Copy SKU"
+                            aria-label={`Copy SKU ${sku}`}
                         >
                             {sku} <Copy className="inline h-2.5 w-2.5" />
-                        </span>
+                        </button>
                         <span className="capitalize text-[10px] px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
                             {currentStatus.replace(/_/g, " ")}
                         </span>

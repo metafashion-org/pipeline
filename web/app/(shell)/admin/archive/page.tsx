@@ -27,6 +27,7 @@ import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton"
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { formatDate } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
@@ -61,8 +62,9 @@ export default async function ArchivePage({
 }: {
     searchParams: Promise<{ q?: string; month?: string }>;
 }) {
-    const filters = await searchParams;
-    const session = await getServerSession(authOptions);
+    // Independent: the URL's query string and the caller's session have nothing to do with
+    // each other, so awaiting them in sequence spent two waits where one does.
+    const [filters, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
 
     if (!session || session.user?.role !== "admin") {
         redirect("/unauthorized");
@@ -223,6 +225,12 @@ export default async function ArchivePage({
 
             <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="pt-6">
+                {/* ArchiveTable reads the query string with useSearchParams. Without a Suspense
+                    boundary that hook forces the whole route into client-side rendering during
+                    prerender, and Next errors on it in a static build. The page is
+                    force-dynamic today, so this is the boundary that keeps it from breaking the
+                    moment that changes. */}
+                <Suspense fallback={<div className="py-6 text-sm text-muted-foreground">Loading archive…</div>}>
                 <ArchiveTable
                     rows={archive.rows.map((r) => ({
                         id: r.id,
@@ -240,6 +248,7 @@ export default async function ArchivePage({
                     paidTotal={archiveTotal.total}
                     paidCurrencies={archiveTotal.currencies}
                 />
+                </Suspense>
                 </CardContent>
             </Card>
 
