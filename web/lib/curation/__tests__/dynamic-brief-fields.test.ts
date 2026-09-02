@@ -46,7 +46,10 @@ async function testDynamicFieldsFlowThroughToTheBrief() {
     const targetWearer = briefFields.find((f) => f.key === "targetWearer");
     assert.ok(rig && rig.value === "R15 Bundle", `rig should resolve from fieldValues, got: ${JSON.stringify(rig)}`);
     assert.ok(specs && specs.value === "512x512 texture, 4k tris max", `technicalSpecs should resolve, got: ${JSON.stringify(specs)}`);
-    assert.ok(budget && budget.value === "250", `budget should resolve, got: ${JSON.stringify(budget)}`);
+    // Budget resolves from assets.fee_amount, not from the fieldValues copy it was submitted
+    // with, so a fee changed after curation (updateAssetFee) is what the artist sees. The
+    // column is numeric(10,2) and carries a currency, hence "250.00 INR" rather than "250".
+    assert.ok(budget && budget.value === "250.00 INR", `budget should resolve off the asset column, got: ${JSON.stringify(budget)}`);
     assert.ok(targetWearer && targetWearer.value === "Y2K aesthetic", `targetWearer should resolve, got: ${JSON.stringify(targetWearer)}`);
 
     // 4. Internal-only fields (trendReasoning, whyItWillSell, comparableItems)

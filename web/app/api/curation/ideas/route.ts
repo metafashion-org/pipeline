@@ -38,6 +38,10 @@ export async function POST(req: Request) {
       sourceLinks: body.sourceLinks || [],
       moodboardUrls: body.moodboardUrls || [],
       fieldValues: body.fieldValues || {},
+      // Graduated first-class values. submitCurationItemIdea falls back to fieldValues when
+      // these are absent, so a draft saved before they were first-class still submits intact.
+      budget: body.budget || undefined,
+      deadline: body.deadline || undefined,
       submitterId: session.user.personnelId || undefined,
       // Converts an existing draft (lib/curation/draft-service.ts) in place
       // instead of inserting a second row - see submitCurationItemIdea.

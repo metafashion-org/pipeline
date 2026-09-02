@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
-import { getCurationFieldConfigs } from "@/lib/curation/curation-service";
+import { getCurationFormFields } from "@/lib/curation/curation-service";
 import { listActiveDrafts } from "@/lib/curation/draft-service";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { CurationWorkspace } from "@/components/curation/CurationWorkspace";
@@ -25,7 +25,10 @@ export default async function CuratorPage() {
     redirect("/unauthorized");
   }
 
-  const fields = await getCurationFieldConfigs();
+  // Form fields only: budget and deadline are configured fields too, but they are backed by
+  // real asset columns and the form collects them as its own typed inputs, so rendering them
+  // here as well is the duplicate write path that put the same value in two places.
+  const fields = await getCurationFormFields();
   const drafts = session.user.personnelId ? await listActiveDrafts(session.user.personnelId) : [];
 
   return (
@@ -45,7 +48,7 @@ export default async function CuratorPage() {
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
         <CurationWorkspace
-          fields={fields.map((f) => ({ fieldKey: f.fieldKey, displayName: f.displayName, fieldType: f.fieldType, options: (f.options as string[]) || [] }))}
+          fields={fields.map((f) => ({ fieldKey: f.fieldKey, displayName: f.displayName, fieldType: f.fieldType, options: (f.options as string[]) || [], appliesToCategories: f.appliesToCategories }))}
           initialDrafts={drafts.map((d) => ({
             id: d.id,
             ideaTitle: d.ideaTitle,

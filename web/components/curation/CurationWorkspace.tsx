@@ -12,6 +12,7 @@ interface FieldConfig {
   displayName: string;
   fieldType: string;
   options: string[];
+  appliesToCategories: string[] | null;
 }
 
 // Ties the flow-state form to the parallel-drafts list: "New Idea" always
