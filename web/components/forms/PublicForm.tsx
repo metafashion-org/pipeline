@@ -27,6 +27,12 @@ function draftKey(formKey: string) {
 
 export function PublicForm({ formKey, fields }: { formKey: string; fields: FormField[] }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  // Every public submission needs a way to reach the person who made it — nobody is logged in, so
+  // the address they type is the only contact there will ever be, and the server rejects a public
+  // submission without one. Most forms declare their own "email" field; this input is for the
+  // ones that don't, so a form built in the admin builder is usable without remembering to add it.
+  const [contactEmail, setContactEmail] = useState("");
+  const formHasEmailField = fields.some((f) => f.fieldKey.toLowerCase() === "email");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState(false);
@@ -81,12 +87,16 @@ export function PublicForm({ formKey, fields }: { formKey: string; fields: FormF
       toast.error(`Please fill in: ${missing.map((f) => f.label).join(", ")}`);
       return;
     }
+    if (!formHasEmailField && !contactEmail.trim()) {
+      toast.error("Please give us an email address so we can get back to you.");
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`/api/forms/${encodeURIComponent(formKey)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values }),
+        body: JSON.stringify({ values, submitterEmail: formHasEmailField ? undefined : contactEmail.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -125,6 +135,25 @@ export function PublicForm({ formKey, fields }: { formKey: string; fields: FormF
         </div>
       )}
 
+      {!formHasEmailField && (
+        <div>
+          <label htmlFor="contact-email" className="text-xs text-muted-foreground mb-1 block">
+            Your email<span className="text-destructive"> *</span>
+          </label>
+          <input
+            id="contact-email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring"
+          />
+          <p className="text-xs text-muted-foreground mt-1">So someone can follow up on what you send.</p>
+        </div>
+      )}
+
       {/* Every field visible at once, fillable in any order — same
           flow-state principle the internal curation form uses. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -133,16 +162,18 @@ export function PublicForm({ formKey, fields }: { formKey: string; fields: FormF
           const wide = f.fieldType === "textarea" || f.fieldType === "multi_select";
           return (
             <div key={f.fieldKey} className={wide ? "sm:col-span-2" : ""}>
-              <label className="text-xs text-muted-foreground mb-1 block">
+              {/* Tied to its control by id so a screen reader announces the label with the
+                  field, and clicking the label focuses it. */}
+              <label htmlFor={`field-${f.fieldKey}`} className="text-xs text-muted-foreground mb-1 block">
                 {f.label}
                 {f.isRequired && <span className="text-destructive"> *</span>}
               </label>
               {f.fieldType === "textarea" && (
-                <Textarea value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} rows={3} />
+                <Textarea id={`field-${f.fieldKey}`} value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} rows={3} />
               )}
               {(f.fieldType === "select" || f.fieldType === "multi_select") && f.options.length > 0 && (
                 <Select value={value} onValueChange={(v) => setField(f.fieldKey, v)}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id={`field-${f.fieldKey}`} className="w-full">
                     <SelectValue placeholder={`Select ${f.label.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
@@ -155,10 +186,11 @@ export function PublicForm({ formKey, fields }: { formKey: string; fields: FormF
                 </Select>
               )}
               {f.fieldType === "url" && (
-                <Input type="url" value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} placeholder="https://..." />
+                <Input id={`field-${f.fieldKey}`} type="url" value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} placeholder="https://..." />
               )}
               {!["textarea", "select", "multi_select", "url"].includes(f.fieldType) && (
                 <Input
+                  id={`field-${f.fieldKey}`}
                   type={f.fieldKey.toLowerCase().includes("email") ? "email" : "text"}
                   value={value}
                   onChange={(e) => setField(f.fieldKey, e.target.value)}
