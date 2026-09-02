@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { apiCall } from "@/lib/api-client";
 import { toast } from "sonner";
 import { CurationFieldSelector } from "./CurationFieldSelector";
 
@@ -65,13 +66,8 @@ export function SettingsManager({
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
 
   async function saveStatus() {
-    const res = await fetch("/api/admin/statuses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(statusForm),
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall<{ status: StatusRow }>("/api/admin/statuses", { method: "POST", body: statusForm });
+    if (!ok) {
       toast.error(data.error || "Failed to save status");
       return;
     }
@@ -84,13 +80,11 @@ export function SettingsManager({
   }
 
   async function saveRule() {
-    const res = await fetch("/api/admin/transition-rules", {
+    const { ok, data } = await apiCall<{ rule: TransitionRuleRow }>("/api/admin/transition-rules", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...ruleForm, role: ruleForm.role || null }),
+      body: { ...ruleForm, role: ruleForm.role || null },
     });
-    const data = await res.json();
-    if (!res.ok) {
+    if (!ok) {
       toast.error(data.error || "Failed to save transition rule");
       return;
     }

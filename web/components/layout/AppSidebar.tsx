@@ -9,6 +9,7 @@ import {
   Archive,
   Megaphone,
   Settings,
+  ClipboardList,
   Users,
   BookOpen,
   Sparkles,
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/publisher", icon: PackageCheck, label: "Uploader Queue" },
+  { href: "/admin/forms", icon: ClipboardList, label: "Forms" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -64,16 +66,19 @@ export function AppSidebar() {
     }
   }, []);
 
+  // The write used to live inside the setCollapsed updater. React treats an updater as a pure
+  // function it may call more than once — twice per update under StrictMode, and again when it
+  // replays an interrupted render — so the localStorage write ran more times than the toggle
+  // did. Deriving the next value from the current state and writing it here keeps the updater
+  // pure and the write happening exactly once per click.
   function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      } catch {
-        // best-effort persistence only
-      }
-      return next;
-    });
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      // best-effort persistence only
+    }
   }
 
   return (

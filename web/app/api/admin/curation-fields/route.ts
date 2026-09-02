@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getCurationFieldConfigs, updateCurationFieldConfig } from "@/lib/curation/curation-service";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { z } from "zod";
 
 const UpdateCurationFieldSchema = z.object({
@@ -16,11 +14,10 @@ const UpdateCurationFieldSchema = z.object({
 // assign artists per RBAC but aren't admins. Changing the config (POST,
 // below) stays admin-only.
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
-  if (!caps.canAssignArtists && !caps.canManageSystemConfig) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getAuthedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!user.caps.canAssignArtists && !user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const rows = await getCurationFieldConfigs();
@@ -28,9 +25,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin") {
+  const user = await getAuthedUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();

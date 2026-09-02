@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
@@ -26,21 +25,23 @@ const CreateAssetSchema = z.object({
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
+    const user = await getAuthedUser();
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { user } = session;
-    const isArtistOnly = user.role === "artist" && (!user.roles || !user.roles.includes("admin") && !user.roles.includes("operator"));
-    const artistFilterEmail = isArtistOnly ? user.email || undefined : undefined;
+    // Who sees the whole board is exactly the canViewAllAssets capability, which already
+    // accounts for per-person overrides. Deriving it from session.user.role instead meant
+    // payment_admin — who does hold canViewAllAssets — arrived here as "artist" and got a
+    // board filtered to their own email, which is empty.
+    const artistFilterEmail = user.caps.canViewAllAssets ? undefined : user.email;
 
     const { columns } = await getKanbanBoardData(artistFilterEmail);
 
     return NextResponse.json({
       data: columns,
-      role: user.role || "artist",
+      roles: user.roles,
     });
   } catch (error: unknown) {
     console.error("Error fetching kanban board data:", error);
@@ -52,9 +53,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin") {
+  const user = await getAuthedUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canAssignArtists) {
+    return NextResponse.json({ error: "You don't have permission to create assets" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest) {
       action: "createAsset",
       entityType: "asset",
       entityId: created.id,
-      actorId: session.user.personnelId || null,
+      actorId: user.personnelId || null,
       payload: { sku, itemName, category: category || null },
     });
 

@@ -15,8 +15,7 @@
   ],
   "ignore": [
     "components/ui/**",
-    "lib/guidelines/guidelines-service.ts",
-    "lib/publisher/publisher-service.ts"
+    "lib/guidelines/guidelines-service.ts"
   ],
   "ignoreDependencies": [
     "tw-animate-css",

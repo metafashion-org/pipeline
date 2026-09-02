@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { formDefinitions } from "@/lib/db/schema/form_definitions";
 import { formFields } from "@/lib/db/schema/form_fields";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createKnowledgeArtifact } from "./artifacts-service";
 import { linkArtifactToCategory } from "./artifact-links-service";
 
@@ -44,24 +44,31 @@ export async function seedArtifactSubmissionFormDefinition() {
     { fieldKey: "usageNotes", label: "Usage Notes", fieldType: "textarea" as const, sortOrder: 8, isRequired: false },
   ];
 
-  for (const f of fields) {
-    const existingField = await db
-      .select()
-      .from(formFields)
-      .where(eq(formFields.fieldKey, f.fieldKey))
-      .limit(1);
+  // Each field is keyed independently, so the check-and-insert pairs do not interact and run
+  // concurrently — the same shape lib/forms/onboarding.ts already uses. In sequence this was
+  // eight round trips before the page could render.
+  await Promise.all(
+    fields.map(async (f) => {
+      // Scoped to this form — see the same fix in lib/forms/onboarding.ts. Matching on fieldKey
+      // alone would treat another form's identically-keyed field as this one's.
+      const existingField = await db
+        .select()
+        .from(formFields)
+        .where(and(eq(formFields.formDefinitionId, defId), eq(formFields.fieldKey, f.fieldKey)))
+        .limit(1);
 
-    if (existingField.length === 0) {
-      await db.insert(formFields).values({
-        formDefinitionId: defId,
-        fieldKey: f.fieldKey,
-        label: f.label,
-        fieldType: f.fieldType,
-        sortOrder: f.sortOrder,
-        isRequired: f.isRequired,
-      });
-    }
-  }
+      if (existingField.length === 0) {
+        await db.insert(formFields).values({
+          formDefinitionId: defId,
+          fieldKey: f.fieldKey,
+          label: f.label,
+          fieldType: f.fieldType,
+          sortOrder: f.sortOrder,
+          isRequired: f.isRequired,
+        });
+      }
+    })
+  );
 
   return defId;
 }

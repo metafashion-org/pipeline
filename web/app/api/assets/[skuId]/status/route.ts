@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { z } from "zod";
 
@@ -14,9 +13,9 @@ export async function PATCH(
   { params }: { params: Promise<{ skuId: string }> }
 ) {
   try {
-    const [{ skuId }, session] = await Promise.all([params, getServerSession(authOptions)]);
+    const [{ skuId }, user] = await Promise.all([params, getAuthedUser()]);
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -32,17 +31,20 @@ export async function PATCH(
       return NextResponse.json({ error: "New status string is required" }, { status: 400 });
     }
 
-    const role = session.user.role || "artist";
-    const actorId = session.user.personnelId || undefined;
-
-    const result = await updateAssetStatusInKanban(skuId, newStatus, role, actorId);
+    // The caller's real roles, not session.user.role — that collapses curator, publisher,
+    // marketing and payment_admin all into "artist", which handed every one of them the
+    // artist path through the transition rules.
+    const result = await updateAssetStatusInKanban(skuId, newStatus, {
+      roles: user.roles,
+      personnelId: user.personnelId,
+    });
 
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     console.error("Error in status update endpoint:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update status" },
-      { status: 400 }
-    );
+    // A refusal by the transition rules is an authorization answer, not a malformed request.
+    const message = error instanceof Error ? error.message : "Failed to update status";
+    const status = /forbidden|not permitted/.test(message) ? 403 : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

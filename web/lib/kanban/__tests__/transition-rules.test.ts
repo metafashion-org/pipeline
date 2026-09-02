@@ -6,6 +6,10 @@ import { eq } from "drizzle-orm";
 
 const TEST_SKU = "TEST-TRANSITION-GATE-SKU";
 
+const ADMIN = { roles: ["admin"] };
+const ARTIST = { roles: ["artist"] };
+const PAYMENT_ADMIN = { roles: ["payment_admin"] };
+
 async function testTransitionRulesEnforcement() {
   console.log("Verifying transition rule enforcement server-side...");
 
@@ -41,7 +45,7 @@ async function testTransitionRulesEnforcement() {
     // Disallowed even for admin: the payment gate is structural per PLAN.md §4/§9,
     // not just a permission check, so admin's "move anywhere" override must not apply here.
     try {
-      await updateAssetStatusInKanban(TEST_SKU, "payment_done", "admin");
+      await updateAssetStatusInKanban(TEST_SKU, "payment_done", ADMIN);
       assert.fail("Payment gate bypass should be rejected even for admin");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -49,11 +53,24 @@ async function testTransitionRulesEnforcement() {
       console.log("Caught expected rejection of payment-gate bypass for admin role too:", message);
     }
 
-    // Allowed: uploaded_to_roblox -> marked_for_payment is a real seeded rule
-    const result = await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment");
+    // A seeded rule row makes the transition possible, but the row's own `role` says who may
+    // make it. This assertion used to pass no actor at all and expect success, which is
+    // exactly the hole: any authenticated caller could put an asset in marked_for_payment.
+    try {
+      await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", ARTIST);
+      assert.fail("An artist must not be able to move an asset into marked_for_payment");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
+      console.log("Confirmed artist is denied marked_for_payment:", message);
+    }
+
+    // Allowed: uploaded_to_roblox -> marked_for_payment carries role 'payment_admin', and
+    // statuses.who_can_move_in for that column lists payment_admin and admin.
+    const result = await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", PAYMENT_ADMIN);
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.toStatus, "marked_for_payment");
-    console.log("Confirmed allowed transition succeeds: uploaded_to_roblox -> marked_for_payment");
+    console.log("Confirmed allowed transition succeeds for payment_admin: uploaded_to_roblox -> marked_for_payment");
   } finally {
     await db.delete(assets).where(eq(assets.sku, TEST_SKU));
   }
@@ -68,7 +85,7 @@ async function testTransitionRulesEnforcement() {
   });
   try {
     // in_progress -> approved has no seeded rule row, but should be allowed for admin
-    const result = await updateAssetStatusInKanban(TEST_SKU, "approved", "admin");
+    const result = await updateAssetStatusInKanban(TEST_SKU, "approved", ADMIN);
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.toStatus, "approved");
     console.log("Confirmed admin override works for a normal transition with no matching rule row");
@@ -76,7 +93,7 @@ async function testTransitionRulesEnforcement() {
     // Same transition, non-admin role, should still be rejected
     await db.update(assets).set({ currentStatus: "in_progress" }).where(eq(assets.sku, TEST_SKU));
     try {
-      await updateAssetStatusInKanban(TEST_SKU, "approved", "artist");
+      await updateAssetStatusInKanban(TEST_SKU, "approved", ARTIST);
       assert.fail("Non-admin should still be rejected for a transition with no matching rule row");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -100,7 +117,7 @@ async function testTransitionRulesEnforcement() {
     // marked_for_payment -> payment_done has a real seeded rule, but no receipt is
     // attached yet, so it should still be rejected - even for admin.
     try {
-      await updateAssetStatusInKanban(TEST_SKU, "payment_done", "admin");
+      await updateAssetStatusInKanban(TEST_SKU, "payment_done", ADMIN);
       assert.fail("payment_done should be rejected with no receipt attached, even for admin");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -110,7 +127,7 @@ async function testTransitionRulesEnforcement() {
 
     // Once a receipt is attached, the same transition succeeds.
     await db.update(assets).set({ paymentReceiptUrl: "https://example.com/receipt.pdf" }).where(eq(assets.sku, TEST_SKU));
-    const result = await updateAssetStatusInKanban(TEST_SKU, "payment_done", "admin");
+    const result = await updateAssetStatusInKanban(TEST_SKU, "payment_done", ADMIN);
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.toStatus, "payment_done");
     console.log("Confirmed payment_done succeeds once a payment receipt is attached");

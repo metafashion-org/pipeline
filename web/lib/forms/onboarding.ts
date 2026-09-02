@@ -4,7 +4,7 @@ import { formFields } from "@/lib/db/schema/form_fields";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
 import { isConfigured as isDiscordConfigured, archiveChannel, restoreChannel } from "@/lib/discord/team-service";
 
@@ -62,10 +62,15 @@ async function runOnboardingSeed() {
   // Each field is keyed independently, so the check-and-insert pairs do not interact and run concurrently.
   await Promise.all(
     fields.map(async (f) => {
+    // Scoped to THIS form. Matching on fieldKey alone meant another form's "email" or "notes"
+    // field counted as proof that this one already had it, so the artist-access form would
+    // silently come up a field short the moment a second form defined the same key. Migration
+    // 0025 adds a unique (form_definition_id, field_key) constraint so the rule is structural
+    // too, not just observed here.
     const existingField = await db
       .select()
       .from(formFields)
-      .where(eq(formFields.fieldKey, f.fieldKey))
+      .where(and(eq(formFields.formDefinitionId, defId), eq(formFields.fieldKey, f.fieldKey)))
       .limit(1);
 
     if (existingField.length === 0) {

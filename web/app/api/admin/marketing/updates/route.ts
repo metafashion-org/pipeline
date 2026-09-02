@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { addMarketingUpdate, INITIAL_MARKETING_STATUSES } from "@/lib/marketing/marketing-service";
 import { z } from "zod";
 
@@ -32,9 +31,15 @@ const CreateMarketingUpdateSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || (session.user?.role !== "admin" && session.user?.role !== "marketing")) {
+  // Was `session.user.role !== "marketing"`, a condition that could never be true: the
+  // session callback only ever produces "admin", "operator" or "artist", so a marketing-role
+  // person arrived here as "artist" and was refused their own tool.
+  const user = await getAuthedUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canAccessMarketingTools) {
+    return NextResponse.json({ error: "You don't have permission to post marketing updates" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest) {
       // at least been logged/planned (not planned at all would mean not
       // logging anything here in the first place).
       marketingStatus: marketingStatus || (postUrl ? "posted" : "planned"),
-      responsiblePersonId: session.user.personnelId,
+      responsiblePersonId: user.personnelId,
     });
     return NextResponse.json({ success: true, update });
   } catch (error: unknown) {

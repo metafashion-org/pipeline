@@ -96,3 +96,60 @@ jobs:
     - name: Typecheck
       working-directory: ./web
       run: pnpm run typecheck
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    # The 34 files under __tests__/ ran nowhere: package.json had no `test` script and no CI job
+    # invoked them, so the suites that arrived with the catalog-intel sync had never executed in
+    # CI. They assert against a real database rather than mocks, hence the service container —
+    # matching docker-compose.test.yml, which is what scripts/test-db.sh brings up locally.
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metafashion_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metafashion_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      # Never the live database. scripts/assert-local-db.mjs refuses anything that is not a
+      # localhost connection, and this is the same URL that guard expects.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/metafashion_test
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: 9
+
+    - name: Install Dependencies
+      working-directory: ./web
+      run: pnpm install
+
+    - name: Migrate and seed
+      working-directory: ./web
+      run: |
+        pnpm run db:migrate
+        pnpm run db:seed
+        pnpm run db:seed:marketing
+        pnpm run db:seed:knowledge
+
+    - name: Run tests
+      working-directory: ./web
+      run: pnpm test

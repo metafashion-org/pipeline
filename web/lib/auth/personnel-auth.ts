@@ -22,6 +22,19 @@ const PERSONNEL_CACHE_MS = 60_000;
 
 const personnelCache = new Map<string, { result: PersonnelAuthResult; cachedAt: number }>();
 
+// Misses are cached too, so a stream of sign-in attempts with distinct unknown addresses would
+// otherwise grow this map for the life of the process. At the cap the oldest insertion is
+// dropped, which for a Map is simply its first key.
+const PERSONNEL_CACHE_MAX_ENTRIES = 5_000;
+
+function rememberPersonnel(email: string, result: PersonnelAuthResult) {
+  if (personnelCache.size >= PERSONNEL_CACHE_MAX_ENTRIES) {
+    const oldest = personnelCache.keys().next().value;
+    if (oldest !== undefined) personnelCache.delete(oldest);
+  }
+  personnelCache.set(email, { result, cachedAt: Date.now() });
+}
+
 /**
  * Drops an email from the auth cache so the next lookup re-reads the database.
  * Call after changing someone's roles or status so the change applies immediately rather than at the end of the cache window.
@@ -51,7 +64,7 @@ export async function getActivePersonnelByEmail(email: string): Promise<Personne
 
     if (records.length === 0) {
       const miss: PersonnelAuthResult = { isAllowed: false, roles: [] };
-      personnelCache.set(normalizedEmail, { result: miss, cachedAt: Date.now() });
+      rememberPersonnel(normalizedEmail, miss);
       return miss;
     }
 
@@ -66,7 +79,7 @@ export async function getActivePersonnelByEmail(email: string): Promise<Personne
       capabilityOverrides: (p.capabilityOverrides as Record<string, boolean>) || {},
     };
 
-    personnelCache.set(normalizedEmail, { result, cachedAt: Date.now() });
+    rememberPersonnel(normalizedEmail, result);
     return result;
   } catch (error) {
     console.error("Error checking personnel auth by email:", error);

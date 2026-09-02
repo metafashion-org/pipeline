@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, integer, index } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
 import { assets } from "./assets";
 
@@ -36,4 +36,15 @@ export const curationItemIdeas = pgTable("curation_item_ideas", {
   version: integer("version").default(1).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // getBriefFieldsForAsset looks an idea up by the asset it created, on every assignment email.
+  index("curation_item_ideas_asset_idx").on(table.assetId),
+  // listActiveDrafts filters a curator's own drafts by status.
+  index("curation_item_ideas_submitter_status_idx").on(table.submittedBy, table.status),
+  // GIN over the dynamic field values, so a query can ask which ideas carry a given key or
+  // value rather than reading every row and unpacking the JSONB in application code. This is
+  // the one JSONB column on the table that holds searchable business data; the config blobs
+  // elsewhere in the schema are always read whole by primary key and get no index, because a
+  // GIN there would cost write throughput and buy nothing.
+  index("curation_item_ideas_field_values_gin").using("gin", table.fieldValues),
+]);

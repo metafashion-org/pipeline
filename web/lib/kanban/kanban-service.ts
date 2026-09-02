@@ -5,7 +5,7 @@ import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 
 export interface KanbanColumnData {
   key: string;
@@ -67,7 +67,11 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       recolorReferenceImages: assets.recolorReferenceImages,
     })
     .from(assets)
-    .leftJoin(personnel, eq(assets.currentArtistId, personnel.id)),
+    .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
+    // Filter in the query rather than after it. An artist's board read every asset in the
+    // table and then discarded all but their own in JavaScript, on every page load. Compared
+    // lowercase on both sides so this keeps the case-insensitive behaviour the filter had.
+    .where(artistEmail ? sql`lower(${personnel.email}) = ${artistEmail.toLowerCase()}` : undefined),
   ]);
 
   const guildId = process.env.DISCORD_GUILD_ID;
@@ -75,16 +79,10 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   // Maps the raw query row (which selected the artist's discordChannelId, an
   // internal id) into the public KanbanAssetCard shape (a full deep-link URL,
   // built here so the client never needs the guild id as a public env var).
-  let allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
+  const allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
     ...rest,
     artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
   }));
-
-  if (artistEmail) {
-    allAssets = allAssets.filter(
-      (a) => a.artistEmail && a.artistEmail.toLowerCase() === artistEmail.toLowerCase()
-    );
-  }
 
   const columnsMap = new Map<string, KanbanColumnData>();
 
@@ -119,18 +117,69 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   };
 }
 
-// Payment gate is structural per PLAN.md §4/§9: encoded as an absence of rows in
-// status_transition_rules, "so it can't be bypassed via direct API calls." The admin
-// override below is deliberately scoped to exclude these two statuses so that promise
-// holds even for admins - admin flexibility is about normal workflow movement, not
-// skipping the financial gate.
+// Payment gate is structural per PLAN.md §4/§9: the admin override below is deliberately
+// scoped to exclude these two statuses, so admin flexibility covers normal workflow
+// movement but never skipping the financial gate.
+//
+// The gate was previously described as "encoded as an absence of rows in
+// status_transition_rules, so it can't be bypassed via direct API calls." That was not
+// true of the shipped data: lib/db/seed-statuses.ts seeds rows for both
+// uploaded_to_roblox -> marked_for_payment and marked_for_payment -> payment_done. Because
+// the rows exist with isAllowed true, the transition passed for every caller and the
+// override exclusion never came into play. What actually gates them now is the role check
+// below, which reads the `role` those seeded rows already carry.
 const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
+
+// Who is asking for the transition. `system` is for transitions the pipeline performs on
+// its own behalf in response to a real event (an assignment email going out, a valid final
+// file arriving) rather than someone dragging a card — those have no human role to check,
+// and the event that triggered them is authorised at its own entry point.
+export type TransitionActor =
+  | { system: true }
+  | { system?: false; roles: string[]; personnelId?: string };
+
+function actorRoles(actor: TransitionActor | undefined): Set<string> {
+  if (!actor || actor.system) return new Set();
+  return new Set(actor.roles.map((r) => r.toLowerCase()));
+}
+
+/**
+ * Decides whether this actor may move a card into this status.
+ *
+ * Input: the actor, the matching status_transition_rules row (or undefined when none exists), and the target status row. Output: null when the move is permitted, or a sentence explaining the refusal.
+ *
+ * Two independent columns constrain a transition and both are honoured where set:
+ * status_transition_rules.role names the single role a manual transition belongs to, and
+ * statuses.who_can_move_in lists every role allowed to put a card in that column. Both were
+ * seeded with real data and neither was read before — who_can_move_in was only ever rendered
+ * into a tooltip. Admin satisfies both.
+ */
+function refuseTransition(
+  actor: TransitionActor | undefined,
+  rule: typeof statusTransitionRules.$inferSelect | undefined,
+  targetStatus: typeof statuses.$inferSelect
+): string | null {
+  if (actor?.system) return null;
+
+  const roles = actorRoles(actor);
+  if (roles.has("admin")) return null;
+
+  if (rule?.role && !roles.has(rule.role.toLowerCase())) {
+    return `moving a card into '${targetStatus.key}' from '${rule.fromStatus}' is reserved for the '${rule.role}' role`;
+  }
+
+  const allowedIn = (targetStatus.whoCanMoveIn || []).map((r) => r.toLowerCase());
+  if (allowedIn.length > 0 && !allowedIn.some((r) => roles.has(r))) {
+    return `only ${allowedIn.join(", ")} can move a card into '${targetStatus.key}'`;
+  }
+
+  return null;
+}
 
 export async function updateAssetStatusInKanban(
   sku: string,
   targetStatusKey: string,
-  role?: string,
-  actorId?: string,
+  actor?: TransitionActor,
   note?: string
 ) {
   const assetRecord = await db.select().from(assets).where(eq(assets.sku, sku)).limit(1);
@@ -151,6 +200,17 @@ export async function updateAssetStatusInKanban(
     throw new Error(`Target status key '${targetStatusKey}' is not a valid status`);
   }
 
+  // Ownership: an artist may only move their own work. The board already filters cards by
+  // artist email for display, but this function takes a SKU, so without this check an artist
+  // could move any other artist's asset just by knowing its SKU. Anyone who can see the whole
+  // board (operator, admin, and anyone granted canViewAllAssets) is exempt.
+  const roles = actorRoles(actor);
+  const isArtistOnly =
+    !actor?.system && roles.has("artist") && !roles.has("admin") && !roles.has("operator");
+  if (isArtistOnly && asset.currentArtistId !== (actor && !actor.system ? actor.personnelId : undefined)) {
+    throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: this asset is not assigned to you`);
+  }
+
   // Check status transition rules: deny by default, per PLAN.md §4 - a transition is only
   // permitted if a matching row exists in status_transition_rules with isAllowed !== false.
   const rule = await db
@@ -168,7 +228,8 @@ export async function updateAssetStatusInKanban(
     // Admin override, per PLAN.md §4/§5 ("admin: Everything... Override/repair records") -
     // but never for the two payment-gated statuses, which stay structurally deny-by-default
     // for every role including admin. See PAYMENT_GATED_STATUSES comment above.
-    const adminOverride = role === "admin" && !PAYMENT_GATED_STATUSES.includes(targetStatusKey);
+    const adminOverride =
+      (actor?.system || roles.has("admin")) && !PAYMENT_GATED_STATUSES.includes(targetStatusKey);
     if (!adminOverride) {
       throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is not permitted: no matching rule in status_transition_rules`);
     }
@@ -177,6 +238,17 @@ export async function updateAssetStatusInKanban(
     // above gets the admin override, never an explicit isAllowed: false row.
     throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${rule[0].failureReason || "Rule restriction"}`);
   }
+
+  // A rule saying the transition is possible is not the same as this caller being allowed to
+  // make it. Both status_transition_rules.role and statuses.who_can_move_in carry that answer
+  // and neither was consulted before, which left every seeded transition open to any
+  // authenticated user - including uploaded_to_roblox -> marked_for_payment.
+  const refusal = refuseTransition(actor, rule[0], targetStatus[0]);
+  if (refusal) {
+    throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${refusal}`);
+  }
+
+  const actorPersonnelId = actor && !actor.system ? actor.personnelId ?? null : null;
 
   // Receipt gate, structural like PAYMENT_GATED_STATUSES above: a client requirement
   // (admin must attach a payment receipt before marking a task paid) enforced here so
@@ -201,7 +273,7 @@ export async function updateAssetStatusInKanban(
     assetId: asset.id,
     fromStatus,
     toStatus: targetStatusKey,
-    actorId: actorId || null,
+    actorId: actorPersonnelId,
     note: note || `Status updated via Kanban to ${targetStatusKey}`,
   });
 
@@ -210,7 +282,7 @@ export async function updateAssetStatusInKanban(
     action: "kanbanStatusChange",
     entityType: "asset",
     entityId: asset.id,
-    actorId: actorId || null,
+    actorId: actorPersonnelId,
     payload: { sku, fromStatus, toStatus: targetStatusKey, note },
   });
 

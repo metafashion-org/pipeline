@@ -6,7 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export DATABASE_URL="postgresql://postgres:postgres@localhost:5433/metafashion_test"
+# Port is overridable because 5433 is a popular choice and another project may already hold it.
+# Set METAFASHION_TEST_DB_PORT to move both the container binding and this URL together.
+TEST_DB_PORT="${METAFASHION_TEST_DB_PORT:-5433}"
+export METAFASHION_TEST_DB_PORT="$TEST_DB_PORT"
+export DATABASE_URL="postgresql://postgres:postgres@localhost:${TEST_DB_PORT}/metafashion_test"
 COMPOSE=(docker compose -f docker-compose.test.yml -p metafashion-test)
 
 node scripts/assert-local-db.mjs
@@ -17,6 +21,7 @@ case "${1:-up}" in
     pnpm run db:migrate
     pnpm run db:seed
     pnpm run db:seed:marketing
+    pnpm run db:seed:knowledge
     pnpm run db:seed:e2e
     ;;
   down)

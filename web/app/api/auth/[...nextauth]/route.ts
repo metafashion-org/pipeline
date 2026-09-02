@@ -89,12 +89,39 @@ export const authOptions: NextAuthOptions = {
             session.refreshToken = token.refreshToken as string | undefined;
 
             if (session.user && token.email) {
+                const status = token.status as string | undefined;
+                session.user.status = status;
+
+                // A session for someone who is no longer Active carries no authority.
+                //
+                // proxy.ts already redirects them away from every page route, but its matcher
+                // covers pages only — never "/api" — so before this, all 42 API routes still
+                // accepted a blacklisted person's still-valid JWT with their original roles.
+                // Emptying the identity here is what makes setPersonnelStatus and
+                // invalidatePersonnelAuthCache mean what their comments say: revoking a
+                // departed freelancer takes effect on their next request, everywhere, without
+                // each route having to remember to check.
+                //
+                // The session object itself stays (NextAuth has no way to return "no session"
+                // from here), so routes that check only `if (!session)` still see one — hence
+                // the capability checks in the routes remain the real gate, and this is the
+                // layer underneath them.
+                if (status !== "Active") {
+                    session.user.personnelId = undefined;
+                    session.user.roles = [];
+                    session.user.capabilityOverrides = {};
+                    session.user.role = undefined;
+                    return session;
+                }
+
                 session.user.personnelId = token.personnelId as string | undefined;
                 session.user.roles = (token.roles as string[]) || [];
-                session.user.status = token.status as string | undefined;
                 session.user.capabilityOverrides = token.capabilityOverrides as Record<string, boolean> | undefined;
-                
-                // Backwards compatibility role string
+
+                // Deprecated single-role string, kept for the page routes that still branch on
+                // it. It cannot represent curator, publisher, marketing or payment_admin — all
+                // four collapse to "artist" — so anything making an authorization decision
+                // should read session.user.roles through getEffectiveCapabilities instead.
                 const roles = session.user.roles;
                 if (roles.includes("admin")) {
                     session.user.role = "admin";

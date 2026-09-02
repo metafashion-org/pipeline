@@ -41,6 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Trash2, Link2 } from "lucide-react";
+import { apiCall } from "@/lib/api-client";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
 
@@ -99,13 +100,8 @@ export function PersonnelManager({
       toast.error("Name, email, and at least one role are required");
       return;
     }
-    const res = await fetch("/api/admin/personnel", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(addForm),
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall<{ personnel: PersonnelRow }>("/api/admin/personnel", { method: "POST", body: addForm });
+    if (!ok) {
       toast.error(data.error || "Failed to add personnel");
       return;
     }
@@ -132,13 +128,8 @@ export function PersonnelManager({
       toast.error("At least one role is required");
       return;
     }
-    const res = await fetch(`/api/admin/personnel/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roles: editRoles }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall<{ personnel: PersonnelRow }>(`/api/admin/personnel/${id}`, { method: "PATCH", body: { roles: editRoles } });
+    if (!ok) {
       toast.error(data.error || "Failed to update roles");
       return;
     }
@@ -148,9 +139,8 @@ export function PersonnelManager({
   }
 
   async function deletePersonnel(id: string) {
-    const res = await fetch(`/api/admin/personnel/${id}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall(`/api/admin/personnel/${id}`, { method: "DELETE" });
+    if (!ok) {
       toast.error(data.error || "Failed to delete personnel");
       return;
     }
@@ -159,13 +149,8 @@ export function PersonnelManager({
   }
 
   async function changeStatus(id: string, status: string) {
-    const res = await fetch(`/api/admin/personnel/${id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall<{ result?: { discordSyncWarning?: string } }>(`/api/admin/personnel/${id}/status`, { method: "POST", body: { status } });
+    if (!ok) {
       toast.error(data.error || "Failed to update status");
       return;
     }
@@ -175,19 +160,16 @@ export function PersonnelManager({
   }
 
   async function approve(submissionId: string) {
-    const res = await fetch(`/api/admin/personnel/submissions/${submissionId}/approve`, {
-      method: "POST",
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    const { ok, data } = await apiCall<{ result: { email: string } }>(`/api/admin/personnel/submissions/${submissionId}/approve`, { method: "POST" });
+    if (!ok) {
       toast.error(data.error || "Failed to approve request");
       return;
     }
     setPending((prev) => prev.filter((s) => s.id !== submissionId));
     toast.success(`Access granted to ${data.result.email}`);
     // Refresh personnel list so the newly-onboarded artist shows up immediately.
-    const refreshed = await fetch("/api/admin/personnel").then((r) => r.json());
-    setPeople(refreshed.personnel);
+    const refreshed = await apiCall<{ personnel: PersonnelRow[] }>("/api/admin/personnel");
+    if (refreshed.ok) setPeople(refreshed.data.personnel);
   }
 
   return (

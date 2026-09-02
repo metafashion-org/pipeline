@@ -24,6 +24,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { apiCall } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format-date";
 import { toast } from "sonner";
 import { Sparkles, History, Trash2, Loader2, Check } from "lucide-react";
 
@@ -32,6 +34,8 @@ interface FieldConfig {
   displayName: string;
   fieldType: string;
   options: string[];
+  // null or empty means the field applies to every category.
+  appliesToCategories: string[] | null;
 }
 
 export interface DraftRecord {
@@ -80,6 +84,14 @@ export function CurationIdeaForm({
   const [category, setCategory] = useState(initialDraft?.category ?? "");
   const [sourceLinks, setSourceLinks] = useState((initialDraft?.sourceLinks ?? []).join(", "));
   const [moodboardUrls, setMoodboardUrls] = useState((initialDraft?.moodboardUrls ?? []).join(", "));
+  // Budget and Deadline are first-class typed columns on `assets` (fee_amount numeric, deadline
+  // timestamptz) that payment cycles and the board sort on, so they are collected as their own
+  // typed inputs rather than as dynamic fields writing strings into field_values. Drafts saved
+  // before that carry them inside fieldValues, so they are read from there as a starting value.
+  // Lazy initializers: the argument form would recompute these on every render and throw the
+  // result away, since useState only reads it once.
+  const [budget, setBudget] = useState(() => String((initialDraft?.fieldValues as Record<string, unknown>)?.budget ?? ""));
+  const [deadline, setDeadline] = useState(() => String((initialDraft?.fieldValues as Record<string, unknown>)?.deadline ?? ""));
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(
     (initialDraft?.fieldValues as Record<string, string>) ?? {}
   );
@@ -121,9 +133,31 @@ export function CurationIdeaForm({
       category: category.trim() || null,
       sourceLinks: sourceLinks.split(",").map((s) => s.trim()).filter(Boolean),
       moodboardUrls: moodboardUrls.split(",").map((s) => s.trim()).filter(Boolean),
-      fieldValues,
+      budget: budget.trim(),
+      deadline: deadline.trim(),
+      // Also folded into fieldValues so the draft row round-trips them: a draft is scratch
+      // space keyed by field, and the restore path above reads them back from here. Only the
+      // top-level values above are used on submit, where they go to the asset's typed columns.
+      fieldValues: { ...fieldValues, budget: budget.trim(), deadline: deadline.trim() },
     };
   }
+
+  /**
+   * The dynamic fields that belong on this form given the category being curated.
+   *
+   * Input: nothing — reads the configured fields and the current category. Output: the fields to render.
+   * A field with no configured categories applies everywhere, which is what every field meant
+   * before scoping existed. With no category chosen yet, everything shows, so the form is never
+   * mysteriously empty while someone is still deciding what they are curating.
+   */
+  const visibleFields = (() => {
+    const chosen = category.trim().toLowerCase();
+    if (!chosen) return fields;
+    return fields.filter(
+      (f) => !f.appliesToCategories || f.appliesToCategories.length === 0 ||
+        f.appliesToCategories.some((c) => c.trim().toLowerCase() === chosen)
+    );
+  })();
 
   // Creates the draft row lazily, on the first real edit only — a blank,
   // never-touched form never leaves a phantom draft behind. Every edit
@@ -142,26 +176,16 @@ export function CurationIdeaForm({
     try {
       if (!draftIdRef.current) {
         creatingRef.current = true;
-        const res = await fetch("/api/curation/drafts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(currentPayload()),
-        });
-        const data = await res.json();
+        const { ok, data } = await apiCall<{ draft: { id: string } }>("/api/curation/drafts", { method: "POST", body: currentPayload() });
         creatingRef.current = false;
-        if (!res.ok) throw new Error(data.error);
+        if (!ok) throw new Error(data.error);
         if (!activeRef.current) return;
         setDraftId(data.draft.id);
         draftIdRef.current = data.draft.id;
         onDraftChanged?.();
       } else {
-        const res = await fetch(`/api/curation/drafts/${draftIdRef.current}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(currentPayload()),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
+        const { ok, data } = await apiCall(`/api/curation/drafts/${draftIdRef.current}`, { method: "PATCH", body: currentPayload() });
+        if (!ok) throw new Error(data.error);
         onDraftChanged?.();
       }
       if (activeRef.current) setSaveState("saved");
@@ -191,9 +215,8 @@ export function CurationIdeaForm({
       return;
     }
     try {
-      const res = await fetch(`/api/curation/drafts/${draftId}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await apiCall(`/api/curation/drafts/${draftId}`, { method: "DELETE" });
+      if (!ok) throw new Error(data.error);
       toast.success("Draft discarded");
       onDraftChanged?.();
       resetForm();
@@ -205,15 +228,16 @@ export function CurationIdeaForm({
   async function restoreVersion(versionId: string) {
     if (!draftId) return;
     try {
-      const res = await fetch(`/api/curation/drafts/${draftId}/versions/${versionId}/restore`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { ok, data } = await apiCall(`/api/curation/drafts/${draftId}/versions/${versionId}/restore`, { method: "POST" });
+      if (!ok) throw new Error(data.error);
       const d = data.draft as DraftRecord;
       setIdeaTitle(d.ideaTitle);
       setCategory(d.category ?? "");
       setSourceLinks((d.sourceLinks ?? []).join(", "));
       setMoodboardUrls((d.moodboardUrls ?? []).join(", "));
       setFieldValues((d.fieldValues as Record<string, string>) ?? {});
+      setBudget(String((d.fieldValues as Record<string, unknown>)?.budget ?? ""));
+      setDeadline(String((d.fieldValues as Record<string, unknown>)?.deadline ?? ""));
       setSaveState("saved");
       setHistoryOpen(false);
       toast.success(`Restored version ${d.version}`);
@@ -231,13 +255,8 @@ export function CurationIdeaForm({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/curation/ideas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...currentPayload(), draftId: draftId || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to submit idea");
+      const { ok, data } = await apiCall<{ sku: string; idea: { ideaTitle: string } }>("/api/curation/ideas", { method: "POST", body: { ...currentPayload(), draftId: draftId || undefined } });
+      if (!ok) throw new Error(data.error || "Failed to submit idea");
 
       setLastCreated({ sku: data.sku, ideaTitle: data.idea.ideaTitle });
       toast.success(`Created ${data.sku} — now on the board, Unassigned`);
@@ -304,8 +323,9 @@ export function CurationIdeaForm({
           this layout. Nothing here gates on a prior field being filled. */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
-          <label className="text-xs text-muted-foreground mb-1 block">Item Name / Curation Title *</label>
+          <label htmlFor="curation-idea-title" className="text-xs text-muted-foreground mb-1 block">Item Name / Curation Title *</label>
           <Input
+            id="curation-idea-title"
             value={ideaTitle}
             onChange={(e) => {
               setIdeaTitle(e.target.value);
@@ -316,8 +336,9 @@ export function CurationIdeaForm({
         </div>
 
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Category</label>
+          <label htmlFor="curation-category" className="text-xs text-muted-foreground mb-1 block">Category</label>
           <Input
+            id="curation-category"
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
@@ -327,15 +348,46 @@ export function CurationIdeaForm({
           />
         </div>
 
-        {fields.map((f) => {
+        <div>
+          <label htmlFor="curation-budget" className="text-xs text-muted-foreground mb-1 block">Budget / Fee</label>
+          <Input
+            id="curation-budget"
+            type="number"
+            min="0"
+            step="0.01"
+            value={budget}
+            onChange={(e) => {
+              setBudget(e.target.value);
+              scheduleSave();
+            }}
+            placeholder="e.g. 5000"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="curation-deadline" className="text-xs text-muted-foreground mb-1 block">Deadline</label>
+          {/* Native date input rather than a picker dependency — it is a real date type on the
+              asset, and the browser already knows how to enter one. */}
+          <Input
+            id="curation-deadline"
+            type="date"
+            value={deadline}
+            onChange={(e) => {
+              setDeadline(e.target.value);
+              scheduleSave();
+            }}
+          />
+        </div>
+
+        {visibleFields.map((f) => {
           const value = fieldValues[f.fieldKey] || "";
           return (
             <div key={f.fieldKey} className={f.fieldType === "textarea" ? "md:col-span-2" : ""}>
-              <label className="text-xs text-muted-foreground mb-1 block">{f.displayName}</label>
-              {f.fieldType === "textarea" && <Textarea value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} rows={2} />}
+              <label htmlFor={`curation-field-${f.fieldKey}`} className="text-xs text-muted-foreground mb-1 block">{f.displayName}</label>
+              {f.fieldType === "textarea" && <Textarea id={`curation-field-${f.fieldKey}`} value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} rows={2} />}
               {f.fieldType === "select" && (
                 <Select value={value} onValueChange={(v) => setField(f.fieldKey, v)}>
-                  <SelectTrigger>
+                  <SelectTrigger id={`curation-field-${f.fieldKey}`}>
                     <SelectValue placeholder={`Select ${f.displayName.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
@@ -348,18 +400,19 @@ export function CurationIdeaForm({
                 </Select>
               )}
               {f.fieldType === "number" && (
-                <Input type="number" value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
+                <Input id={`curation-field-${f.fieldKey}`} type="number" value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
               )}
               {!["textarea", "select", "number"].includes(f.fieldType) && (
-                <Input value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
+                <Input id={`curation-field-${f.fieldKey}`} value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
               )}
             </div>
           );
         })}
 
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Source Links (comma-separated)</label>
+          <label htmlFor="curation-source-links" className="text-xs text-muted-foreground mb-1 block">Source Links (comma-separated)</label>
           <Input
+            id="curation-source-links"
             value={sourceLinks}
             onChange={(e) => {
               setSourceLinks(e.target.value);
@@ -369,8 +422,9 @@ export function CurationIdeaForm({
           />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground mb-1 block">Moodboard URLs (comma-separated)</label>
+          <label htmlFor="curation-moodboard-urls" className="text-xs text-muted-foreground mb-1 block">Moodboard URLs (comma-separated)</label>
           <Input
+            id="curation-moodboard-urls"
             value={moodboardUrls}
             onChange={(e) => {
               setMoodboardUrls(e.target.value);
@@ -430,9 +484,8 @@ function VersionHistoryList({ draftId, onRestore }: { draftId: string; onRestore
   const [versions, setVersions] = useState<DraftVersion[] | null>(null);
 
   useEffect(() => {
-    fetch(`/api/curation/drafts/${draftId}/versions`)
-      .then((r) => r.json())
-      .then((data) => setVersions(data.versions || []))
+    apiCall<{ versions: DraftVersion[] }>(`/api/curation/drafts/${draftId}/versions`)
+      .then(({ ok, data }) => setVersions(ok ? data.versions || [] : []))
       .catch(() => setVersions([]));
   }, [draftId]);
 
@@ -446,7 +499,7 @@ function VersionHistoryList({ draftId, onRestore }: { draftId: string; onRestore
             <p className="font-medium truncate">
               v{v.version} — {v.ideaTitle}
             </p>
-            <p className="text-xs text-muted-foreground">{new Date(v.savedAt).toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">{formatDateTime(v.savedAt)}</p>
           </div>
           <Button size="sm" variant="outline" onClick={() => onRestore(v.id)} className="shrink-0">
             Restore

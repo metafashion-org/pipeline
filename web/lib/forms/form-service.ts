@@ -28,6 +28,10 @@ export interface SubmitFormOptions {
   submitterId?: string;
 }
 
+// Deliberately permissive: enough to reject a typo or a blank, not enough to argue with a real
+// address. Anything stricter rejects valid mail for no gain.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // Validates against the form's OWN real field definitions (required/type),
 // not a hardcoded shape — same "dynamic form fields" principle the brief's
 // §6 curation form is built on (curation-service.ts), applied here to
@@ -51,19 +55,79 @@ export async function submitFormResponse(options: SubmitFormOptions) {
   }
 
   const emailFromValues = typeof cleanValues["email"] === "string" ? (cleanValues["email"] as string).trim() : "";
+  const resolvedEmail = (submitterEmail || emailFromValues).trim().toLowerCase();
+
+  // A public form has no session behind it, so the address the submitter types is the only way to
+  // reach them afterwards — and every one of these forms exists to be followed up on. Requiring it
+  // here rather than in the page means it holds for a direct POST too.
+  const isPublicForm = !form.definition.targetRoles || form.definition.targetRoles.length === 0;
+  if (isPublicForm && !submitterId) {
+    if (!resolvedEmail) throw new Error("An email address is required so we can get back to you.");
+    if (!EMAIL_PATTERN.test(resolvedEmail)) throw new Error(`"${resolvedEmail}" doesn't look like an email address.`);
+  }
 
   const [submission] = await db
     .insert(formSubmissions)
     .values({
       formDefinitionId: form.definition.id,
-      submitterEmail: submitterEmail || emailFromValues || null,
+      submitterEmail: resolvedEmail || null,
       submitterId: submitterId || null,
       values: cleanValues,
       status: "pending",
     })
     .returning();
 
-  return submission;
+  const behaviorError = await runSubmissionBehavior(
+    form.definition.onSubmissionBehavior,
+    submission.id,
+    submitterId
+  );
+
+  return { ...submission, behaviorError };
+}
+
+/**
+ * Runs whatever form_definitions.on_submission_behavior says to do once a submission is stored.
+ *
+ * Input: the behavior key, the id of the submission just written, and the submitter. Output: null on success, or a message describing why the follow-on action failed.
+ *
+ * The column was written in two places and read in none, so a form declaring
+ * "trigger_artifact_creation" recorded the submission and then did nothing with it, even though
+ * processArtifactSubmission was sitting there fully written. The submission row is inserted
+ * before this runs, so a failure here costs a follow-on action, never the submitter's input —
+ * an admin can retry it from the stored submission.
+ */
+async function runSubmissionBehavior(
+  behavior: string,
+  submissionId: string,
+  actorId?: string
+): Promise<string | null> {
+  try {
+    switch (behavior) {
+      case "trigger_artifact_creation": {
+        // Only reachable on a role-gated form (the artifact submission form targets admin,
+        // operator and curator), so creating the artifact outright is the intent rather than a
+        // way in for anyone who finds the URL.
+        const { processArtifactSubmission } = await import("@/lib/knowledge/artifact-submission");
+        await processArtifactSubmission(submissionId, actorId);
+        return null;
+      }
+      case "trigger_personnel_onboarding":
+        // Deliberately does nothing automatic. The Artist Access Request form is public and
+        // unauthenticated, so onboarding on submit would let anyone grant themselves an
+        // artist account. The submission stays 'pending' for the admin review path that
+        // already exists (approveArtistAccessSubmission, /admin/personnel), which is where a
+        // person actually becomes personnel.
+        return null;
+      case "record_only":
+      default:
+        return null;
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`[forms] on-submission behavior '${behavior}' failed for submission ${submissionId}:`, message);
+    return message;
+  }
 }
 
 function isEmptyValue(v: unknown): boolean {

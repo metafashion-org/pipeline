@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, numeric, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, numeric, jsonb, index } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
 
 export const assets = pgTable("assets", {
@@ -21,4 +21,9 @@ export const assets = pgTable("assets", {
   recolorReferenceImages: jsonb("recolor_reference_images").default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // The board groups every asset by status, and the artist board filters by assignee. Both
+  // were sequential scans; sku already has one from its unique constraint.
+  index("assets_current_status_idx").on(table.currentStatus),
+  index("assets_current_artist_idx").on(table.currentArtistId),
+]);

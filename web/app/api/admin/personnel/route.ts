@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
@@ -19,21 +18,22 @@ const AddPersonnelSchema = z.object({
 });
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin") {
+  const user = await getAuthedUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Ensure the access-request form exists so there's always something real to point artists at.
-  await seedOnboardingFormDefinition();
-
-  const people = await db.select().from(personnel).orderBy(desc(personnel.dateOnboarded));
-
-  const accessForm = await db
-    .select()
-    .from(formDefinitions)
-    .where(eq(formDefinitions.key, ARTIST_ACCESS_FORM_KEY))
-    .limit(1);
+  // The seed and the personnel list touch different tables, so they run together rather than
+  // making every page load wait for the seed before the list even starts.
+  const [, people, accessForm] = await Promise.all([
+    seedOnboardingFormDefinition(),
+    db.select().from(personnel).orderBy(desc(personnel.dateOnboarded)),
+    db.select().from(formDefinitions).where(eq(formDefinitions.key, ARTIST_ACCESS_FORM_KEY)).limit(1),
+  ]);
 
   let pendingSubmissions: (typeof formSubmissions.$inferSelect)[] = [];
   if (accessForm.length > 0) {
@@ -52,9 +52,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin") {
+  const user = await getAuthedUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -86,7 +89,7 @@ export async function POST(request: NextRequest) {
     action: "addPersonnel",
     entityType: "personnel",
     entityId: created.id,
-    actorId: session.user.personnelId || null,
+    actorId: user.personnelId || null,
     payload: { name, email: normalizedEmail, roles },
   });
 

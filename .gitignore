@@ -18,3 +18,8 @@ TEST-hey.md
 # GitButler installs its own managed hooks locally and chains ours as pre-commit-user
 .githooks/pre-commit-user
 .githooks/post-checkout
+
+# npm lockfile: this is a pnpm workspace. A package-lock.json arrived with the
+# catalog-intel sync and would resolve a different dependency tree from CI, with none
+# of the minimumReleaseAge / trustPolicy hardening in web/pnpm-workspace.yaml.
+package-lock.json
