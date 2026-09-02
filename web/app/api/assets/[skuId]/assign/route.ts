@@ -64,11 +64,13 @@ export async function POST(
     });
 
     if (assetRecord[0].currentStatus === "unassigned") {
+      // unassigned -> assigned is the seeded automatic transition, triggered by the
+      // assignment itself rather than by someone moving a card. The caller was already
+      // checked for canAssignArtists above, which is where this action is authorised.
       await updateAssetStatusInKanban(
         skuId,
         "assigned",
-        session.user.role,
-        session.user.personnelId,
+        { system: true },
         "Artist assigned via Kanban"
       );
     }

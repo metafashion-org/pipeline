@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
@@ -19,9 +18,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ personnelId: string }> }
 ) {
-  const [session, { personnelId }] = await Promise.all([getServerSession(authOptions), params]);
-  if (!session || session.user?.role !== "admin") {
+  const [user, { personnelId }] = await Promise.all([getAuthedUser(), params]);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -30,7 +32,7 @@ export async function PATCH(
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
   }
 
-  if (isSelfAdminRemovalAttempt(session.user.personnelId, personnelId, parseResult.data.roles)) {
+  if (isSelfAdminRemovalAttempt(user.personnelId, personnelId, parseResult.data.roles)) {
     return NextResponse.json({ error: "You can't remove admin from your own roles" }, { status: 400 });
   }
 
@@ -52,7 +54,7 @@ export async function PATCH(
     action: "updatePersonnelRoles",
     entityType: "personnel",
     entityId: personnelId,
-    actorId: session.user.personnelId || null,
+    actorId: user.personnelId || null,
     payload: { oldRoles: existing[0].roles, newRoles: parseResult.data.roles },
   });
 
@@ -63,12 +65,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ personnelId: string }> }
 ) {
-  const [session, { personnelId }] = await Promise.all([getServerSession(authOptions), params]);
-  if (!session || session.user?.role !== "admin") {
+  const [user, { personnelId }] = await Promise.all([getAuthedUser(), params]);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!user.caps.canManageSystemConfig) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  if (session.user.personnelId === personnelId) {
+  if (user.personnelId === personnelId) {
     return NextResponse.json({ error: "You can't delete your own account" }, { status: 400 });
   }
 
@@ -102,7 +107,7 @@ export async function DELETE(
     action: "deletePersonnel",
     entityType: "personnel",
     entityId: personnelId,
-    actorId: session.user.personnelId || null,
+    actorId: user.personnelId || null,
     payload: { name: existing[0].name, email: existing[0].email, roles: existing[0].roles },
   });
 

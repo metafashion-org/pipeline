@@ -1,5 +1,4 @@
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getMarketingKanbanData } from "@/lib/marketing/marketing-kanban-service";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -9,9 +8,9 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 export default async function AdminMarketingPage() {
-  const session = await getServerSession(authOptions);
-
-  if (!session || (session.user?.role !== "admin" && session.user?.role !== "marketing")) {
+  // Same dead condition as the API route this page posts to: role can never be "marketing".
+  const user = await getAuthedUser();
+  if (!user?.caps.canAccessMarketingTools) {
     redirect("/unauthorized");
   }
 
@@ -30,7 +29,7 @@ export default async function AdminMarketingPage() {
           <h1 className="text-lg font-semibold">Marketing Kanban & Campaign Dashboard</h1>
           <span className="hidden sm:inline text-xs text-muted-foreground">Posts and promotion status for assets that have reached Roblox. Filter by what still needs marketing.</span>
           <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
-            {session.user.email}
+            {user.email}
           </span>
         </div>
         <div className="flex items-center gap-2">

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
 import { updateAssetPaymentDetails, SUPPORTED_CURRENCIES } from "@/lib/curation/curation-service";
 import { z } from "zod";
 
@@ -14,9 +13,12 @@ const UpdatePaymentDetailsSchema = z
   });
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ skuId: string }> }) {
-  const [session, { skuId }] = await Promise.all([getServerSession(authOptions), params]);
-  if (!session || session.user?.role !== "admin") {
+  const [user, { skuId }] = await Promise.all([getAuthedUser(), params]);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!user.caps.canMarkPaymentDone) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const body = await request.json();
@@ -29,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const result = await updateAssetPaymentDetails(
       skuId,
       parseResult.data,
-      session.user.personnelId || undefined
+      user.personnelId || undefined
     );
     return NextResponse.json({ success: true, result });
   } catch (err) {

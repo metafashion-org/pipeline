@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { getEffectiveCapabilities, isRouteAllowedForRoles, ROLE_DEFAULT_CAPABILITIES } from "../rbac";
+import { getEffectiveCapabilities, isRouteAllowedForRoles, landingPathForRoles, ROLE_DEFAULT_CAPABILITIES } from "../rbac";
 
 function testRbacSystem() {
   console.log("Verifying 7-Role RBAC Capability & Route Guard logic...");
@@ -61,6 +61,47 @@ function testRbacSystem() {
 
   // 12. /publisher route must also admit the raw "uploader" role string, not just the capability
   assert.strictEqual(isRouteAllowedForRoles("/publisher", ["uploader"]), true, "uploader must be allowed on /publisher route");
+
+  // This function now gates the real page routes (proxy.ts), so these are load-bearing.
+
+  // Admin subsections need more than "can see the board". An operator runs production day to
+  // day and belongs on the board, but managing people and rewriting the status machine is a
+  // higher bar, and payment_admin holds canViewAllAssets without being an administrator.
+  assert.strictEqual(isRouteAllowedForRoles("/admin", ["operator"]), true, "operator belongs on the admin board");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/personnel", ["operator"]), false, "operator must not manage personnel");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/settings", ["operator"]), false, "operator must not edit system config");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/personnel", ["admin"]), true, "admin manages personnel");
+  assert.strictEqual(isRouteAllowedForRoles("/admin", ["payment_admin"]), true, "payment_admin can view all assets");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/settings", ["payment_admin"]), false, "payment_admin is not a system administrator");
+
+  // The marketing role reaching its own tools. It could not before: the session's collapsed
+  // role string never produced "marketing", so every check against it was dead.
+  assert.strictEqual(isRouteAllowedForRoles("/admin/marketing", ["marketing"]), true, "marketing must reach marketing tools");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/marketing", ["artist"]), false, "an artist must not reach marketing tools");
+
+  // Per-person overrides have to actually change what a page route allows — that is the whole
+  // reason personnel.capability_overrides exists, and the previous middleware ignored it.
+  assert.strictEqual(
+    isRouteAllowedForRoles("/admin/settings", ["artist"], { canManageSystemConfig: true }),
+    true,
+    "a granted override must widen route access"
+  );
+  assert.strictEqual(
+    isRouteAllowedForRoles("/admin", ["operator"], { canViewAllAssets: false, canManageSystemConfig: false }),
+    false,
+    "a revoked override must narrow route access"
+  );
+
+  // Roles arrive capitalised from the source personnel sheet ("Artist, Operator, Uploader").
+  assert.strictEqual(isRouteAllowedForRoles("/artist", ["Artist"]), true, "role matching must be case-insensitive");
+
+  // Everyone lands somewhere they can use. A pure marketing or payment_admin person used to
+  // fall through every branch of the login redirect and sit on "/" with no error.
+  assert.strictEqual(landingPathForRoles(["artist"]), "/artist");
+  assert.strictEqual(landingPathForRoles(["curator"]), "/curator");
+  assert.strictEqual(landingPathForRoles(["publisher"]), "/publisher");
+  assert.strictEqual(landingPathForRoles(["payment_admin"]), "/admin");
+  assert.strictEqual(landingPathForRoles([]), "/unauthorized", "someone with no roles has nowhere to land");
 
   console.log("✓ All P2-T6 7-Role RBAC assertions passed cleanly!");
 }
