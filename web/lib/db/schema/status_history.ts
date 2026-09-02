@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
 import { assets } from "./assets";
 import { personnel } from "./personnel";
 
@@ -10,4 +10,7 @@ export const statusHistory = pgTable("status_history", {
   actorId: uuid("actor_id").references(() => personnel.id),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // The asset drawer reads one asset's history newest-first on every open.
+  index("status_history_asset_created_idx").on(table.assetId, table.createdAt),
+]);

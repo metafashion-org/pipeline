@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { formDefinitions } from "./form_definitions";
 import { personnel } from "./personnel";
 
@@ -13,4 +13,10 @@ export const formSubmissions = pgTable("form_submissions", {
   reviewNotes: text("review_notes"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // The review queue reads one form's pending submissions, newest first.
+  index("form_submissions_form_status_idx").on(table.formDefinitionId, table.status, table.createdAt),
+  // Same reasoning as curation_item_ideas.field_values: this holds the answers people typed,
+  // so it is the column a query would search by key or value.
+  index("form_submissions_values_gin").using("gin", table.values),
+]);

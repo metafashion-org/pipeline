@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, index, unique } from "drizzle-orm/pg-core";
 import { formDefinitions } from "./form_definitions";
 
 export const formFields = pgTable("form_fields", {
@@ -12,4 +12,13 @@ export const formFields = pgTable("form_fields", {
   options: jsonb("options").default([]), // For dropdown / radio options
   validationRules: jsonb("validation_rules").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // A field key is unique within its own form, not across all forms. Without this the
+  // onboarding seed's existence check (which matched on fieldKey alone) would treat another
+  // form's "email" field as proof that the artist-access form already had one, and silently
+  // leave that form a field short. The seed now scopes its own lookup as well; this makes the
+  // rule structural so the next seeder can't reintroduce the bug.
+  unique("form_fields_definition_key_unique").on(table.formDefinitionId, table.fieldKey),
+  // Rendering a form reads its fields in sort order.
+  index("form_fields_definition_sort_idx").on(table.formDefinitionId, table.sortOrder),
+]);
