@@ -46,7 +46,9 @@ export async function POST(
     return NextResponse.json({ error: `Asset with SKU '${skuId}' not found` }, { status: 404 });
   }
 
-  const roles = session.user.roles || [];
+  // Lowercased for the same reason rbac.ts lowercases: role names are stored capitalised in
+  // places, and a raw includes() would refuse a real operator whose row reads "Operator".
+  const roles = (session.user.roles || []).map((r) => r.toLowerCase());
   const isAdminOrOperator = roles.includes("admin") || roles.includes("operator");
   const isAssignedArtist =
     Boolean(session.user.personnelId) && session.user.personnelId === assetRecord[0].currentArtistId;

@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { db } from "@/lib/db/client";
 import { guidelines } from "@/lib/db/schema/guidelines";
 import { asc } from "drizzle-orm";
 
-function canManageKnowledge(roles: string[], overrides: Record<string, boolean>): boolean {
-  const caps = getEffectiveCapabilities(roles, overrides);
-  return caps.canManageSystemConfig || caps.canAccessCuratorTools;
-}
 
 // Minimal list/quick-create for the "Technical guideline libraries" link
 // surface (brief §7's "attachable to" list) — the guidelines table existed
@@ -19,7 +15,7 @@ function canManageKnowledge(roles: string[], overrides: Record<string, boolean>)
 // piece of work, not attempted here.
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
   const rows = await db.select().from(guidelines).orderBy(asc(guidelines.title));
@@ -28,7 +24,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
   const body = await request.json().catch(() => ({}));

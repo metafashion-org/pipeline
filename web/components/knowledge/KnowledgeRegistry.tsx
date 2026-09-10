@@ -140,7 +140,7 @@ export function KnowledgeRegistry({
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Submit a Knowledge Artifact</DialogTitle>
-              <DialogDescription>Gets a real, permanent ID (e.g. TR001) the moment you submit — citable and cross-referenceable from then on.</DialogDescription>
+              <DialogDescription>It gets a permanent ID (TR001, for example) on submit, so it can be cited and linked from anywhere.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -229,7 +229,7 @@ export function KnowledgeRegistry({
                   <td className="px-4 py-2">
                     <div className="flex flex-wrap gap-1">
                       {(a.tags || []).map((t) => (
-                        <span key={t} className="text-[10px] px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
+                        <span key={t} className="text-xs px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
                           {t}
                         </span>
                       ))}

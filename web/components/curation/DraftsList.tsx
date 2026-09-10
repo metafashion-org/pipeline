@@ -68,11 +68,11 @@ export function DraftsList({
             <div className="flex items-center gap-2">
               <p className="font-medium truncate">{d.ideaTitle || "Untitled idea"}</p>
               {d.category && (
-                <Badge variant="secondary" className="text-[10px] shrink-0">
+                <Badge variant="secondary" className="text-xs shrink-0">
                   {d.category}
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px] shrink-0">
+              <Badge variant="outline" className="text-xs shrink-0">
                 v{d.version}
               </Badge>
             </div>

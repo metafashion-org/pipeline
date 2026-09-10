@@ -118,7 +118,7 @@ async function testFinalFilesUploaderRobloxFlow() {
     // 6. recordRobloxUpload must reject an asset that isn't Ready for Upload.
     await db.update(assets).set({ currentStatus: "final_files_received" }).where(eq(assets.id, assetId));
     try {
-      await recordRobloxUpload({ sku: TEST_SKU, robloxItemUrl: "https://www.roblox.com/catalog/12345" });
+      await recordRobloxUpload({ sku: TEST_SKU, robloxItemUrls: ["https://www.roblox.com/catalog/12345/Test-Hat"] });
       assert.fail("Should reject a Roblox upload when the asset isn't Ready for Upload");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -130,8 +130,7 @@ async function testFinalFilesUploaderRobloxFlow() {
     await db.update(assets).set({ currentStatus: "ready_for_upload" }).where(eq(assets.id, assetId));
     const robloxResult = await recordRobloxUpload({
       sku: TEST_SKU,
-      robloxItemUrl: "https://www.roblox.com/catalog/999999",
-      robloxAssetId: "999999",
+      robloxItemUrls: ["https://www.roblox.com/catalog/999999/Test-Hat"],
     });
     assert.strictEqual(robloxResult.currentStatus, "uploaded_to_roblox");
 
@@ -140,7 +139,8 @@ async function testFinalFilesUploaderRobloxFlow() {
 
     const [uploadRecord] = await db.select().from(uploadRecords).where(eq(uploadRecords.assetId, assetId));
     assert.ok(uploadRecord, "A real upload_records row must be written");
-    assert.strictEqual(uploadRecord.robloxItemUrl, "https://www.roblox.com/catalog/999999");
+    assert.strictEqual(uploadRecord.robloxItemUrl, "https://www.roblox.com/catalog/999999/Test-Hat");
+    // Read out of the link rather than typed: the separate "Roblox asset ID" field is gone.
     assert.strictEqual(uploadRecord.robloxAssetId, "999999");
     console.log("Confirmed a valid Roblox upload transitions the asset and writes a real upload_records row");
 

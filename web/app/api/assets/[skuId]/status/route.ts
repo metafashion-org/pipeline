@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { z } from "zod";
+import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
 const StatusSchema = z.object({
   status: z.string().optional(),
@@ -39,6 +40,10 @@ export async function PATCH(
       personnelId: user.personnelId,
     });
 
+    // A status change can move an asset into or out of the Uploader Queue, and into Marketing's
+    // "uploaded but not marketed" list, so both cached views are dropped rather than guessing which
+    // transition this was.
+    revalidateViews(CACHE_TAGS.publisherQueue, CACHE_TAGS.marketing);
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     console.error("Error in status update endpoint:", error);

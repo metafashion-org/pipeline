@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,8 +24,16 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MetaFashion - Task Kanban",
-  description: "Task management board for MetaFashion",
+  title: "MetaFashion Pipeline",
+  description: "Production pipeline for MetaFashion assets.",
+};
+
+// Stops iOS Safari zooming the page when a field is focused, which it does whenever an input
+// renders below 16px, and keeps the layout inside the notch on a phone.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -38,10 +46,13 @@ export default function RootLayout({
       <body
         className={`${sans.variable} ${display.variable} ${mono.variable} antialiased`}
       >
+        {/* System is enabled because the mode toggle in the shell offers it. It was listed as a
+            choice while enableSystem was false, so picking it did nothing. Dark stays the
+            default for anyone who has not chosen. */}
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          enableSystem={false}
+          enableSystem
           disableTransitionOnChange
         >
           {children}

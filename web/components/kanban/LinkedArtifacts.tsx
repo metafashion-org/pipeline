@@ -37,7 +37,7 @@ export function LinkedArtifacts({ sku, enabled }: { sku: string; enabled: boolea
         {artifacts.map((a) => (
           <div key={a.id} className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-mono text-[10px] text-muted-foreground">
+              <p className="font-mono text-xs text-muted-foreground">
                 {a.artifactId} · {a.typeLabel}
               </p>
               <p className="truncate">{a.title}</p>

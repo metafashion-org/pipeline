@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { notifyUploader } from "@/lib/deliverables/deliverables-service";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { z } from "zod";
+import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
 const NotifyUploaderSchema = z.object({
   notes: z.string().trim().min(1).optional(),
@@ -39,6 +40,8 @@ export async function POST(
 
   try {
     const result = await notifyUploader(skuId, session.user.personnelId, parseResult.data.notes);
+    // The asset has just become Ready for Upload, so it now belongs in the Uploader Queue.
+    revalidateViews(CACHE_TAGS.publisherQueue);
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     return NextResponse.json(

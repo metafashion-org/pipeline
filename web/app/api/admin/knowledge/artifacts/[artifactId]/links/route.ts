@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import {
   getLinksForArtifact,
   linkArtifactToSku,
@@ -13,10 +13,6 @@ import {
 } from "@/lib/knowledge/artifact-links-service";
 import { z } from "zod";
 
-function canManageKnowledge(roles: string[], overrides: Record<string, boolean>): boolean {
-  const caps = getEffectiveCapabilities(roles, overrides);
-  return caps.canManageSystemConfig || caps.canAccessCuratorTools;
-}
 
 // One artifact's links across all 6 of the brief's §7 "attachable to"
 // surfaces (SKUs, categories, artist briefs, style systems, marketing
@@ -24,7 +20,7 @@ function canManageKnowledge(roles: string[], overrides: Record<string, boolean>)
 // see getLinksForArtifact.
 export async function GET(_request: Request, { params }: { params: Promise<{ artifactId: string }> }) {
   const [{ artifactId }, session] = await Promise.all([params, getServerSession(authOptions)]);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
   const links = await getLinksForArtifact(artifactId);
@@ -38,7 +34,7 @@ const LinkSchema = z.object({
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ artifactId: string }> }) {
   const [{ artifactId }, session] = await Promise.all([params, getServerSession(authOptions)]);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
 

@@ -10,6 +10,8 @@
 // callers should return a clear "not configured" response rather than
 // throwing.
 
+import { cachedDiscordRead, invalidateDiscordCache, DISCORD_CACHE_KEYS } from "./discord-cache";
+
 const API_BASE = "https://discord.com/api/v10";
 
 // Minimal shapes for the real Discord REST v10 fields this app actually
@@ -108,27 +110,36 @@ export async function discordFetch<T = unknown>(path: string, opts: RequestInit 
   throw lastErr;
 }
 
+// The three whole-guild reads every Discord screen is built from. All three are cached in process
+// for a short window and invalidated by the write helpers below — see discord-cache.ts for why.
+
 export async function getGuildMembers(): Promise<DiscordGuildMember[]> {
-  // Discord paginates at 1000/page via `after` (last-seen user id).
-  const guildId = process.env.DISCORD_GUILD_ID;
-  const all: DiscordGuildMember[] = [];
-  let after = "0";
-  for (;;) {
-    const page = await discordFetch<DiscordGuildMember[]>(`/guilds/${guildId}/members?limit=1000&after=${after}`);
-    if (!Array.isArray(page) || page.length === 0) break;
-    all.push(...page);
-    if (page.length < 1000) break;
-    after = page[page.length - 1].user.id;
-  }
-  return all;
+  return cachedDiscordRead(DISCORD_CACHE_KEYS.members, async () => {
+    // Discord paginates at 1000/page via `after` (last-seen user id).
+    const guildId = process.env.DISCORD_GUILD_ID;
+    const all: DiscordGuildMember[] = [];
+    let after = "0";
+    for (;;) {
+      const page = await discordFetch<DiscordGuildMember[]>(`/guilds/${guildId}/members?limit=1000&after=${after}`);
+      if (!Array.isArray(page) || page.length === 0) break;
+      all.push(...page);
+      if (page.length < 1000) break;
+      after = page[page.length - 1].user.id;
+    }
+    return all;
+  });
 }
 
 export async function getGuildChannels(): Promise<DiscordChannel[]> {
-  return discordFetch<DiscordChannel[]>(`/guilds/${process.env.DISCORD_GUILD_ID}/channels`);
+  return cachedDiscordRead(DISCORD_CACHE_KEYS.channels, () =>
+    discordFetch<DiscordChannel[]>(`/guilds/${process.env.DISCORD_GUILD_ID}/channels`)
+  );
 }
 
 export async function getGuildRoles(): Promise<DiscordRole[]> {
-  return discordFetch<DiscordRole[]>(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`);
+  return cachedDiscordRead(DISCORD_CACHE_KEYS.roles, () =>
+    discordFetch<DiscordRole[]>(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`)
+  );
 }
 
 // Discord channel type 4 = category. Every non-category channel carries
@@ -185,14 +196,18 @@ export const NEW_CHANNEL_MESSAGE_TEMPLATE = (displayName: string, department: st
 // ─── Write helpers ────────────────────────────────────────────────────────
 
 export async function createRole(name: string, color?: number): Promise<DiscordRole> {
-  return discordFetch<DiscordRole>(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`, {
+  const role = await discordFetch<DiscordRole>(`/guilds/${process.env.DISCORD_GUILD_ID}/roles`, {
     method: "POST",
     body: JSON.stringify({ name, color: color ?? 0x3498db, mentionable: false, hoist: false }),
   });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.roles);
+  return role;
 }
 
 export async function assignRole(userId: string, roleId: string): Promise<void> {
   await discordFetch(`/guilds/${process.env.DISCORD_GUILD_ID}/members/${userId}/roles/${roleId}`, { method: "PUT" });
+  // A member's role list is part of the member record, so the cached member list is now wrong.
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.members);
 }
 
 export async function createChannel(
@@ -201,18 +216,23 @@ export async function createChannel(
   permissionOverwrites: DiscordOverwrite[],
   topic?: string
 ): Promise<DiscordChannel> {
-  return discordFetch<DiscordChannel>(`/guilds/${process.env.DISCORD_GUILD_ID}/channels`, {
+  const channel = await discordFetch<DiscordChannel>(`/guilds/${process.env.DISCORD_GUILD_ID}/channels`, {
     method: "POST",
     body: JSON.stringify({ name, type: 0, parent_id: parentId, permission_overwrites: permissionOverwrites, topic }),
   });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.channels);
+  return channel;
 }
 
 export async function patchChannel(channelId: string, patch: Record<string, unknown>): Promise<DiscordChannel> {
-  return discordFetch<DiscordChannel>(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  const channel = await discordFetch<DiscordChannel>(`/channels/${channelId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.channels);
+  return channel;
 }
 
 export async function deleteChannel(channelId: string): Promise<void> {
   await discordFetch(`/channels/${channelId}`, { method: "DELETE" });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.channels);
 }
 
 // Sets ONE overwrite entry (role or member) on a channel. Discord's PUT here
@@ -229,10 +249,13 @@ export async function putChannelPermission(
     method: "PUT",
     body: JSON.stringify({ id: overwriteId, type, allow: allow.toString(), deny: deny.toString() }),
   });
+  // Overwrites are read back off the channel list, which is what canViewChannel resolves against.
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.channels);
 }
 
 export async function deleteChannelPermission(channelId: string, overwriteId: string): Promise<void> {
   await discordFetch(`/channels/${channelId}/permissions/${overwriteId}`, { method: "DELETE" });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.channels);
 }
 
 // BigInt(...) calls rather than `1024n` literal syntax: this project's
@@ -291,7 +314,10 @@ export async function kickMember(userId: string, reason?: string): Promise<void>
     method: "DELETE",
     headers: reason ? { "X-Audit-Log-Reason": reason.slice(0, 500) } : {},
   });
+  invalidateDiscordCache(DISCORD_CACHE_KEYS.members);
 }
+
+export { invalidateDiscordCache, DISCORD_CACHE_KEYS } from "./discord-cache";
 
 export async function searchMembers(query: string): Promise<DiscordGuildMember[]> {
   return discordFetch<DiscordGuildMember[]>(`/guilds/${process.env.DISCORD_GUILD_ID}/members/search?query=${encodeURIComponent(query)}&limit=10`);

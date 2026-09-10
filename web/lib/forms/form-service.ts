@@ -13,6 +13,7 @@ import { formDefinitions } from "@/lib/db/schema/form_definitions";
 import { formFields } from "@/lib/db/schema/form_fields";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
 import { eq, asc } from "drizzle-orm";
+import { isPublicForm } from "./form-access";
 
 export async function getFormDefinitionByKey(key: string) {
   const [def] = await db.select().from(formDefinitions).where(eq(formDefinitions.key, key)).limit(1);
@@ -60,8 +61,8 @@ export async function submitFormResponse(options: SubmitFormOptions) {
   // A public form has no session behind it, so the address the submitter types is the only way to
   // reach them afterwards — and every one of these forms exists to be followed up on. Requiring it
   // here rather than in the page means it holds for a direct POST too.
-  const isPublicForm = !form.definition.targetRoles || form.definition.targetRoles.length === 0;
-  if (isPublicForm && !submitterId) {
+  const isPublic = isPublicForm(form.definition);
+  if (isPublic && !submitterId) {
     if (!resolvedEmail) throw new Error("An email address is required so we can get back to you.");
     if (!EMAIL_PATTERN.test(resolvedEmail)) throw new Error(`"${resolvedEmail}" doesn't look like an email address.`);
   }
@@ -80,7 +81,8 @@ export async function submitFormResponse(options: SubmitFormOptions) {
   const behaviorError = await runSubmissionBehavior(
     form.definition.onSubmissionBehavior,
     submission.id,
-    submitterId
+    submitterId,
+    isPublic
   );
 
   return { ...submission, behaviorError };
@@ -100,14 +102,19 @@ export async function submitFormResponse(options: SubmitFormOptions) {
 async function runSubmissionBehavior(
   behavior: string,
   submissionId: string,
-  actorId?: string
+  actorId: string | undefined,
+  isPublicForm: boolean
 ): Promise<string | null> {
   try {
     switch (behavior) {
       case "trigger_artifact_creation": {
-        // Only reachable on a role-gated form (the artifact submission form targets admin,
-        // operator and curator), so creating the artifact outright is the intent rather than a
-        // way in for anyone who finds the URL.
+        // Creating the artifact outright is the intent on a role-gated form, and a way in for
+        // anyone who finds the URL on a public one. The form builder now refuses to save that
+        // combination, and this refuses to act on it for any row that predates the check — the
+        // submission is still recorded, so nothing anyone typed is lost.
+        if (isPublicForm) {
+          return "This form is public, so it only records submissions. An admin has to give it a role before it can create artifacts.";
+        }
         const { processArtifactSubmission } = await import("@/lib/knowledge/artifact-submission");
         await processArtifactSubmission(submissionId, actorId);
         return null;

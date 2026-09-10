@@ -1,26 +1,29 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 
 export default function UnauthorizedPage() {
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
-            <Card className="w-[350px]">
-                <CardHeader>
-                    <CardTitle className="text-destructive">Unauthorized</CardTitle>
-                    <CardDescription>
-                        Your email is not authorized to access this system.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Please contact the administrator if you believe this is an error.
-                    </p>
-                    <Button asChild variant="outline" className="w-full">
-                        <Link href="/login">Return to Login</Link>
-                    </Button>
-                </CardContent>
-            </Card>
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background text-foreground p-6">
+      <div className="w-full max-w-sm text-center space-y-4">
+        <div className="mx-auto w-12 h-12 rounded-full grid place-items-center bg-muted">
+          <ShieldAlert className="w-5 h-5 text-muted-foreground" />
         </div>
-    );
+        <div className="space-y-1">
+          <h1 className="text-xl">No access</h1>
+          <p className="text-muted-foreground">
+            This account is not set up to use the pipeline, or its access has been turned off.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button asChild variant="outline">
+            <Link href="/login">Sign in with another account</Link>
+          </Button>
+          <Button asChild variant="ghost">
+            <Link href="/apply">Request artist access</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

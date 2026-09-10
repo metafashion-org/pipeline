@@ -1,11 +1,11 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
-import { getReadyForUploadQueue } from "@/lib/publisher/publisher-service";
+import { getPublisherQueueView } from "@/lib/dashboard/views";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { PublisherQueue } from "@/components/publisher/PublisherQueue";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
+
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -25,31 +25,18 @@ export default async function PublisherPage() {
     redirect("/unauthorized");
   }
 
-  const queue = await getReadyForUploadQueue();
+  // Cached under the publisher-queue tag and invalidated when an asset enters or leaves the queue, so coming back to this view does not re-run the query.
+  const queue = await getPublisherQueueView();
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-lg font-semibold truncate">Uploader queue</h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-            Assets Ready for Upload — record the Roblox link to publish.
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <ModeToggle />
-          <LogoutButton />
-        </div>
-      </header>
+      <PageHeader
+        title="Uploader Queue"
+        description="Assets ready for upload. Record the Roblox link to publish."
+      />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
-        <PublisherQueue
-          initialItems={queue.map((item) => ({
-            ...item,
-            deadline: item.deadline ? item.deadline.toISOString() : null,
-            updatedAt: item.updatedAt.toISOString(),
-          }))}
-        />
+        <PublisherQueue initialItems={queue} />
       </main>
     </div>
   );

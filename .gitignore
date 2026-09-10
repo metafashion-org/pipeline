@@ -15,6 +15,9 @@ TEST-hey.md
 # Playwright MCP browser session artifacts (snapshots, console logs, screenshots)
 .playwright-mcp/
 
+# Codex CLI local config, per-machine and not shared
+.codex/
+
 # GitButler installs its own managed hooks locally and chains ours as pre-commit-user
 .githooks/pre-commit-user
 .githooks/post-checkout

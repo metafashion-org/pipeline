@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { getAssetAssignmentHistory } from "@/lib/kanban/assignment-service";
 
 // Lists one asset's assignment history (current + past) so the Knowledge
@@ -11,7 +11,7 @@ import { getAssetAssignmentHistory } from "@/lib/kanban/assignment-service";
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
-  if (!session || !(caps.canManageSystemConfig || caps.canAccessCuratorTools)) {
+  if (!session || !canManageKnowledge(caps)) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
 

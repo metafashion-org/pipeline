@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { addMarketingUpdate, INITIAL_MARKETING_STATUSES } from "@/lib/marketing/marketing-service";
 import { z } from "zod";
+import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
 const MARKETING_STATUS_KEYS = INITIAL_MARKETING_STATUSES.map((s) => s.statusKey);
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       marketingStatus: marketingStatus || (postUrl ? "posted" : "planned"),
       responsiblePersonId: user.personnelId,
     });
+    revalidateViews(CACHE_TAGS.marketing);
     return NextResponse.json({ success: true, update });
   } catch (error: unknown) {
     return NextResponse.json(

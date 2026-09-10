@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getCurationFieldConfigs, updateCurationFieldConfig } from "@/lib/curation/curation-service";
 import { z } from "zod";
+import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
 const UpdateCurationFieldSchema = z.object({
   fieldKey: z.string().min(1),
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
     const row = await updateCurationFieldConfig(parseResult.data.fieldKey, {
       includeInArtistEmail: parseResult.data.includeInArtistEmail,
     });
+    revalidateViews(CACHE_TAGS.curationFields);
     return NextResponse.json({ success: true, field: row });
   } catch (error: unknown) {
     return NextResponse.json(

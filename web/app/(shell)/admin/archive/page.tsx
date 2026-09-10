@@ -18,8 +18,6 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
 import { PendingPaymentControls } from "@/components/archive/PendingPaymentControls";
 import { ArchiveTable } from "@/components/archive/ArchiveTable";
 import { getArchivedAssets, getArchivedTotal } from "@/lib/archive/archive-service";
@@ -29,6 +27,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { formatDate } from "@/lib/format-date";
+
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -137,22 +137,11 @@ export default async function ArchivePage({
     }
 
     return (
-        <div className="flex flex-col h-screen bg-background text-foreground">
-            <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-                <div className="flex items-center gap-2 min-w-0">
-                    <Button variant="ghost" size="icon" asChild>
-                        <Link href="/admin">
-                            <ArrowLeft className="w-4 h-4" />
-                        </Link>
-                    </Button>
-                    <h1 className="text-lg font-semibold truncate">Task Archive</h1>
-                    <span className="hidden sm:inline text-xs text-muted-foreground truncate">Assets paid out more than 7 days ago, kept for reference</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <ModeToggle />
-                    <LogoutButton />
-                </div>
-            </header>
+        <div className="flex flex-col h-full bg-background text-foreground">
+      <PageHeader
+        title="Archive"
+        description="Assets paid out more than 7 days ago."
+      />
 
             <main className="flex-1 overflow-auto p-4 sm:p-6 flex flex-col gap-6">
             <Card className="shadow-sm hover:shadow-md transition-shadow">

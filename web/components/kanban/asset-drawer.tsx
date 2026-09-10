@@ -28,7 +28,7 @@ export interface AssetDrawerProps {
  */
 // Constant, so it is built once at module scope rather than rebuilt for every thumbnail on every render.
 const OPEN_IN_DRIVE = (
-  <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-[10px] text-muted-foreground">
+  <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-xs text-muted-foreground">
     <ExternalLink className="h-3.5 w-3.5" />
     Open in Drive
   </span>
@@ -200,13 +200,13 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
               <div className="bg-muted/30 p-3 rounded-md text-sm flex items-center justify-between gap-2 flex-wrap">
                 {canSubmitFinalFiles && asset.currentStatus === "approved" && (
                   <>
-                    <p className="text-xs text-muted-foreground">Approved — ready for the artist&apos;s final files.</p>
+                    <p className="text-xs text-muted-foreground">Approved. Waiting on the artist&apos;s final files.</p>
                     <SubmitFinalFilesDialog sku={asset.sku} />
                   </>
                 )}
                 {canNotifyUploader && asset.currentStatus === "final_files_received" && (
                   <>
-                    <p className="text-xs text-muted-foreground">Final files received — notify the uploader when ready.</p>
+                    <p className="text-xs text-muted-foreground">Final files received. Notify the uploader when ready.</p>
                     <NotifyUploaderButton sku={asset.sku} />
                   </>
                 )}

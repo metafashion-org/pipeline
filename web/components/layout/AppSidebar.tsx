@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -16,18 +17,16 @@ import {
   PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
+  Menu,
+  X,
 } from "lucide-react";
+import { isRouteAllowedForRoles } from "@/lib/auth/rbac";
+import { ModeToggle } from "@/components/ui/mode-toggle";
 
-// Curator, Publisher, and Artist used to each be their own standalone page
-// with no sidebar at all — reachable, but every click into one visually
-// "ate" the sidebar and dropped you into a differently-shaped page, and
-// clicking back out meant hunting for a "Back to Admin" link two of them
-// grew as a stopgap. Reported directly: some pages losing the sidebar felt
-// forced. Real fix, not another patch: all four now live under the same
-// app/(shell) route group and share this one sidebar (renamed from
-// AdminSidebar now that it's genuinely not admin-only), so the shell
-// itself never disappears — only its own collapse state changes, and that
-// state is the user's choice, not something a route switches on them.
+// Every internal page shares this one sidebar. Before, admin/* had a sidebar and artist,
+// curator and publisher each stood alone, so moving between tools looked like the shell kept
+// disappearing.
 const NAV_ITEMS = [
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
@@ -43,20 +42,31 @@ const NAV_ITEMS = [
 
 const COLLAPSE_KEY = "pipeline_sidebar_collapsed";
 
-// Presentation matches Catalog Intel's own sidebar (App.tsx): a branded
-// header block, labeled nav rows (not an icon-only rail by default), and
-// the same active-state convention — a left accent border plus a tinted
-// background, not a flat solid fill — so this reads as the same product.
-export function AppSidebar() {
+export interface SidebarViewer {
+  email: string | null;
+  roles: string[];
+  capabilityOverrides: Record<string, boolean>;
+}
+
+// The viewer is passed down from the server layout, which already has the session, rather than
+// read here with useSession. That avoids mounting a SessionProvider and refetching on the client
+// something the server rendered this page with, and it means the nav is correct in the first
+// paint instead of filtering itself once the session arrives.
+export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  // Separate from `collapsed`: on a phone the sidebar is a panel that slides over the page and
+  // closes on navigation, not a rail that sits beside it.
+  //
+  // Held as the path the panel was opened on rather than a boolean, so navigating closes it as a
+  // consequence of the path changing instead of needing an effect to watch for that and call
+  // setState — which is a cascading render, and what the effect version was doing.
+  const [openedOnPath, setOpenedOnPath] = useState<string | null>(null);
+  const mobileOpen = openedOnPath !== null && openedOnPath === pathname;
 
-  // Read the saved preference after mount, same reasoning as any
-  // localStorage-backed state in this app (PublicForm.tsx has the fuller
-  // version of this comment): localStorage doesn't exist during SSR, so
-  // there's no render-time value to compute this from, and hydrating it
-  // via a lazy useState initializer would run once on the server (where
-  // window is undefined) and again on the client, producing a mismatch.
+  // Read the saved preference after mount. localStorage does not exist during the server render,
+  // so there is no render-time value to compute this from, and a lazy useState initializer would
+  // run on the server too and produce a hydration mismatch.
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -66,11 +76,8 @@ export function AppSidebar() {
     }
   }, []);
 
-  // The write used to live inside the setCollapsed updater. React treats an updater as a pure
-  // function it may call more than once — twice per update under StrictMode, and again when it
-  // replays an interrupted render — so the localStorage write ran more times than the toggle
-  // did. Deriving the next value from the current state and writing it here keeps the updater
-  // pure and the write happening exactly once per click.
+  // The write used to live inside the setCollapsed updater. React may call an updater more than
+  // once, so the write ran more often than the toggle did.
   function toggle() {
     const next = !collapsed;
     setCollapsed(next);
@@ -81,68 +88,129 @@ export function AppSidebar() {
     }
   }
 
-  return (
-    <nav
-      className={`flex flex-col h-screen shrink-0 bg-sidebar border-r border-sidebar-border transition-[width] duration-150 ${
-        collapsed ? "w-14" : "w-56"
-      }`}
-    >
-      <div className="h-14 shrink-0 flex items-center px-3 border-b border-sidebar-border justify-between">
+  const roles = viewer.roles;
+  const overrides = viewer.capabilityOverrides;
+
+  // Only the destinations this person can actually open. Every user was shown all ten, so a
+  // curator clicking Personnel, Settings or Forms landed on /unauthorized — the nav advertised
+  // work they had no way to do. Same rule proxy.ts enforces, so the list and the gate agree.
+  const visibleItems = NAV_ITEMS.filter((item) => isRouteAllowedForRoles(item.href, roles, overrides));
+
+  const panel = (
+    <>
+      <div className="h-14 shrink-0 flex items-center px-3 border-b border-sidebar-border">
         <div className="flex items-center min-w-0">
-          <div className="w-7 h-7 rounded-md flex items-center justify-center text-white font-bold text-sm flex-shrink-0 bg-primary">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shrink-0 bg-primary">
             M
           </div>
           {!collapsed && (
             <div className="ml-2.5 min-w-0">
-              <span className="block font-display font-semibold tracking-tight text-white text-sm leading-none truncate">
+              <span className="block font-display font-semibold tracking-tight text-white text-base leading-tight truncate">
                 MetaFashion
               </span>
-              <span className="block text-[9px] text-sidebar-foreground tracking-widest mt-0.5">PIPELINE</span>
+              <span className="block text-xs text-sidebar-foreground leading-tight">Pipeline</span>
             </div>
           )}
         </div>
+        <button
+          type="button"
+          onClick={() => setOpenedOnPath(null)}
+          aria-label="Close menu"
+          className="md:hidden ml-auto h-9 w-9 grid place-items-center rounded-md text-sidebar-foreground hover:text-white hover:bg-sidebar-accent"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
-          const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={collapsed ? label : undefined}
-              className={`w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded text-sm transition-colors ${
-                isActive ? "text-white" : "text-sidebar-foreground hover:text-white hover:bg-sidebar-accent"
-              }`}
-              style={
-                isActive
-                  ? { backgroundColor: "var(--sidebar-accent)", borderLeft: "3px solid var(--sidebar-primary)", paddingLeft: "9px" }
-                  : { borderLeft: "3px solid transparent" }
-              }
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span className="truncate">{label}</span>}
+        {visibleItems.map(({ href, icon: Icon, label }) => {
+            const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                title={collapsed ? label : undefined}
+                aria-current={isActive ? "page" : undefined}
+                // min-h-10 rather than py-2: 40px is a target you can hit without aiming, and the
+                // rows were 32px.
+                className={`w-full flex items-center gap-3 min-h-10 pl-3 pr-2.5 rounded-md transition-colors ${
+                  isActive
+                    ? "text-white bg-sidebar-accent font-medium"
+                    : "text-sidebar-foreground hover:text-white hover:bg-sidebar-accent/60"
+                }`}
+                style={{ borderLeft: `3px solid ${isActive ? "var(--sidebar-primary)" : "transparent"}`, paddingLeft: "9px" }}
+              >
+                <Icon className="w-[18px] h-[18px] shrink-0" />
+                {!collapsed && <span className="truncate">{label}</span>}
             </Link>
           );
         })}
       </div>
 
-      {/* A real toggle, not a route-dependent accident — the same control
-          on every page, so hiding/showing the sidebar is always the user's
-          own action instead of something clicking into a different tool
-          does to them. */}
-      <div className="shrink-0 border-t border-sidebar-border p-2">
+      <div className="shrink-0 border-t border-sidebar-border p-2 space-y-0.5">
+        {/* Identity, theme and sign-out live here rather than being repeated in the header of
+            every page. There is one of each in the app now, always in the same place. */}
+        {!collapsed && viewer.email && (
+          <p className="px-3 pt-1 pb-2 text-xs text-sidebar-foreground truncate" title={viewer.email}>
+            {viewer.email}
+          </p>
+        )}
+        <div className={`flex items-center gap-1 ${collapsed ? "flex-col" : ""}`}>
+          <ModeToggle />
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            title="Sign out"
+            aria-label="Sign out"
+            className="h-9 flex-1 flex items-center justify-center gap-2 rounded-md text-sidebar-foreground hover:text-white hover:bg-sidebar-accent transition-colors"
+          >
+            <LogOut className="w-[18px] h-[18px] shrink-0" />
+            {!collapsed && <span>Sign out</span>}
+          </button>
+        </div>
         <button
           type="button"
           onClick={toggle}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="w-full flex items-center gap-2.5 pl-3 pr-2.5 py-2 rounded text-sm text-sidebar-foreground hover:text-white hover:bg-sidebar-accent transition-colors"
+          className="hidden md:flex w-full items-center gap-3 min-h-10 pl-3 pr-2.5 rounded-md text-sidebar-foreground hover:text-white hover:bg-sidebar-accent transition-colors"
         >
-          {collapsed ? <PanelLeftOpen className="w-4 h-4 flex-shrink-0" /> : <PanelLeftClose className="w-4 h-4 flex-shrink-0" />}
+          {collapsed ? <PanelLeftOpen className="w-[18px] h-[18px] shrink-0" /> : <PanelLeftClose className="w-[18px] h-[18px] shrink-0" />}
           {!collapsed && <span className="truncate">Collapse</span>}
         </button>
       </div>
-    </nav>
+    </>
+  );
+
+  return (
+    <>
+      {/* Phone: a button in the corner opens the panel over the page. The rail itself is hidden
+          below md, where a fixed 224px of it left almost nothing for the content. */}
+      <button
+        type="button"
+        onClick={() => setOpenedOnPath(pathname)}
+        aria-label="Open menu"
+        className="md:hidden fixed top-2.5 left-3 z-40 h-10 w-10 grid place-items-center rounded-lg border border-border bg-card text-foreground shadow-sm"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {mobileOpen && (
+        <div
+          onClick={() => setOpenedOnPath(null)}
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
+          aria-hidden="true"
+        />
+      )}
+
+      <nav
+        aria-label="Main"
+        className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col h-full shrink-0 bg-sidebar border-r border-sidebar-border transition-transform md:transition-[width] duration-200 w-64 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        } ${collapsed ? "md:w-16" : "md:w-56"}`}
+      >
+        {panel}
+      </nav>
+    </>
   );
 }

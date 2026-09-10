@@ -40,25 +40,30 @@ CREATE TABLE IF NOT EXISTS "artifact_assignment_links" (
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "artifact_style_system_links" ADD CONSTRAINT "artifact_style_system_links_artifact_id_knowledge_artifacts_id_fk" FOREIGN KEY ("artifact_id") REFERENCES "public"."knowledge_artifacts"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "artifact_style_system_links" ADD CONSTRAINT "artifact_style_system_links_style_system_id_style_systems_id_fk" FOREIGN KEY ("style_system_id") REFERENCES "public"."style_systems"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "artifact_campaign_links" ADD CONSTRAINT "artifact_campaign_links_artifact_id_knowledge_artifacts_id_fk" FOREIGN KEY ("artifact_id") REFERENCES "public"."knowledge_artifacts"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "artifact_assignment_links" ADD CONSTRAINT "artifact_assignment_links_artifact_id_knowledge_artifacts_id_fk" FOREIGN KEY ("artifact_id") REFERENCES "public"."knowledge_artifacts"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "artifact_assignment_links" ADD CONSTRAINT "artifact_assignment_links_assignment_id_assignments_id_fk" FOREIGN KEY ("assignment_id") REFERENCES "public"."assignments"("id") ON DELETE no action ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;

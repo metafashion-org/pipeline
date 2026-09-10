@@ -313,7 +313,7 @@ export function MarketingTracker({
                     <div key={update.updateId} className="p-2.5 bg-background border rounded-md text-xs space-y-1 shadow-sm">
                       <div className="flex justify-between font-mono font-bold">
                         <span>{update.sku}</span>
-                        <span className="uppercase text-[10px] text-muted-foreground">
+                        <span className="uppercase text-xs text-muted-foreground">
                           {update.platform}
                           {update.postType ? ` · ${update.postType}` : ""}
                         </span>
@@ -322,7 +322,7 @@ export function MarketingTracker({
                       {update.campaign && <p className="text-muted-foreground truncate">Campaign: {update.campaign}</p>}
                       {update.caption && <p className="text-muted-foreground italic truncate">{update.caption}</p>}
                       {update.highPerforming && (
-                        <Badge variant="default" className="text-[9px] h-4 px-1.5">High performing</Badge>
+                        <Badge variant="default" className="px-1.5">High performing</Badge>
                       )}
                     </div>
                   ))}
@@ -384,7 +384,7 @@ export function MarketingTracker({
                             <Badge variant={STATUS_VARIANT[u.marketingStatus] || "outline"}>
                               {statusLabel(u.marketingStatus)}
                             </Badge>
-                            {u.highPerforming && <Badge variant="outline" className="text-[10px]">High performing</Badge>}
+                            {u.highPerforming && <Badge variant="outline" className="text-xs">High performing</Badge>}
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">

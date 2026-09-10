@@ -140,7 +140,7 @@ export function AssetFormFields({
                     value={values.referenceImages}
                     onChange={(e) => set({ referenceImages: e.target.value })}
                 />
-                <p className="text-[11px] text-muted-foreground">Shown as previews on the card and in the asset drawer.</p>
+                <p className="text-xs text-muted-foreground">Shown as previews on the card and in the asset drawer.</p>
             </div>
 
             <div className="grid gap-1.5">

@@ -18,19 +18,21 @@ import { Loader2, X } from "lucide-react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { toast } from "sonner";
-import { KanbanColumnData, KanbanAssetCard } from "@/lib/kanban/kanban-service";
+// The client types, not the server ones: the two date fields are Dates when this came from the
+// server render and ISO strings when SWR refetched it.
+import type { KanbanColumnDataClient, KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 interface BoardProps {
-    initialColumns?: KanbanColumnData[];
+    initialColumns?: KanbanColumnDataClient[];
     role: string;
 }
 
 export function Board({ initialColumns = [], role }: BoardProps) {
-    const { data: swrResponse, mutate, isValidating } = useSWR<{ data: KanbanColumnData[] }>("/api/assets", jsonFetcher, {
+    const { data: swrResponse, mutate, isValidating } = useSWR<{ data: KanbanColumnDataClient[] }>("/api/assets", jsonFetcher, {
         fallbackData: { data: initialColumns },
         // The server component already rendered this board from a fresh query, so revalidating on mount refetched the whole thing immediately and made every visit pay for the same data twice.
         // Focus revalidation and the polling interval still keep it current after that.
@@ -39,8 +41,8 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         refreshInterval: 20000,
     });
 
-    const allColumns: KanbanColumnData[] = swrResponse?.data || initialColumns || [];
-    const [activeTask, setActiveTask] = useState<KanbanAssetCard | null>(null);
+    const allColumns: KanbanColumnDataClient[] = swrResponse?.data || initialColumns || [];
+    const [activeTask, setActiveTask] = useState<KanbanAssetCardClient | null>(null);
     const [mounted, setMounted] = useState(false);
 
     // Filters — artist-wise and deadline-date-wise, both requested from the
@@ -59,7 +61,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
 
     const hasActiveFilters = artistFilter !== "all" || deadlineFrom !== "" || deadlineTo !== "";
 
-    const columns: KanbanColumnData[] = hasActiveFilters
+    const columns: KanbanColumnDataClient[] = hasActiveFilters
         ? allColumns.map((col) => ({
               ...col,
               assets: col.assets.filter((a) => {
@@ -93,7 +95,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         })
     );
 
-    const findTask = (sku: string): KanbanAssetCard | null => {
+    const findTask = (sku: string): KanbanAssetCardClient | null => {
         for (const col of columns) {
             const found = col.assets.find((a) => a.sku === sku || a.id === sku);
             if (found) return found;
@@ -104,7 +106,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
     const submitStatusUpdate = useCallback(async (
         sku: string,
         newStatus: string,
-        previousColumns: KanbanColumnData[]
+        previousColumns: KanbanColumnDataClient[]
     ) => {
         try {
             const response = await fetch(`/api/assets/${sku}/status`, {
@@ -232,22 +234,22 @@ export function Board({ initialColumns = [], role }: BoardProps) {
                             <Column
                                 id={col.key}
                                 title={col.label}
-                                tasks={col.assets as any}
-                                role={role as any}
+                                tasks={col.assets}
+                                role={role}
                             />
                         </div>
                     ))}
                 </div>
 
                 <DragOverlay>
-                    {activeTask ? <TaskCard task={activeTask as any} role={role as any} /> : null}
+                    {activeTask ? <TaskCard task={activeTask} role={role} /> : null}
                 </DragOverlay>
             </DndContext>
 
             {isValidating && (
                 <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border px-3 py-1.5 rounded-full shadow-lg animate-in fade-in slide-in-from-bottom-2 z-50">
                     <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Syncing DB</span>
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Syncing DB</span>
                 </div>
             )}
         </>

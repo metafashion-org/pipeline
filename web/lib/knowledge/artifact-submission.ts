@@ -25,6 +25,10 @@ export async function seedArtifactSubmissionFormDefinition() {
         key: ARTIFACT_SUBMISSION_FORM_KEY,
         title: "Knowledge Artifact Submission",
         description: "Submit a reusable trend brief, insight, recolor kit, reference, or any configured artifact type to the Knowledge Registry",
+        // Stated, not inferred. This form writes into the knowledge registry the moment a
+        // submission lands, so who may fill it is the whole safety of the thing — and an empty
+        // target_roles array used to read as "public" everywhere it was checked.
+        audience: "roles",
         targetRoles: ["admin", "operator", "curator"],
         onSubmissionBehavior: "trigger_artifact_creation",
         isActive: true,

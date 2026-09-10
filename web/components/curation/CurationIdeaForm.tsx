@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiCall } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format-date";
+import type { FieldOption } from "@/lib/forms/field-options";
 import { toast } from "sonner";
 import { Sparkles, History, Trash2, Loader2, Check } from "lucide-react";
 
@@ -33,7 +34,7 @@ interface FieldConfig {
   fieldKey: string;
   displayName: string;
   fieldType: string;
-  options: string[];
+  options: FieldOption[];
   // null or empty means the field applies to every category.
   appliesToCategories: string[] | null;
 }
@@ -307,7 +308,7 @@ export function CurationIdeaForm({
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
-                  <AlertDialogDescription>This deletes it — there&apos;s no submitted idea to keep, since it was never submitted.</AlertDialogDescription>
+                  <AlertDialogDescription>It was never submitted, so there is nothing to keep. This deletes it.</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -381,19 +382,22 @@ export function CurationIdeaForm({
 
         {visibleFields.map((f) => {
           const value = fieldValues[f.fieldKey] || "";
+          // A select whose options were never configured renders a free-text input instead of an
+          // empty dropdown, so the field is still answerable.
+          const isChoice = f.fieldType === "select" && f.options.length > 0;
           return (
             <div key={f.fieldKey} className={f.fieldType === "textarea" ? "md:col-span-2" : ""}>
               <label htmlFor={`curation-field-${f.fieldKey}`} className="text-xs text-muted-foreground mb-1 block">{f.displayName}</label>
               {f.fieldType === "textarea" && <Textarea id={`curation-field-${f.fieldKey}`} value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} rows={2} />}
-              {f.fieldType === "select" && (
+              {isChoice && (
                 <Select value={value} onValueChange={(v) => setField(f.fieldKey, v)}>
                   <SelectTrigger id={`curation-field-${f.fieldKey}`}>
                     <SelectValue placeholder={`Select ${f.displayName.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
                     {f.options.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {opt}
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -402,7 +406,7 @@ export function CurationIdeaForm({
               {f.fieldType === "number" && (
                 <Input id={`curation-field-${f.fieldKey}`} type="number" value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
               )}
-              {!["textarea", "select", "number"].includes(f.fieldType) && (
+              {f.fieldType !== "textarea" && f.fieldType !== "number" && !isChoice && (
                 <Input id={`curation-field-${f.fieldKey}`} value={value} onChange={(e) => setField(f.fieldKey, e.target.value)} />
               )}
             </div>
@@ -464,7 +468,7 @@ function VersionHistoryDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Version history</DialogTitle>
-          <DialogDescription>Every real save of this draft, most recent first. Restoring writes it back as a new version — nothing here gets erased.</DialogDescription>
+          <DialogDescription>Every save of this draft, most recent first. Restoring writes the old version back as a new one, so nothing is erased.</DialogDescription>
         </DialogHeader>
         {/* Mounted fresh only while actually open, so its own loading state
             can just start true (see VersionHistoryList) instead of needing
