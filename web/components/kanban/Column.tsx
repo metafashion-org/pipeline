@@ -4,6 +4,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext } from "@dnd-kit/sortable";
 import { TaskCard } from "./TaskCard";
 import { StatusInfoTooltip } from "./status-info-tooltip";
+import type { KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 
 interface ColumnProps {
     id: string;
@@ -11,13 +12,11 @@ interface ColumnProps {
     whoCanMoveIn?: string | null;
     nextActionHint?: string | null;
     automationNote?: string | null;
-    tasks: any[];
+    tasks: KanbanAssetCardClient[];
     role: string;
-    onDelete?: (skuId: string) => void;
-    onEdit?: (skuId: string, updates: any) => Promise<void>;
 }
 
-export function Column({ id, title, whoCanMoveIn, nextActionHint, automationNote, tasks, role, onDelete, onEdit }: ColumnProps) {
+export function Column({ id, title, whoCanMoveIn, nextActionHint, automationNote, tasks, role }: ColumnProps) {
     const { setNodeRef, isOver } = useDroppable({ id });
 
     return (
@@ -52,8 +51,6 @@ export function Column({ id, title, whoCanMoveIn, nextActionHint, automationNote
                                 key={task.sku || task.id || `missing-${idx}`}
                                 task={task}
                                 role={role}
-                                onDelete={onDelete}
-                                onEdit={onEdit}
                             />
                         ))}
                     </div>

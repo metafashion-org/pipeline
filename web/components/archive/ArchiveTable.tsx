@@ -169,7 +169,7 @@ export function ArchiveTable({
                     {rows.length === 0 ? (
                         <TableRow>
                             <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                {isFiltered ? "Nothing matches that search." : "No archived tasks yet."}
+                                {isFiltered ? "No rows match that search." : "No archived tasks yet."}
                             </TableCell>
                         </TableRow>
                     ) : (
@@ -193,7 +193,7 @@ export function ArchiveTable({
                                             Receipt <ExternalLink className="h-3 w-3" />
                                         </a>
                                     ) : (
-                                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                                        <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
                                             None attached
                                         </Badge>
                                     )}

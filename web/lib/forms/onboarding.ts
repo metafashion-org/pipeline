@@ -43,7 +43,10 @@ async function runOnboardingSeed() {
         key: ARTIST_ACCESS_FORM_KEY,
         title: "Artist Access Request",
         description: "Submit your details to request freelance artist access to Meta Fashion Digital Assets pipeline",
-        targetRoles: [], // Public form
+        // Deliberately public: anyone should be able to ask for artist access. Stated here so
+        // it reads as a decision rather than as an empty column.
+        audience: "public",
+        targetRoles: [],
         onSubmissionBehavior: "trigger_personnel_onboarding",
         isActive: true,
       })

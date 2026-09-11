@@ -3,17 +3,21 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getFormDefinitionByKey } from "@/lib/forms/form-service";
 import { seedOnboardingFormDefinition, ARTIST_ACCESS_FORM_KEY } from "@/lib/forms/onboarding";
+import { normalizeFieldOptions } from "@/lib/forms/field-options";
+import { checkFormAccess, isPublicForm } from "@/lib/forms/form-access";
 
-// Public read of a form's own definition + fields, so a public form page
-// can render real, admin-configured fields instead of a hardcoded shape -
-// same "dynamic form fields" principle the curation form already uses.
-// targetRoles === [] means public (per form_definitions' own column
-// comment); anything else requires a session carrying one of those roles.
+// Reads one form's definition and fields, so a form page renders the real, admin-configured
+// fields rather than a hardcoded shape.
+//
+// Who may read it is decided by lib/forms/form-access.ts, which is also what the page and the
+// submit route use. This route used to make the decision itself, by treating an empty
+// target_roles array as "public" — the inference that let a form nobody had marked public be
+// answered by anyone with the link.
 export async function GET(_request: Request, { params }: { params: Promise<{ formKey: string }> }) {
   const { formKey } = await params;
 
-  // The Artist Access Request form is seeded lazily on first real use here,
-  // matching the same pattern the admin Personnel page already relies on.
+  // The Artist Access Request form is seeded lazily on first real use here, matching the pattern
+  // the admin Personnel page already relies on.
   if (formKey === ARTIST_ACCESS_FORM_KEY) {
     await seedOnboardingFormDefinition();
   }
@@ -23,11 +27,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ for
     return NextResponse.json({ error: "Form not found" }, { status: 404 });
   }
 
-  if (form.definition.targetRoles && form.definition.targetRoles.length > 0) {
+  // A public form is read without touching the session at all, which keeps the common case free
+  // of a session lookup it has no use for.
+  if (!isPublicForm(form.definition)) {
     const session = await getServerSession(authOptions);
-    const roles = session?.user?.roles || [];
-    if (!session || !form.definition.targetRoles.some((r) => roles.includes(r))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = checkFormAccess(
+      form.definition,
+      session ? { email: session.user.email, roles: session.user.roles, personnelId: session.user.personnelId } : null
+    );
+    if (!access.allowed) {
+      return NextResponse.json({ error: access.reason }, { status: access.status });
     }
   }
 
@@ -40,7 +49,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ for
       label: f.label,
       fieldType: f.fieldType,
       isRequired: f.isRequired,
-      options: f.options,
+      section: f.section,
+      helpText: f.helpText,
+      placeholder: f.placeholder,
+      // Normalized here rather than handed over raw, so every client of this route gets one shape
+      // instead of each having to cope with both.
+      options: normalizeFieldOptions(f.options),
     })),
   });
 }

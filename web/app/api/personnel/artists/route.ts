@@ -27,7 +27,9 @@ export async function GET() {
   const artists = await db
     .select({ id: personnel.id, name: personnel.name, email: personnel.email })
     .from(personnel)
-    .where(and(eq(personnel.status, "Active"), sql`${personnel.roles} && ARRAY['artist']::text[]`))
+    // Lowercased in SQL rather than matched literally: personnel.roles holds capitalised values in
+    // places, and `&& ARRAY['artist']` would silently return an empty artist list for those rows.
+    .where(and(eq(personnel.status, "Active"), sql`EXISTS (SELECT 1 FROM unnest(${personnel.roles}) AS r WHERE lower(r) = 'artist')`))
     .orderBy(asc(personnel.name));
 
   return NextResponse.json({ artists });

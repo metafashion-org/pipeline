@@ -12,9 +12,9 @@ import {
     EmptyPanel,
 } from "@/components/dashboard/panels";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,10 @@ function monthLabel(key: string): string {
 export default async function AdminDashboardPage() {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user?.role !== "admin") {
+    // canViewAllAssets, not the deprecated collapsed session.user.role: this page is the board's
+    // own overview, and proxy.ts already admits operators to /admin on exactly that capability.
+    const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
+    if (!session || !(caps.canViewAllAssets || caps.canManageSystemConfig)) {
         redirect("/unauthorized");
     }
 
@@ -57,21 +60,10 @@ export default async function AdminDashboardPage() {
 
     return (
         <div className="flex h-screen flex-col bg-background text-foreground">
-            <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3 sm:px-6">
-                <div className="flex min-w-0 items-baseline gap-2">
-                    <h1 className="truncate text-lg font-semibold">Overview</h1>
-                    <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-                        {d.totals.assets} assets, {d.roster.active} people with access
-                    </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                    <span className="hidden rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary md:inline">
-                        {session.user.email}
-                    </span>
-                    <ModeToggle />
-                    <LogoutButton />
-                </div>
-            </header>
+            <PageHeader
+                title="Overview"
+                description={`${d.totals.assets} assets. ${d.roster.active} people with access.`}
+            />
 
             <main className="flex-1 overflow-auto p-4 sm:p-6">
                 <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
@@ -129,7 +121,7 @@ export default async function AdminDashboardPage() {
                                     <BarRow key={a.name} label={a.name} value={a.wip} max={maxWip}
                                         tone={a.status !== "Active" ? "bad" : "accent"} />
                                 ))}
-                                {activeArtists.length === 0 && <p className="text-[11.5px] text-muted-foreground">Nobody is holding work.</p>}
+                                {activeArtists.length === 0 && <p className="text-[11.5px] text-muted-foreground">No one is holding work.</p>}
                             </div>
                             {d.gaps.heldByLockedOut > 0 && (
                                 <p className="text-[11.5px] text-red-600 dark:text-red-400">Red bars cannot sign in.</p>
@@ -287,7 +279,7 @@ export default async function AdminDashboardPage() {
                         <Panel title="No deadline set">
                             <RatioPanel value={d.gaps.noDeadline} total={d.totals.assets}
                                 tone={d.gaps.noDeadline > 0 ? "warn" : "good"}
-                                note={d.gaps.noDeadline > 0 ? "Nothing counts as late while this holds." : "Everything has a date."} />
+                                note={d.gaps.noDeadline > 0 ? "Nothing is late while this holds." : "Everything has a date."} />
                         </Panel>
                         <Panel title="No fee set">
                             <RatioPanel value={d.gaps.noFee} total={d.totals.assets}
@@ -324,9 +316,9 @@ export default async function AdminDashboardPage() {
                             <div className="flex items-end gap-1.5" style={{ minHeight: "7rem" }}>
                                 {d.flow.byMonth.map((m) => (
                                     <div key={m.month} className="flex flex-1 flex-col justify-end gap-1">
-                                        <span className="text-center font-mono text-[11px] font-semibold tabular-nums">{m.transitions}</span>
+                                        <span className="text-center font-mono text-xs font-semibold tabular-nums">{m.transitions}</span>
                                         <span className="rounded-t-sm bg-primary/75" style={{ height: `${Math.max(3, Math.round((m.transitions / maxMonth) * 80))}px` }} />
-                                        <span className="text-center text-[9px] text-muted-foreground">{monthLabel(m.month)}</span>
+                                        <span className="text-center text-xs text-muted-foreground">{monthLabel(m.month)}</span>
                                     </div>
                                 ))}
                             </div>

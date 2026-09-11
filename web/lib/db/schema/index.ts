@@ -25,3 +25,4 @@ export * from "./payment_cycles";
 export * from "./payment_cycle_items";
 export * from "./discord_temp_access";
 export * from "./artifact_type_config";
+export * from "./onboarding_requests";

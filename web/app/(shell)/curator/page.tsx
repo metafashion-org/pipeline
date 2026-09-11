@@ -1,12 +1,12 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
-import { getCurationFormFields } from "@/lib/curation/curation-service";
 import { listActiveDrafts } from "@/lib/curation/draft-service";
+import { getCurationFieldsView } from "@/lib/dashboard/views";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { CurationWorkspace } from "@/components/curation/CurationWorkspace";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
+
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -28,27 +28,22 @@ export default async function CuratorPage() {
   // Form fields only: budget and deadline are configured fields too, but they are backed by
   // real asset columns and the form collects them as its own typed inputs, so rendering them
   // here as well is the duplicate write path that put the same value in two places.
-  const fields = await getCurationFormFields();
-  const drafts = session.user.personnelId ? await listActiveDrafts(session.user.personnelId) : [];
+  // The field configuration is the same for every curator, so it is cached under the curation-fields tag and invalidated when an admin edits the field config. The drafts are this curator's own and are read fresh every time.
+  const [fields, drafts] = await Promise.all([
+    getCurationFieldsView(),
+    session.user.personnelId ? listActiveDrafts(session.user.personnelId) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-lg font-semibold truncate">Curation</h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-            Add an item idea — a SKU is created the moment you submit.
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <ModeToggle />
-          <LogoutButton />
-        </div>
-      </header>
+      <PageHeader
+        title="Curation"
+        description="Add an item idea. Submitting it creates the SKU."
+      />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
         <CurationWorkspace
-          fields={fields.map((f) => ({ fieldKey: f.fieldKey, displayName: f.displayName, fieldType: f.fieldType, options: (f.options as string[]) || [], appliesToCategories: f.appliesToCategories }))}
+          fields={fields}
           initialDrafts={drafts.map((d) => ({
             id: d.id,
             ideaTitle: d.ideaTitle,

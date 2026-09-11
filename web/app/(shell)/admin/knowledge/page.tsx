@@ -1,13 +1,14 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
-import { getKnowledgeArtifacts, listArtifactTypes } from "@/lib/knowledge/artifacts-service";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { getKnowledgeRegistryView } from "@/lib/dashboard/views";
 import { KnowledgeRegistry } from "@/components/knowledge/KnowledgeRegistry";
 import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -23,38 +24,23 @@ export default async function KnowledgePage() {
   // tighter one. A pure curator still can't reach this page at all (the
   // /admin proxy gate bounces them before this check even runs) - giving
   // curators their own path to Knowledge is a bigger, separate change.
-  const roles = session?.user?.roles || [];
-  if (!session || !(roles.includes("admin") || roles.includes("operator"))) {
+  const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
+  if (!session || !canManageKnowledge(caps)) {
     redirect("/unauthorized");
   }
 
-  const [artifacts, types] = await Promise.all([getKnowledgeArtifacts(), listArtifactTypes()]);
+  // Cached under the knowledge tag; the artifact and link routes invalidate it on every write.
+  const { artifacts, types } = await getKnowledgeRegistryView();
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/admin">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-          </Button>
-          <h1 className="text-lg font-semibold truncate">Knowledge Registry</h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-            Trend briefs, insights, recolor kits, references — every artifact with a real, permanent ID.
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <ModeToggle />
-          <LogoutButton />
-        </div>
-      </header>
+    <div className="flex flex-col h-full bg-background text-foreground">
+      <PageHeader
+        title="Knowledge Registry"
+        description="Trend briefs, insights, recolor kits and references, each with a permanent ID."
+      />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
-        <KnowledgeRegistry
-          initialArtifacts={artifacts.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() }))}
-          artifactTypes={types.map((t) => ({ id: t.id, prefix: t.prefix, label: t.label }))}
-        />
+        <KnowledgeRegistry initialArtifacts={artifacts} artifactTypes={types} />
       </main>
     </div>
   );

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+import { PageHeader } from "@/components/layout/PageHeader";
+
 export const dynamic = "force-dynamic";
 
 // Phase 2 of the Discord/personnel migration: real write actions
@@ -40,20 +42,12 @@ export default async function DiscordTeamManagerPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/admin/personnel">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-          </Button>
-          <h1 className="text-lg font-semibold truncate">Discord Team Manager</h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
-            Real, live actions against the Meta Fashion 3D Team Discord server.
-          </span>
-        </div>
-      </header>
+    <div className="flex flex-col h-full bg-background text-foreground">
+      <PageHeader
+        title="Discord Team Manager"
+        description="Actions here run against the Meta Fashion 3D Team Discord server."
+        actions={<Button variant="outline" size="sm" asChild><Link href="/admin/personnel">Back to Personnel</Link></Button>}
+      />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
         {!configured && (

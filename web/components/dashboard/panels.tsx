@@ -41,10 +41,10 @@ export function Panel({
     <Card className={cn("gap-0 py-0 shadow-sm", className)}>
       <CardContent className="flex h-full flex-col gap-2 p-3.5">
         <div className="flex items-baseline justify-between gap-2">
-          <h3 className="font-mono text-[10px] font-semibold uppercase tracking-[0.11em] text-muted-foreground">
+          <h3 className="font-mono text-xs font-semibold uppercase tracking-[0.11em] text-muted-foreground">
             {title}
           </h3>
-          {hint && <span className="shrink-0 text-[10px] text-muted-foreground">{hint}</span>}
+          {hint && <span className="shrink-0 text-xs text-muted-foreground">{hint}</span>}
         </div>
         {children}
       </CardContent>
@@ -115,7 +115,7 @@ export function StageColumns({
         const terminal = s.key === "payment_done";
         return (
           <div key={s.key} className="flex min-w-[3.25rem] flex-1 flex-col justify-end gap-1">
-            <span className="text-center font-mono text-[11px] font-semibold tabular-nums">{s.count}</span>
+            <span className="text-center font-mono text-xs font-semibold tabular-nums">{s.count}</span>
             <span
               className={cn(
                 "rounded-t-sm",
@@ -123,7 +123,7 @@ export function StageColumns({
               )}
               style={{ height: `${Math.max(3, Math.round((s.count / max) * 88))}px` }}
             />
-            <span className="truncate text-center text-[9px] leading-tight text-muted-foreground" title={s.label}>
+            <span className="truncate text-center text-xs leading-tight text-muted-foreground" title={s.label}>
               {s.label}
             </span>
           </div>
@@ -143,7 +143,7 @@ export function SplitBar({ parts }: { parts: { value: number; tone: Tone; label:
           <span key={p.label} className={cn("block h-full", TONE_BG[p.tone])} style={{ width: `${(p.value / total) * 100}%` }} />
         ))}
       </span>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {parts.map((p) => (
           <span key={p.label} className="inline-flex items-center gap-1.5">
             <i className={cn("inline-block size-2 rounded-[2px] not-italic", TONE_BG[p.tone])} />
@@ -171,7 +171,7 @@ export function RatioPanel({ value, total, tone, note }: { value: number; total:
 
 export function AccessBadge({ status }: { status: string }) {
   const tone = status === "Active" ? "outline" : "destructive";
-  return <Badge variant={tone} className="px-1.5 py-0 text-[10px] font-normal">{status}</Badge>;
+  return <Badge variant={tone} className="px-1.5 font-normal">{status}</Badge>;
 }
 
 /** Used where a panel has nothing to show and that absence is itself worth stating. */
@@ -179,7 +179,7 @@ export function EmptyPanel({ title, detail }: { title: string; detail: string })
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-1 rounded-md border border-dashed px-2 py-4 text-center">
       <p className="text-[13px] font-medium">{title}</p>
-      <p className="text-[11px] text-muted-foreground">{detail}</p>
+      <p className="text-xs text-muted-foreground">{detail}</p>
     </div>
   );
 }

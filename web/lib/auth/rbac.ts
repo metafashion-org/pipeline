@@ -256,6 +256,19 @@ export function landingPathForRoles(
   return candidates.find((p) => isRouteAllowedForRoles(p, roles, capabilityOverrides)) || "/unauthorized";
 }
 
+/**
+ * Whether someone may read and edit the Knowledge Registry and its links.
+ *
+ * Input: their effective capabilities. Output: true for admins, operators and curators.
+ *
+ * These three were being tested for in four different ways: /admin/knowledge admitted admin and operator by role name, while every /api/admin/knowledge route required canManageSystemConfig || canAccessCuratorTools — which an operator has neither of, so the page opened for them and its own link dialog answered 401. The artifacts route checked nothing beyond "is there a session". One rule, used by all of them.
+ *
+ * canAssignArtists is what an operator brings: it is held by admin and operator and by nobody else, so the union covers exactly the three roles the registry is for, and a per-person override still moves the boundary the way it does everywhere else.
+ */
+export function canManageKnowledge(caps: CapabilitySet): boolean {
+  return caps.canManageSystemConfig || caps.canAssignArtists || caps.canAccessCuratorTools;
+}
+
 // Discord Team Manager's two-tier access, ported from Catalog Intel's own
 // DISCORD_ROLE_RANK (manager: 1, admin: 2). That version needed a
 // Discord-specific role field because it had no real RBAC of its own; this
@@ -265,10 +278,14 @@ export function landingPathForRoles(
 // already manages production day-to-day; "Admin" tier (permission-bit
 // edits, permanent channel deletion, kicks) = admin only, the same
 // higher-privilege boundary canManageSystemConfig already draws elsewhere.
+// Compared lowercase, like getEffectiveCapabilities and isRouteAllowedForRoles already do. The
+// source personnel data stores role names capitalised in places ("Artist, Operator, Uploader" is
+// one real cell value), so a raw includes() would refuse a real admin whose row reads "Admin".
 export function isDiscordManagerTier(roles: (SystemRole | string)[]): boolean {
-  return roles.includes("admin") || roles.includes("operator");
+  const normalized = roles.map((r) => String(r).toLowerCase());
+  return normalized.includes("admin") || normalized.includes("operator");
 }
 
 export function isDiscordAdminTier(roles: (SystemRole | string)[]): boolean {
-  return roles.includes("admin");
+  return roles.map((r) => String(r).toLowerCase()).includes("admin");
 }

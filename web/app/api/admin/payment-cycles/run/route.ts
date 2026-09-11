@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { runPaymentCyclePull } from "@/lib/payments/payment-cycle-service";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 
 // Two ways in: an authenticated admin (the "Run pull now" button on /admin/archive),
 // or Vercel's own cron invocation, authenticated via a shared CRON_SECRET per
@@ -14,7 +15,11 @@ async function isAuthorized(request: NextRequest): Promise<boolean> {
     return true;
   }
   const session = await getServerSession(authOptions);
-  return Boolean(session && session.user?.role === "admin");
+  if (!session) return false;
+  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
+  // Running a payment cycle pull is a money action, so it stays on the same capability that gates
+  // marking payments done rather than on the deprecated collapsed session.user.role.
+  return caps.canMarkPaymentDone;
 }
 
 // Shared by both methods: Vercel Cron Jobs invoke this path with GET, while the

@@ -42,6 +42,23 @@ export interface KanbanAssetCard {
   recolorReferenceImages: unknown;
 }
 
+/**
+ * A KanbanAssetCard as the board component actually holds it.
+ *
+ * The two date fields are genuinely either type there, and which one depends on where the card
+ * came from: the server render passes real Dates through the server-component boundary, while a
+ * revalidation reads /api/assets over JSON and gets ISO strings. The board swaps between the two
+ * sources as SWR refetches, so a component receiving a card has to cope with both. It was typed
+ * `any`, which hid that rather than answering it.
+ */
+export type KanbanAssetCardClient = Omit<KanbanAssetCard, "deadline" | "updatedAt"> & {
+  deadline: string | Date | null;
+  updatedAt: string | Date;
+};
+
+/** A KanbanColumnData holding client-shaped cards. */
+export type KanbanColumnDataClient = Omit<KanbanColumnData, "assets"> & { assets: KanbanAssetCardClient[] };
+
 export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[] }> {
   // The status config and the asset list are independent, so they are fetched concurrently.
   // Awaiting them in sequence spent two full network round trips where one would do, which is the dominant cost of rendering this page against a remote database.

@@ -7,15 +7,13 @@ import { Copy, Maximize2, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AssetDrawer } from "./asset-drawer";
-import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
+import type { KanbanAssetCard, KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { DriveImage } from "./drive-image";
 
 interface TaskCardProps {
-    task: KanbanAssetCard | any;
+    task: KanbanAssetCardClient;
     role: string;
-    onDelete?: (skuId: string) => void;
-    onEdit?: (skuId: string, updates: any) => Promise<void>;
 }
 
 const GRADIENTS = [
@@ -36,11 +34,15 @@ function getGradient(sku: string | undefined): string {
 export function TaskCard({ task, role }: TaskCardProps) {
     const [drawerOpen, setDrawerOpen] = useState(false);
 
-    const sku = task.sku || task.skuId || "temp-sku";
+    // The `|| task.skuId`, `|| task.productionStatus`, `|| task.artist` fallbacks that used to sit
+    // here read fields no card has ever carried — they were left over from an earlier shape and
+    // were only reachable because the prop was typed `any`. What remains is the placeholder for a
+    // card mid-creation, which is real.
+    const sku = task.sku || "temp-sku";
     const itemName = task.itemName || "Unnamed Asset";
-    const currentStatus = task.currentStatus || task.productionStatus || "unassigned";
-    const artistName = task.artistName || task.artist || null;
-    const artistDiscordUrl = task.artistDiscordUrl || null;
+    const currentStatus = task.currentStatus || "unassigned";
+    const artistName = task.artistName;
+    const artistDiscordUrl = task.artistDiscordUrl;
 
     const {
         attributes,
@@ -66,25 +68,21 @@ export function TaskCard({ task, role }: TaskCardProps) {
         } catch {
             // Clipboard access is refused outside a secure context; say so rather than claiming
             // a copy that did not happen.
-            toast.error("Couldn't copy — select the SKU and copy it by hand.");
+            toast.error("Could not copy. Select the SKU and copy it by hand.");
             return;
         }
         toast.success("SKU copied to clipboard");
     };
 
+    // The drawer wants real Dates; the wire carries ISO strings. This is the one place they are
+    // converted.
     const formattedAsset: KanbanAssetCard = {
+        ...task,
         id: task.id || sku,
         sku,
         itemName,
-        category: task.category || task.itemCategory || null,
         currentStatus,
-        feeAmount: task.feeAmount || task.budget || null,
         currency: task.currency || "INR",
-        artistId: task.artistId || null,
-        artistName,
-        artistEmail: task.artistEmail || task.emailAddress || null,
-        artistDiscordUrl: artistDiscordUrl,
-        gmailThreadId: task.gmailThreadId || task.assignmentThreadId || null,
         deadline: task.deadline ? new Date(task.deadline) : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
         referenceImages: task.referenceImages ?? [],
@@ -129,7 +127,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
                         </>
                     )}
                     <div className="relative flex items-center justify-between">
-                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
+                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
                             {sku}
                         </span>
                         <Button
@@ -158,20 +156,20 @@ export function TaskCard({ task, role }: TaskCardProps) {
                             a board redesign, not a fix. */}
                         <button
                             type="button"
-                            className="font-mono text-[10px] text-muted-foreground hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            className="font-mono text-xs text-muted-foreground hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             onClick={copySku}
                             title="Copy SKU"
                             aria-label={`Copy SKU ${sku}`}
                         >
                             {sku} <Copy className="inline h-2.5 w-2.5" />
                         </button>
-                        <span className="capitalize text-[10px] px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
+                        <span className="capitalize text-xs px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
                             {currentStatus.replace(/_/g, " ")}
                         </span>
                     </div>
                     {artistName && (
                         <div className="flex items-center justify-between gap-1">
-                            <p className="text-[11px] text-muted-foreground truncate" title={artistName}>
+                            <p className="text-xs text-muted-foreground truncate" title={artistName}>
                                 Artist: {artistName}
                             </p>
                             {artistDiscordUrl && (

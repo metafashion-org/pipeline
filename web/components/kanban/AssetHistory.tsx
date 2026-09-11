@@ -89,7 +89,7 @@ function HistoryList({ entries }: { entries: AssetHistoryEntry[] }) {
                                 humanizeAction(entry.action || "change")
                             )}
                         </span>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-xs text-muted-foreground">
                             {formatDateTime(entry.at)}
                         </span>
                     </div>
@@ -98,7 +98,7 @@ function HistoryList({ entries }: { entries: AssetHistoryEntry[] }) {
                         <ul className="mt-1 space-y-0.5 text-muted-foreground">
                             {Object.entries(entry.changes).map(([field, change]) => (
                                 <li key={field}>
-                                    <span className="font-mono text-[10px]">{field}</span>: {formatValue(change.from)}
+                                    <span className="font-mono text-xs">{field}</span>: {formatValue(change.from)}
                                     <ArrowRight className="mx-1 inline h-2.5 w-2.5" />
                                     {formatValue(change.to)}
                                 </li>
@@ -108,7 +108,7 @@ function HistoryList({ entries }: { entries: AssetHistoryEntry[] }) {
 
                     {entry.note && <p className="mt-0.5 text-muted-foreground">{entry.note}</p>}
 
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                         {entry.actorName || "System"}
                     </p>
                 </li>

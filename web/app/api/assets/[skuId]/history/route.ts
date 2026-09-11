@@ -6,6 +6,7 @@ import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { eq, or, desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export async function GET(
   }
 
   const assetRecord = await db
-    .select({ id: assets.id, sku: assets.sku })
+    .select({ id: assets.id, sku: assets.sku, currentArtistId: assets.currentArtistId })
     .from(assets)
     .where(eq(assets.sku, skuId))
     .limit(1);
@@ -53,6 +54,17 @@ export async function GET(
   }
 
   const asset = assetRecord[0];
+
+  // The trail carries fee changes, payment receipts and who was reassigned off the work, so it is
+  // not something every signed-in person should be able to read for every SKU. Whoever can see
+  // the whole board can see any asset's trail; anyone else can see only the asset they are
+  // currently assigned to.
+  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
+  const isAssignedArtist =
+    Boolean(session.user.personnelId) && session.user.personnelId === asset.currentArtistId;
+  if (!caps.canViewAllAssets && !isAssignedArtist) {
+    return NextResponse.json({ error: "You don't have access to this asset's history" }, { status: 403 });
+  }
 
   const [statusRows, auditRows] = await Promise.all([
     db

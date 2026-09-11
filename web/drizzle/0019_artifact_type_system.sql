@@ -24,7 +24,8 @@ ALTER TABLE "knowledge_artifacts" ADD COLUMN IF NOT EXISTS "artifact_id" text NO
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "knowledge_artifacts" ADD CONSTRAINT "knowledge_artifacts_artifact_id_unique" UNIQUE ("artifact_id");
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;
 --> statement-breakpoint
 ALTER TABLE "knowledge_artifacts" ADD COLUMN IF NOT EXISTS "artifact_type_id" uuid NOT NULL REFERENCES "artifact_type_config"("id");

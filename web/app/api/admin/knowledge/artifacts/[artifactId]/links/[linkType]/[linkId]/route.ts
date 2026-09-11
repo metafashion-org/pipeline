@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import {
   unlinkArtifactFromSku,
   unlinkArtifactFromCategory,
@@ -11,10 +11,6 @@ import {
   unlinkArtifactFromAssignment,
 } from "@/lib/knowledge/artifact-links-service";
 
-function canManageKnowledge(roles: string[], overrides: Record<string, boolean>): boolean {
-  const caps = getEffectiveCapabilities(roles, overrides);
-  return caps.canManageSystemConfig || caps.canAccessCuratorTools;
-}
 
 const UNLINK_BY_TYPE: Record<string, (linkId: string, actorId?: string) => Promise<void>> = {
   sku: unlinkArtifactFromSku,
@@ -30,7 +26,7 @@ export async function DELETE(
   { params }: { params: Promise<{ artifactId: string; linkType: string; linkId: string }> }
 ) {
   const [{ linkType, linkId }, session] = await Promise.all([params, getServerSession(authOptions)]);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
 

@@ -3,16 +3,14 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
-import { formSubmissions } from "@/lib/db/schema/form_submissions";
-import { formDefinitions } from "@/lib/db/schema/form_definitions";
-import { seedOnboardingFormDefinition, ARTIST_ACCESS_FORM_KEY } from "@/lib/forms/onboarding";
+import { seedOnboardingFormDefinition } from "@/lib/forms/onboarding";
+import { syncOnboardingRequests, listOnboardingRequests } from "@/lib/personnel/onboarding-sync";
 import { PersonnelManager } from "@/components/settings/PersonnelManager";
 import { Button } from "@/components/ui/button";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { LogoutButton } from "@/components/LogoutButton";
-import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { eq, desc } from "drizzle-orm";
+import { desc } from "drizzle-orm";
+
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -23,46 +21,23 @@ export default async function PersonnelPage() {
     redirect("/unauthorized");
   }
 
-  // The seed, the personnel list and the access-form lookup are independent, so they run together instead of costing three round trips in a row.
-  const [, people, accessForm] = await Promise.all([
-    seedOnboardingFormDefinition(),
+  // The form seed has to be in place before the sync reads its submissions, and the personnel list does not depend on either, so it runs alongside them.
+  const [people] = await Promise.all([
     db.select().from(personnel).orderBy(desc(personnel.dateOnboarded)),
-    db
-      .select()
-      .from(formDefinitions)
-      .where(eq(formDefinitions.key, ARTIST_ACCESS_FORM_KEY))
-      .limit(1),
+    seedOnboardingFormDefinition(),
   ]);
 
-  let pendingSubmissions: (typeof formSubmissions.$inferSelect)[] = [];
-  if (accessForm.length > 0) {
-    const rows = await db
-      .select()
-      .from(formSubmissions)
-      .where(eq(formSubmissions.formDefinitionId, accessForm[0].id));
-    pendingSubmissions = rows.filter((s) => s.status === "pending");
-  }
+  // Opening the page brings in whatever has arrived by form or turned up in Discord since the last look. The Discord read behind it is cached for a minute (lib/discord/discord-cache.ts), so reloading this page repeatedly does not mean repeatedly fetching the whole guild. The sync only ever writes pending rows; nobody is granted anything by loading this page.
+  const syncResult = await syncOnboardingRequests();
+  const requests = await listOnboardingRequests();
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href="/admin">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-          </Button>
-          <h1 className="text-lg font-semibold truncate">Personnel</h1>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">Review access requests, manage roles, grant or revoke access.</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/personnel/discord">Discord</Link>
-          </Button>
-          <ModeToggle />
-          <LogoutButton />
-        </div>
-      </header>
+    <div className="flex flex-col h-full bg-background text-foreground">
+      <PageHeader
+        title="Personnel"
+        description="Review access requests, manage roles, grant or revoke access."
+        actions={<Button variant="outline" size="sm" asChild><Link href="/admin/personnel/discord">Discord</Link></Button>}
+      />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
         <PersonnelManager
@@ -75,12 +50,8 @@ export default async function PersonnelPage() {
             status: p.status,
             dateOnboarded: p.dateOnboarded ? p.dateOnboarded.toISOString() : null,
           }))}
-          initialPendingSubmissions={pendingSubmissions.map((s) => ({
-            id: s.id,
-            submitterEmail: s.submitterEmail,
-            values: s.values as Record<string, unknown>,
-            createdAt: s.createdAt.toISOString(),
-          }))}
+          initialRequests={requests}
+          initialSyncWarning={syncResult.warning ?? null}
         />
       </main>
     </div>

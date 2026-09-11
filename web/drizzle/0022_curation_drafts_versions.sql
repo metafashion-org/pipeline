@@ -24,5 +24,6 @@ CREATE TABLE IF NOT EXISTS "curation_idea_versions" (
 --> statement-breakpoint
 DO $$ BEGIN
   ALTER TABLE "curation_idea_versions" ADD CONSTRAINT "curation_idea_versions_idea_id_curation_item_ideas_id_fk" FOREIGN KEY ("idea_id") REFERENCES "public"."curation_item_ideas"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION WHEN duplicate_object THEN NULL;
+-- A unique constraint raises duplicate_table (42P07) when its backing index already exists, which is what a push-maintained database has, so both codes have to be caught for this to be a no-op there.
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
 END $$;

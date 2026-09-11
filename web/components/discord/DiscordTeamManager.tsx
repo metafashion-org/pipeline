@@ -141,7 +141,7 @@ export function DiscordTeamManager({
     setRefreshing(true);
     try {
       const [ov, ta] = await Promise.all([
-        postJson<Overview>("/api/admin/discord/overview", undefined, "GET"),
+        postJson<Overview>("/api/admin/discord/overview?refresh=1", undefined, "GET"),
         isManagerTier ? postJson<{ grants: TempAccessGrant[] }>("/api/admin/discord/temp-access", undefined, "GET") : Promise.resolve({ grants: tempGrants }),
       ]);
       setOverview(ov);
@@ -288,7 +288,7 @@ function OverviewTab({
                         <span className="text-muted-foreground text-xs">—</span>
                       ) : (
                         m.buckets.map((b) => (
-                          <Badge key={b} variant="secondary" className="text-[10px]">
+                          <Badge key={b} variant="secondary" className="text-xs">
                             {BUCKET_LABEL[b] || b}
                           </Badge>
                         ))
@@ -297,7 +297,7 @@ function OverviewTab({
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{m.channels.length}</TableCell>
                   <TableCell>
-                    <Badge variant={m.status === "active" ? "default" : "outline"} className="text-[10px] capitalize">
+                    <Badge variant={m.status === "active" ? "default" : "outline"} className="text-xs capitalize">
                       {m.status}
                     </Badge>
                   </TableCell>
@@ -436,7 +436,7 @@ function OnboardTab({
       <div className="grid gap-2">
         <Label htmlFor="onboard-username">Discord name (exact)</Label>
         <Input id="onboard-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their Discord display name or username" />
-        <p className="text-xs text-muted-foreground">Their display name (e.g. &ldquo;Anuj&rdquo;) or @username both work. They must already be in the server. Exact match required — no closest-guess fallback.</p>
+        <p className="text-xs text-muted-foreground">Their display name or @username. They must already be in the server, and the name has to match exactly.</p>
       </div>
       <div className="grid gap-2">
         <Label>Department</Label>
@@ -577,7 +577,7 @@ function PermissionsTab({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>#{detailChannel?.name} — permission detail</DialogTitle>
-            <DialogDescription>What Discord actually has stored per role, bit by bit.</DialogDescription>
+            <DialogDescription>The permission bits Discord has stored for each role.</DialogDescription>
           </DialogHeader>
           {detailChannel && <ChannelPermissionDetail channelId={detailChannel.id} isAdminTier={isAdminTier} onChanged={onChanged} />}
         </DialogContent>
@@ -625,7 +625,7 @@ function ChannelPermissionDetail({ channelId, isAdminTier, onChanged }: { channe
           <TableRow>
             <TableHead>Role</TableHead>
             {BIT_LABELS.map((b) => (
-              <TableHead key={b.key} className="text-center text-[10px]">
+              <TableHead key={b.key} className="text-center text-xs">
                 {b.label}
               </TableHead>
             ))}
@@ -894,7 +894,7 @@ function ArchiveTab({ overview, isAdminTier, onChanged }: { overview: Overview; 
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Permanently delete #{c.name}?</AlertDialogTitle>
-                          <AlertDialogDescription>This can&apos;t be undone — the channel and its full message history are gone from Discord.</AlertDialogDescription>
+                          <AlertDialogDescription>This cannot be undone. The channel and its message history are deleted from Discord.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>

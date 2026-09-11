@@ -12,6 +12,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  experimental: {
+    // How long the browser may reuse an already-fetched page from the client-side router cache
+    // before asking the server for it again. Next's default for a dynamic page is 0, which is why
+    // going Marketing -> Knowledge -> Marketing re-rendered the Marketing page on the server every
+    // time, including the round trip. Thirty seconds covers moving between dashboard views without
+    // holding a stale page long enough for anyone to act on it, and it only applies to navigation:
+    // a reload always goes to the server.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
   images: {
     remotePatterns: [
       {

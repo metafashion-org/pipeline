@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { listStyleSystems, createStyleSystem } from "@/lib/knowledge/style-systems-service";
 
-function canManageKnowledge(roles: string[], overrides: Record<string, boolean>): boolean {
-  const caps = getEffectiveCapabilities(roles, overrides);
-  return caps.canManageSystemConfig || caps.canAccessCuratorTools;
-}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
   const styleSystems = await listStyleSystems();
@@ -20,7 +16,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || !canManageKnowledge(session.user.roles || [], session.user.capabilityOverrides || {})) {
+  if (!session || !canManageKnowledge(getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {}))) {
     return NextResponse.json({ error: "Not authorized" }, { status: 401 });
   }
   const body = await request.json().catch(() => ({}));

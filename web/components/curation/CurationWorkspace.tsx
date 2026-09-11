@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { PlusCircle, FileEdit } from "lucide-react";
 import { CurationIdeaForm, type DraftRecord } from "./CurationIdeaForm";
 import { DraftsList, type DraftListItem } from "./DraftsList";
+import type { FieldOption } from "@/lib/forms/field-options";
 
 interface FieldConfig {
   fieldKey: string;
   displayName: string;
   fieldType: string;
-  options: string[];
+  options: FieldOption[];
   appliesToCategories: string[] | null;
 }
 
@@ -73,7 +74,7 @@ export function CurationWorkspace({ fields, initialDrafts = [] }: { fields: Fiel
         <TabsTrigger value="drafts">
           <FileEdit className="h-3.5 w-3.5" /> My Drafts
           {drafts.length > 0 && (
-            <Badge variant="secondary" className="ml-1 h-4 min-w-4 px-1 text-[10px]">
+            <Badge variant="secondary" className="ml-1 min-w-5 px-1.5">
               {drafts.length}
             </Badge>
           )}

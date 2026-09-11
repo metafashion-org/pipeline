@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getFormDefinitionByKey, submitFormResponse } from "@/lib/forms/form-service";
 import { seedOnboardingFormDefinition, ARTIST_ACCESS_FORM_KEY } from "@/lib/forms/onboarding";
 import { checkSubmissionRate, clientKeyFor } from "@/lib/forms/rate-limit";
+import { checkFormAccess, isPublicForm } from "@/lib/forms/form-access";
 import { z } from "zod";
 
 const SubmitSchema = z.object({
@@ -35,12 +36,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
   }
 
+  // Same rule the page and the read route use — see lib/forms/form-access.ts. The session is read
+  // for a restricted form even when the answer turns out to be no, because a signed-in submitter
+  // is also how the submission gets attributed to a person rather than to an address they typed.
   let session = null;
-  if (form.definition.targetRoles && form.definition.targetRoles.length > 0) {
+  if (!isPublicForm(form.definition)) {
     session = await getServerSession(authOptions);
-    const roles = session?.user?.roles || [];
-    if (!session || !form.definition.targetRoles.some((r) => roles.includes(r))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const access = checkFormAccess(
+      form.definition,
+      session ? { email: session.user.email, roles: session.user.roles, personnelId: session.user.personnelId } : null
+    );
+    if (!access.allowed) {
+      return NextResponse.json({ error: access.reason }, { status: access.status });
     }
   }
 
@@ -54,7 +61,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const submission = await submitFormResponse({
       formKey,
       values: parseResult.data.values,
-      submitterEmail: parseResult.data.submitterEmail,
+      // The address on the session wins over anything in the body: on a restricted form it is the
+      // address access was granted against, so recording a different one would leave a submission
+      // attributed to someone who did not make it.
+      submitterEmail: session?.user?.email || parseResult.data.submitterEmail,
       submitterId: session?.user?.personnelId,
     });
     // The submission itself succeeded even if its follow-on behavior did not; say so rather
