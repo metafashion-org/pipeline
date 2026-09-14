@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
+import { jsonFetcher } from "@/lib/fetcher";
 import {
     Dialog,
     DialogContent,
@@ -26,6 +27,17 @@ export function NewAssetDialog() {
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState(EMPTY_ASSET_FORM);
     const { mutate } = useSWRConfig();
+
+    // Display-only preview of the SKU this asset will get — never actually submitted (the SKU
+    // field stays disabled; see AssetFormFields). The real one is computed fresh server-side at
+    // creation time regardless of what's shown here. Keyed on `open` rather than fetched in an
+    // effect: SWR dedupes/cancels for us, so rapidly opening, closing and reopening the dialog
+    // can't land a stale response from an earlier open after a newer one already resolved.
+    const { data: skuPreviewData } = useSWR<{ sku: string }>(
+        open ? "/api/assets/next-sku" : null,
+        jsonFetcher
+    );
+    const skuPreview = skuPreviewData?.sku ?? null;
 
     const handleOpenChange = (next: boolean) => {
         if (!next) setForm(EMPTY_ASSET_FORM);
@@ -87,7 +99,7 @@ export function NewAssetDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
-                <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku />
+                <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku skuPreview={skuPreview} />
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => handleOpenChange(false)}>
