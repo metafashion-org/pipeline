@@ -106,7 +106,7 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
           {!collapsed && (
             <div className="ml-2.5 min-w-0">
               <span className="block font-display font-semibold tracking-tight text-white text-base leading-tight truncate">
-                MetaFashion
+                Meta Fashion
               </span>
               <span className="block text-xs text-sidebar-foreground leading-tight">Pipeline</span>
             </div>
