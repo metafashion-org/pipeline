@@ -32,6 +32,77 @@ interface RegistryArtifact {
 }
 
 /**
+ * Same status-check-before-parse shape as lib/fetcher.ts's jsonFetcher, for POST/DELETE instead
+ * of GET (jsonFetcher takes no RequestInit, so it doesn't fit here as-is). Checking `res.ok`
+ * before trusting the body avoids two different failure modes: reading an error payload as if it
+ * were the real result, and a non-JSON error page throwing an opaque parse error instead of a
+ * useful message.
+ */
+async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body as { error?: string } | null)?.error || `Request failed with ${res.status}`);
+  }
+  return res.json().catch(() => null) as Promise<T>;
+}
+
+/**
+ * The Select + Add/Cancel row shown while attaching an artifact — split out of LinkedArtifacts so
+ * its own state (selection, submitting, the registry fetch) doesn't add to that function's
+ * control-flow complexity. Fetches the registry on mount rather than being gated by a prop: it
+ * only ever mounts while the parent is in "attaching" mode, so mounting already is the gate.
+ */
+function AttachArtifactControl({
+  linkedIds,
+  onAttach,
+  onCancel,
+}: {
+  linkedIds: Set<string>;
+  onAttach: (artifactId: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { data } = useSWR<{ artifacts: RegistryArtifact[] }>("/api/admin/knowledge/artifacts", jsonFetcher);
+  const options = (data?.artifacts || []).filter((a) => !linkedIds.has(a.id));
+
+  const [selected, setSelected] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleAttach() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      await onAttach(selected);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 pt-2 mt-1 border-t border-border/60">
+      <Select value={selected} onValueChange={setSelected}>
+        <SelectTrigger className="h-8 text-xs flex-1">
+          <SelectValue placeholder={options.length ? "Pick an artifact…" : "Nothing left to attach"} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((a) => (
+            <SelectItem key={a.id} value={a.id}>
+              {a.artifactId} · {a.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" className="h-8 text-xs" disabled={!selected || submitting} onClick={handleAttach}>
+        {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
+/**
  * The other end of the Knowledge Registry's SKU-linking (see ArtifactLinksDialog.tsx, which
  * links from the artifact's side). The brief's §7 whole point — "reuse knowledge instead of
  * rewriting context for every asset" — only actually happens if someone looking at an asset can
@@ -57,49 +128,28 @@ export function LinkedArtifacts({
   const linksKey = enabled ? `/api/assets/${encodeURIComponent(sku)}/artifacts` : null;
   const { data, isLoading, mutate } = useSWR<{ artifacts: LinkedArtifact[] }>(linksKey, jsonFetcher);
   const artifacts = data?.artifacts || [];
+  const linkedIds = new Set(artifacts.map((a) => a.id));
 
   const [attaching, setAttaching] = useState(false);
-  const [selected, setSelected] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
 
-  // Only fetched once the attach picker is actually opened — no reason to load the whole
-  // registry every time someone opens an asset that doesn't need a new link right now.
-  const { data: registryData } = useSWR<{ artifacts: RegistryArtifact[] }>(
-    canManage && attaching ? "/api/admin/knowledge/artifacts" : null,
-    jsonFetcher
-  );
-  const linkedIds = new Set(artifacts.map((a) => a.id));
-  const attachOptions = (registryData?.artifacts || []).filter((a) => !linkedIds.has(a.id));
-
-  async function attach() {
-    if (!selected) return;
-    setSubmitting(true);
+  async function handleAttach(artifactId: string) {
     try {
-      const res = await fetch(`/api/admin/knowledge/artifacts/${selected}/links`, {
+      await requestJson(`/api/admin/knowledge/artifacts/${artifactId}/links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "sku", value: assetId }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to attach artifact");
       toast.success("Artifact attached");
-      setSelected("");
       setAttaching(false);
       mutate();
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to attach artifact");
-    } finally {
-      setSubmitting(false);
     }
   }
 
-  async function remove(a: LinkedArtifact) {
+  async function handleRemove(a: LinkedArtifact) {
     try {
-      const res = await fetch(`/api/admin/knowledge/artifacts/${a.id}/links/sku/${a.linkId}`, {
-        method: "DELETE",
-      });
-      const result = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(result.error || "Failed to remove artifact");
+      await requestJson(`/api/admin/knowledge/artifacts/${a.id}/links/sku/${a.linkId}`, { method: "DELETE" });
       toast.success("Artifact removed");
       mutate();
     } catch (error: unknown) {
@@ -160,7 +210,7 @@ export function LinkedArtifacts({
               {canManage && (
                 <button
                   type="button"
-                  onClick={() => remove(a)}
+                  onClick={() => handleRemove(a)}
                   title="Remove from this asset"
                   aria-label={`Remove ${a.title} from this asset`}
                   className="text-muted-foreground hover:text-destructive"
@@ -173,35 +223,11 @@ export function LinkedArtifacts({
         ))}
 
         {attaching && (
-          <div className="flex items-center gap-2 pt-2 mt-1 border-t border-border/60">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="h-8 text-xs flex-1">
-                <SelectValue placeholder={attachOptions.length ? "Pick an artifact…" : "Nothing left to attach"} />
-              </SelectTrigger>
-              <SelectContent>
-                {attachOptions.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.artifactId} · {a.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="sm" className="h-8 text-xs" disabled={!selected || submitting} onClick={attach}>
-              {submitting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => {
-                setAttaching(false);
-                setSelected("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+          <AttachArtifactControl
+            linkedIds={linkedIds}
+            onAttach={handleAttach}
+            onCancel={() => setAttaching(false)}
+          />
         )}
       </div>
     </section>
