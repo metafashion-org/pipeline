@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Copy, Maximize2 } from "lucide-react";
@@ -83,8 +84,6 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 export function TaskCard({ task, role }: TaskCardProps) {
-    const [drawerOpen, setDrawerOpen] = useState(false);
-
     // The `|| task.skuId`, `|| task.productionStatus`, `|| task.artist` fallbacks that used to sit
     // here read fields no card has ever carried — they were left over from an earlier shape and
     // were only reachable because the prop was typed `any`. What remains is the placeholder for a
@@ -94,6 +93,13 @@ export function TaskCard({ task, role }: TaskCardProps) {
     const currentStatus = task.currentStatus || "unassigned";
     const artistName = task.artistName;
     const artistDiscordUrl = task.artistDiscordUrl;
+
+    // Opens straight to this card's drawer when the board is loaded as .../board?asset=<SKU> —
+    // the other half of openArtistDiscord's copied link below. Read once on first render: if
+    // someone closes the drawer, we don't want it snapping back open just because the URL still
+    // carries the param.
+    const searchParams = useSearchParams();
+    const [drawerOpen, setDrawerOpen] = useState(() => searchParams.get("asset") === sku);
 
     const {
         attributes,
@@ -126,14 +132,20 @@ export function TaskCard({ task, role }: TaskCardProps) {
     };
 
     // Discord deep links (https://discord.com/channels/{guild}/{channel}) open the channel but
-    // can't pre-fill a message — there's no URL parameter for that. So this copies a ready-to-
-    // paste reference instead of trying to fake one: the person still has to paste it themselves,
-    // but at least they're not retyping the SKU from memory once they're there.
+    // can't pre-fill a message — confirmed there's genuinely no URL parameter or scheme for that,
+    // official or otherwise. So this copies a ready-to-paste reference instead of trying to fake
+    // one: the person still has to paste it themselves, but the reference is a real clickable
+    // link to this asset's own page (/artist?asset=<SKU> — the artist's own board, which they
+    // have access to, rather than /admin/board, which they don't), not just the bare SKU text.
+    // TaskCard renders under both /admin/board and /artist, and both read the same ?asset= param
+    // (see the drawerOpen initializer above), so whichever page this link points at, opening it
+    // lands straight on this card's drawer, already open.
     const openArtistDiscord = async (e: React.MouseEvent) => {
         e.stopPropagation();
         try {
-            await navigator.clipboard.writeText(`Re: ${sku} — ${itemName}`);
-            toast.success(`Copied a reference to ${sku} — paste it in the channel`);
+            const assetUrl = `${window.location.origin}/artist?asset=${encodeURIComponent(sku)}`;
+            await navigator.clipboard.writeText(`Re: ${sku} — ${itemName}\n${assetUrl}`);
+            toast.success(`Copied a reference + link to ${sku} — paste it in the channel`);
         } catch {
             // Clipboard can fail outside a secure context; the link below still opens regardless.
         }
