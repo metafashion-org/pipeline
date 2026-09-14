@@ -66,6 +66,54 @@ export interface SidebarViewer {
   capabilityOverrides: Record<string, boolean>;
 }
 
+// Split out of AppSidebar so the picker's own JSX branching doesn't add to that function's
+// control-flow complexity. State stays lifted in the parent (it needs previewRole too, to filter
+// NAV_ITEMS), so this is a plain controlled component, not a second source of truth.
+function PreviewRolePicker({
+  collapsed,
+  previewRole,
+  onChange,
+}: {
+  collapsed: boolean;
+  previewRole: SystemRole | null;
+  onChange: (role: SystemRole | null) => void;
+}) {
+  if (collapsed) return null;
+
+  return (
+    <div className="shrink-0 px-2 pt-2">
+      <div className="flex items-center gap-1.5 px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/70">
+        <Eye className="w-3 h-3" />
+        Preview nav as
+      </div>
+      <Select
+        value={previewRole ?? "__real__"}
+        onValueChange={(v) => onChange(v === "__real__" ? null : (v as SystemRole))}
+      >
+        <SelectTrigger className="h-8 text-xs w-full" aria-label="Preview navigation as role">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__real__">My real access</SelectItem>
+          {ALL_ROLES.map((r) => (
+            <SelectItem key={r} value={r}>
+              {ROLE_LABELS[r]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {previewRole && (
+        // Deliberately not "you're viewing as X" — this changes which links show, not what
+        // renders when you click them. Pages still load with the real signed-in user's real
+        // permissions and real data, so overstating this as a login-swap would be misleading.
+        <p className="px-1 pt-1 text-[10px] leading-snug text-amber-400">
+          Menu only — pages still show your own real data.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // The viewer is passed down from the server layout, which already has the session, rather than
 // read here with useSession. That avoids mounting a SessionProvider and refetching on the client
 // something the server rendered this page with, and it means the nav is correct in the first
@@ -151,37 +199,8 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
         </button>
       </div>
 
-      {canPreview && !collapsed && (
-        <div className="shrink-0 px-2 pt-2">
-          <div className="flex items-center gap-1.5 px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/70">
-            <Eye className="w-3 h-3" />
-            Preview nav as
-          </div>
-          <Select
-            value={previewRole ?? "__real__"}
-            onValueChange={(v) => setPreviewRole(v === "__real__" ? null : (v as SystemRole))}
-          >
-            <SelectTrigger className="h-8 text-xs w-full" aria-label="Preview navigation as role">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__real__">My real access</SelectItem>
-              {ALL_ROLES.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {ROLE_LABELS[r]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {previewRole && (
-            // Deliberately not "you're viewing as X" — this changes which links show, not what
-            // renders when you click them. Pages still load with the real signed-in user's real
-            // permissions and real data, so overstating this as a login-swap would be misleading.
-            <p className="px-1 pt-1 text-[10px] leading-snug text-amber-400">
-              Menu only — pages still show your own real data.
-            </p>
-          )}
-        </div>
+      {canPreview && (
+        <PreviewRolePicker collapsed={collapsed} previewRole={previewRole} onChange={setPreviewRole} />
       )}
 
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
