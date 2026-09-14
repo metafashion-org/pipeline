@@ -113,13 +113,13 @@ export function TaskCard({ task, role }: TaskCardProps) {
                 }}
                 className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]"
             >
-                <div className={`w-full h-24 overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>
+                <div className={`w-full aspect-square overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>
                     {coverRef?.fileId && (
                         <>
                             <DriveImage
                                 fileId={coverRef.fileId}
                                 alt=""
-                                sizes="280px"
+                                sizes="220px"
                                 className="object-cover"
                             />
                             {/* Darkens the cover so the SKU chip and item name stay readable over any image. */}

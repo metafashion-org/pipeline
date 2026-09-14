@@ -230,7 +230,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
             >
                 <div className="flex gap-4 overflow-x-auto pb-4 h-full">
                     {columns.map((col) => (
-                        <div key={col.key} className="shrink-0 w-[280px]">
+                        <div key={col.key} className="shrink-0 w-[220px]">
                             <Column
                                 id={col.key}
                                 title={col.label}
