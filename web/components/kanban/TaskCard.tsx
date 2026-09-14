@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, Maximize2, MessageCircle } from "lucide-react";
+import { Copy, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AssetDrawer } from "./asset-drawer";
@@ -29,6 +29,57 @@ function getGradient(sku: string | undefined): string {
     if (!sku) return GRADIENTS[0];
     const hash = sku.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
     return GRADIENTS[hash % GRADIENTS.length];
+}
+
+/**
+ * Whole calendar days between today and the deadline (negative once overdue). Compared by
+ * calendar day, not exact milliseconds — a deadline at 11:59pm today shouldn't read as "0.001
+ * days left" or round down to "overdue" just because the clock ticked past noon.
+ */
+function daysUntil(deadline: string | Date | null): number | null {
+    if (!deadline) return null;
+    const d = new Date(deadline);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDeadline = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.round((startOfDeadline.getTime() - startOfToday.getTime()) / 86_400_000);
+}
+
+/**
+ * Colour tiers deliberately coarse (not a different shade per day): overdue/today is the one
+ * state that needs to read as "drop everything," 1-2 days is "soon," 3-5 is "keep an eye on it,"
+ * anything further out shouldn't compete for attention at a glance.
+ */
+function deadlineTier(days: number): { label: string; className: string } {
+    if (days < 0) return { label: `${Math.abs(days)}d overdue`, className: "bg-red-500/90 text-white" };
+    if (days === 0) return { label: "Due today", className: "bg-red-500/90 text-white" };
+    if (days <= 2) return { label: `${days}d left`, className: "bg-orange-500/90 text-white" };
+    if (days <= 5) return { label: `${days}d left`, className: "bg-amber-500/90 text-black" };
+    return { label: `${days}d left`, className: "bg-emerald-600/90 text-white" };
+}
+
+function DeadlineBadge({ deadline }: { deadline: string | Date | null }) {
+    const days = daysUntil(deadline);
+    if (days === null) return null;
+    const tier = deadlineTier(days);
+    return (
+        <span
+            className={`font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded backdrop-blur-sm ${tier.className}`}
+        >
+            {tier.label}
+        </span>
+    );
+}
+
+// lucide-react deliberately ships no brand/logo icons, so this is the actual Discord mark
+// (Simple Icons' path data) rather than a generic stand-in like MessageCircle.
+function DiscordIcon({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+            <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" />
+        </svg>
+    );
 }
 
 export function TaskCard({ task, role }: TaskCardProps) {
@@ -72,6 +123,20 @@ export function TaskCard({ task, role }: TaskCardProps) {
             return;
         }
         toast.success("SKU copied to clipboard");
+    };
+
+    // Discord deep links (https://discord.com/channels/{guild}/{channel}) open the channel but
+    // can't pre-fill a message — there's no URL parameter for that. So this copies a ready-to-
+    // paste reference instead of trying to fake one: the person still has to paste it themselves,
+    // but at least they're not retyping the SKU from memory once they're there.
+    const openArtistDiscord = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        try {
+            await navigator.clipboard.writeText(`Re: ${sku} — ${itemName}`);
+            toast.success(`Copied a reference to ${sku} — paste it in the channel`);
+        } catch {
+            // Clipboard can fail outside a secure context; the link below still opens regardless.
+        }
     };
 
     // The drawer wants real Dates; the wire carries ISO strings. This is the one place they are
@@ -122,18 +187,16 @@ export function TaskCard({ task, role }: TaskCardProps) {
                                 sizes="220px"
                                 className="object-cover"
                             />
-                            {/* Darkens the cover so the SKU chip and item name stay readable over any image. */}
+                            {/* Darkens the cover so the deadline badge and item name stay readable over any image. */}
                             <div className="absolute inset-0 bg-black/40" />
                         </>
                     )}
-                    <div className="relative flex items-center justify-between">
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-black/40 text-white backdrop-blur-sm">
-                            {sku}
-                        </span>
+                    <div className="relative flex items-center justify-between gap-1">
+                        <DeadlineBadge deadline={task.deadline} />
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-white/80 hover:text-white hover:bg-black/30 rounded"
+                            className="h-6 w-6 shrink-0 ml-auto text-white/80 hover:text-white hover:bg-black/30 rounded"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setDrawerOpen(true);
@@ -142,7 +205,9 @@ export function TaskCard({ task, role }: TaskCardProps) {
                             <Maximize2 className="h-3 w-3" />
                         </Button>
                     </div>
-                    <p className="relative text-sm font-semibold truncate leading-tight">{itemName}</p>
+                    {/* Two lines rather than one: at 220px-wide columns a single truncated line was
+                        cutting off most item names after only a few words. */}
+                    <p className="relative text-sm font-semibold line-clamp-2 leading-tight">{itemName}</p>
                 </div>
 
                 <div className="px-3 py-2 flex flex-col gap-1">
@@ -153,7 +218,9 @@ export function TaskCard({ task, role }: TaskCardProps) {
                             ponytail: this does sit inside the card's own role="button", which is
                             nested interactive content. Resolving that properly means dropping the
                             whole-card click target in favour of an explicit open affordance —
-                            a board redesign, not a fix. */}
+                            a board redesign, not a fix.
+                            This is now the card's only SKU display — it used to also sit on the
+                            image overlay above, showing the same value twice for no reason. */}
                         <button
                             type="button"
                             className="font-mono text-xs text-muted-foreground hover:underline cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -168,21 +235,24 @@ export function TaskCard({ task, role }: TaskCardProps) {
                         </span>
                     </div>
                     {artistName && (
-                        <div className="flex items-center justify-between gap-1">
-                            <p className="text-xs text-muted-foreground truncate" title={artistName}>
-                                Artist: {artistName}
-                            </p>
-                            {artistDiscordUrl && (
+                        <div className="flex items-center gap-1 text-xs">
+                            <span className="text-muted-foreground shrink-0">Artist:</span>
+                            {artistDiscordUrl ? (
                                 <a
                                     href={artistDiscordUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    title={`Open ${artistName}'s Discord channel`}
-                                    className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                                    onClick={openArtistDiscord}
+                                    title={`Open ${artistName}'s Discord channel — copies "${sku}" to paste there`}
+                                    className="flex items-center gap-1 min-w-0 text-primary hover:underline"
                                 >
-                                    <MessageCircle className="h-3 w-3" />
+                                    <DiscordIcon className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">{artistName}</span>
                                 </a>
+                            ) : (
+                                <span className="text-muted-foreground truncate" title={artistName}>
+                                    {artistName}
+                                </span>
                             )}
                         </div>
                     )}
