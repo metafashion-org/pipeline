@@ -20,9 +20,17 @@ import {
   LogOut,
   Menu,
   X,
+  Eye,
 } from "lucide-react";
-import { isRouteAllowedForRoles } from "@/lib/auth/rbac";
+import { isRouteAllowedForRoles, getEffectiveCapabilities, ALL_ROLES, type SystemRole } from "@/lib/auth/rbac";
 import { ModeToggle } from "@/components/ui/mode-toggle";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Every internal page shares this one sidebar. Before, admin/* had a sidebar and artist,
 // curator and publisher each stood alone, so moving between tools looked like the shell kept
@@ -42,10 +50,68 @@ const NAV_ITEMS = [
 
 const COLLAPSE_KEY = "pipeline_sidebar_collapsed";
 
+const ROLE_LABELS: Record<SystemRole, string> = {
+  admin: "Admin",
+  operator: "Operator",
+  curator: "Curator",
+  artist: "Artist",
+  publisher: "Publisher",
+  marketing: "Marketing",
+  payment_admin: "Payment Admin",
+};
+
 export interface SidebarViewer {
   email: string | null;
   roles: string[];
   capabilityOverrides: Record<string, boolean>;
+}
+
+// Split out of AppSidebar so the picker's own JSX branching doesn't add to that function's
+// control-flow complexity. State stays lifted in the parent (it needs previewRole too, to filter
+// NAV_ITEMS), so this is a plain controlled component, not a second source of truth.
+function PreviewRolePicker({
+  collapsed,
+  previewRole,
+  onChange,
+}: {
+  collapsed: boolean;
+  previewRole: SystemRole | null;
+  onChange: (role: SystemRole | null) => void;
+}) {
+  if (collapsed) return null;
+
+  return (
+    <div className="shrink-0 px-2 pt-2">
+      <div className="flex items-center gap-1.5 px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-sidebar-foreground/70">
+        <Eye className="w-3 h-3" />
+        Preview nav as
+      </div>
+      <Select
+        value={previewRole ?? "__real__"}
+        onValueChange={(v) => onChange(v === "__real__" ? null : (v as SystemRole))}
+      >
+        <SelectTrigger className="h-8 text-xs w-full" aria-label="Preview navigation as role">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__real__">My real access</SelectItem>
+          {ALL_ROLES.map((r) => (
+            <SelectItem key={r} value={r}>
+              {ROLE_LABELS[r]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {previewRole && (
+        // Deliberately not "you're viewing as X" — this changes which links show, not what
+        // renders when you click them. Pages still load with the real signed-in user's real
+        // permissions and real data, so overstating this as a login-swap would be misleading.
+        <p className="px-1 pt-1 text-[10px] leading-snug text-amber-400">
+          Menu only — pages still show your own real data.
+        </p>
+      )}
+    </div>
+  );
 }
 
 // The viewer is passed down from the server layout, which already has the session, rather than
@@ -91,10 +157,21 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
   const roles = viewer.roles;
   const overrides = viewer.capabilityOverrides;
 
+  // "Preview nav as <role>" — admin-only, nav-only. It swaps which role's capabilities decide
+  // which links render, so an admin can sanity-check what e.g. an artist's menu looks like
+  // without needing a second account. It does NOT change what data loads: every page still
+  // renders for the real signed-in user with their real permissions, so this is a sighted-check
+  // on the menu, not a real impersonation — see lib/auth/rbac.ts's ALL_ROLES doc comment.
+  // Session state only (not persisted), so nobody is left "stuck" previewing after a reload.
+  const [previewRole, setPreviewRole] = useState<SystemRole | null>(null);
+  const canPreview = getEffectiveCapabilities(roles, overrides).canManageSystemConfig;
+  const navRoles = canPreview && previewRole ? [previewRole] : roles;
+  const navOverrides = canPreview && previewRole ? {} : overrides;
+
   // Only the destinations this person can actually open. Every user was shown all ten, so a
   // curator clicking Personnel, Settings or Forms landed on /unauthorized — the nav advertised
   // work they had no way to do. Same rule proxy.ts enforces, so the list and the gate agree.
-  const visibleItems = NAV_ITEMS.filter((item) => isRouteAllowedForRoles(item.href, roles, overrides));
+  const visibleItems = NAV_ITEMS.filter((item) => isRouteAllowedForRoles(item.href, navRoles, navOverrides));
 
   const panel = (
     <>
@@ -121,6 +198,10 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
           <X className="w-5 h-5" />
         </button>
       </div>
+
+      {canPreview && (
+        <PreviewRolePicker collapsed={collapsed} previewRole={previewRole} onChange={setPreviewRole} />
+      )}
 
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {visibleItems.map(({ href, icon: Icon, label }) => {

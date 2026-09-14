@@ -7,6 +7,19 @@ export type SystemRole =
   | "marketing"
   | "payment_admin";
 
+// Every real role, for anything that needs to enumerate them (e.g. the sidebar's "preview nav as"
+// picker). "uploader" is deliberately excluded — it is an alias for "publisher" (see
+// ROLE_ALIASES below), not a distinct role someone would pick from a list.
+export const ALL_ROLES: SystemRole[] = [
+  "admin",
+  "operator",
+  "curator",
+  "artist",
+  "publisher",
+  "marketing",
+  "payment_admin",
+];
+
 // The live personnel.roles data uses "uploader" for the role the brief calls
 // "Uploader," which docs/PLAN.md §5 defines as this app's "publisher" role.
 // Alias it to publisher's capability set instead of duplicating it.
