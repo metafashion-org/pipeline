@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { parseDriveRefs, DriveRef } from "@/lib/assets/drive-links";
 import { DriveImage } from "./drive-image";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { getEffectiveCapabilities, canManageKnowledge } from "@/lib/auth/rbac";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
@@ -89,6 +89,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   const canSubmitFinalFiles = isAdminOrOperator || userRoles.includes("artist");
   // Editing an asset's name, category, budget or deadline is the same production-management right as assigning its artist, so it rides on the same capability rather than inventing a second one.
   const canEdit = canAssignArtists;
+  // Same rule the Knowledge Registry's own admin page and its API routes already use (see
+  // lib/auth/rbac.ts's canManageKnowledge doc comment) — admin, operator or curator.
+  const canManageLinks = canManageKnowledge(getEffectiveCapabilities(userRoles));
 
   const references = parseDriveRefs(asset.referenceImages);
   const recolorReferences = parseDriveRefs(asset.recolorReferenceImages);
@@ -166,7 +169,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
-        <LinkedArtifacts sku={asset.sku} enabled={open} />
+        <LinkedArtifacts sku={asset.sku} assetId={asset.id} enabled={open} canManage={canManageLinks} />
 
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">
