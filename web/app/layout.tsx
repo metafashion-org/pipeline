@@ -24,7 +24,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MetaFashion Pipeline",
+  title: "Meta Fashion Pipeline",
   description: "Production pipeline for MetaFashion assets.",
 };
 
