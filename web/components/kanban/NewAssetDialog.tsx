@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSWRConfig } from "swr";
 import {
     Dialog,
@@ -25,7 +25,20 @@ export function NewAssetDialog() {
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState(EMPTY_ASSET_FORM);
+    // Display-only preview of the SKU this asset will get — never actually submitted (the SKU
+    // field stays disabled; see AssetFormFields). The real one is computed fresh server-side at
+    // creation time regardless of what's shown here.
+    const [skuPreview, setSkuPreview] = useState<string | null>(null);
     const { mutate } = useSWRConfig();
+
+    useEffect(() => {
+        if (!open) return;
+        setSkuPreview(null);
+        fetch("/api/assets/next-sku")
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => setSkuPreview(data?.sku ?? null))
+            .catch(() => setSkuPreview(null));
+    }, [open]);
 
     const handleOpenChange = (next: boolean) => {
         if (!next) setForm(EMPTY_ASSET_FORM);
@@ -87,7 +100,7 @@ export function NewAssetDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
-                <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku />
+                <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku skuPreview={skuPreview} />
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => handleOpenChange(false)}>

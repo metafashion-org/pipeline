@@ -48,12 +48,20 @@ export function AssetFormFields({
     onChange,
     idPrefix,
     showSku = false,
+    skuPreview = null,
 }: {
     values: AssetFormValues;
     onChange: (next: AssetFormValues) => void;
     /** Keeps input ids unique when both dialogs are mounted on the same page. */
     idPrefix: string;
     showSku?: boolean;
+    /**
+     * The SKU this asset will most likely get, for display only — the field never accepts
+     * typing. The real SKU is always computed fresh at creation time (see NewAssetDialog), so
+     * this can occasionally be one behind if someone else creates an asset in between; that's
+     * expected, not a bug to chase.
+     */
+    skuPreview?: string | null;
 }) {
     const set = (patch: Partial<AssetFormValues>) => onChange({ ...values, ...patch });
     const id = (name: string) => `${idPrefix}-${name}`;
@@ -76,9 +84,10 @@ export function AssetFormFields({
                         <Label htmlFor={id("sku")}>SKU</Label>
                         <Input
                             id={id("sku")}
-                            placeholder="Auto-generated"
-                            value={values.sku}
-                            onChange={(e) => set({ sku: e.target.value })}
+                            disabled
+                            placeholder="Auto-generating…"
+                            value={skuPreview ?? ""}
+                            className="disabled:opacity-100 disabled:cursor-default text-muted-foreground"
                         />
                     </div>
                 )}
@@ -95,19 +104,6 @@ export function AssetFormFields({
 
             <div className="grid grid-cols-3 gap-3">
                 <div className="grid gap-1.5">
-                    <Label htmlFor={id("fee")}>Budget</Label>
-                    <Input
-                        id={id("fee")}
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="1"
-                        placeholder="Not set"
-                        value={values.feeAmount}
-                        onChange={(e) => set({ feeAmount: e.target.value })}
-                    />
-                </div>
-                <div className="grid gap-1.5">
                     <Label htmlFor={id("currency")}>Currency</Label>
                     <Select value={values.currency} onValueChange={(v) => set({ currency: v })}>
                         <SelectTrigger id={id("currency")} className="w-full">
@@ -119,6 +115,19 @@ export function AssetFormFields({
                             ))}
                         </SelectContent>
                     </Select>
+                </div>
+                <div className="grid gap-1.5">
+                    <Label htmlFor={id("fee")}>Budget</Label>
+                    <Input
+                        id={id("fee")}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="1"
+                        placeholder="Not set"
+                        value={values.feeAmount}
+                        onChange={(e) => set({ feeAmount: e.target.value })}
+                    />
                 </div>
                 <div className="grid gap-1.5">
                     <Label htmlFor={id("deadline")}>Deadline</Label>
@@ -140,7 +149,9 @@ export function AssetFormFields({
                     value={values.referenceImages}
                     onChange={(e) => set({ referenceImages: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">Shown as previews on the card and in the asset drawer.</p>
+                <p className="text-xs text-muted-foreground">
+                    The first link becomes the card&apos;s thumbnail image. All links show as previews in the asset drawer.
+                </p>
             </div>
 
             <div className="grid gap-1.5">
