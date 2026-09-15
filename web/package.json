@@ -17,7 +17,7 @@
     "db:seed:e2e": "tsx lib/db/seed-e2e-fixtures.ts",
     "test:db:up": "bash scripts/test-db.sh up",
     "test:db:down": "bash scripts/test-db.sh down",
-    "test": "tsx --test --test-concurrency=1 \"{app,lib,components}/**/__tests__/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "deadcode": "knip --include files,dependencies,unlisted,binaries",
     "deadcode:all": "knip",
