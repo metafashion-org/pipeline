@@ -13,7 +13,7 @@ import {
     closestCorners,
 } from "@dnd-kit/core";
 import useSWR from "swr";
-import { Loader2, X, ChevronDown } from "lucide-react";
+import { Loader2, X, ChevronDown, Filter } from "lucide-react";
 
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
@@ -36,6 +36,40 @@ import {
 interface BoardProps {
     initialColumns?: KanbanColumnDataClient[];
     role: string;
+}
+
+interface StoredFilters {
+    artistFilter: string[];
+    deadlineFrom: string;
+    deadlineTo: string;
+    monthFilter: string;
+    artifactFilter: string[];
+}
+
+// Filters persist per-browser so coming back to the board — later the same day, the next day, or
+// after switching to another sidebar section and back — shows the same filtered view rather than
+// resetting silently. localStorage rather than the URL: the ask was specifically "even if I just
+// come back to this page", not "if someone shares this link", and localStorage survives that
+// without needing every filter change to push a new URL. Versioned key so a future change to the
+// shape doesn't crash on an old saved value — a fresh empty start beats a fresh error.
+const FILTER_STORAGE_KEY = "pipeline:board-filters:v1";
+
+function loadStoredFilters(): StoredFilters | null {
+    try {
+        const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return {
+            artistFilter: Array.isArray(parsed.artistFilter) ? parsed.artistFilter : [],
+            deadlineFrom: typeof parsed.deadlineFrom === "string" ? parsed.deadlineFrom : "",
+            deadlineTo: typeof parsed.deadlineTo === "string" ? parsed.deadlineTo : "",
+            monthFilter: typeof parsed.monthFilter === "string" ? parsed.monthFilter : "",
+            artifactFilter: Array.isArray(parsed.artifactFilter) ? parsed.artifactFilter : [],
+        };
+    } catch {
+        // Private browsing can make localStorage throw on read; a saved filter is a convenience, not something worth a broken board over.
+        return null;
+    }
 }
 
 interface MultiFilterOption {
@@ -192,8 +226,31 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         : allColumns;
 
     useEffect(() => {
+        const saved = loadStoredFilters();
+        if (saved) {
+            setArtistFilter(saved.artistFilter);
+            setDeadlineFrom(saved.deadlineFrom);
+            setDeadlineTo(saved.deadlineTo);
+            setMonthFilter(saved.monthFilter);
+            setArtifactFilter(saved.artifactFilter);
+        }
         setMounted(true);
+        // Deliberately empty deps: this restores the saved filters once, on first mount. Re-running
+        // it on every filter change would fight the save effect below and undo a Clear Filters click.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Saves after the restore above has had its turn (guarded on `mounted`), so this never writes
+    // the empty initial state over a filter set that hasn't been loaded from storage yet.
+    useEffect(() => {
+        if (!mounted) return;
+        try {
+            const toStore: StoredFilters = { artistFilter, deadlineFrom, deadlineTo, monthFilter, artifactFilter };
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(toStore));
+        } catch {
+            // Same private-browsing possibility as the read above — losing persistence silently beats crashing the board.
+        }
+    }, [mounted, artistFilter, deadlineFrom, deadlineTo, monthFilter, artifactFilter]);
 
     const sensors = useSensors(
         useSensor(MouseSensor, {
@@ -287,9 +344,25 @@ export function Board({ initialColumns = [], role }: BoardProps) {
 
     if (!mounted) return null;
 
+    const activeFilterCount =
+        (artistFilter.length > 0 ? 1 : 0) +
+        (deadlineFrom || deadlineTo ? 1 : 0) +
+        (monthFilter ? 1 : 0) +
+        (artifactFilter.length > 0 ? 1 : 0);
+
     return (
         <>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div
+                className={`flex flex-wrap items-center gap-2 mb-3 rounded-md ${
+                    hasActiveFilters ? "border border-primary/40 bg-primary/5 p-2" : ""
+                }`}
+            >
+                {hasActiveFilters && (
+                    <span className="flex items-center gap-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold px-2.5 py-1">
+                        <Filter className="h-3 w-3" />
+                        {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active
+                    </span>
+                )}
                 <MultiFilterDropdown
                     label="All artists"
                     options={artistOptions}
