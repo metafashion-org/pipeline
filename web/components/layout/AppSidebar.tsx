@@ -15,6 +15,7 @@ import {
   BookOpen,
   Sparkles,
   PackageCheck,
+  Wallet,
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/publisher", icon: PackageCheck, label: "Uploader Queue" },
+  { href: "/admin/payments", icon: Wallet, label: "Payments" },
   { href: "/admin/forms", icon: ClipboardList, label: "Forms" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];

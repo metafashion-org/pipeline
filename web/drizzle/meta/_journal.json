@@ -204,6 +204,13 @@
       "when": 1789482000000,
       "tag": "0028_brand_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789483000000,
+      "tag": "0029_payment_batches",
+      "breakpoints": true
     }
   ]
 }
