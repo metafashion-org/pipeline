@@ -39,7 +39,7 @@ const NAV_ITEMS = [
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
   { href: "/curator", icon: Sparkles, label: "Curation" },
-  { href: "/admin/knowledge", icon: BookOpen, label: "Knowledge" },
+  { href: "/admin/knowledge", icon: BookOpen, label: "Registry" },
   { href: "/admin/archive", icon: Archive, label: "Archive" },
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },

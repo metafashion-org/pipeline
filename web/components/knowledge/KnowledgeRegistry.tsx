@@ -139,7 +139,7 @@ export function KnowledgeRegistry({
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Submit a Knowledge Artifact</DialogTitle>
+              <DialogTitle>Submit a Registry Artifact</DialogTitle>
               <DialogDescription>It gets a permanent ID (TR001, for example) on submit, so it can be cited and linked from anywhere.</DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
