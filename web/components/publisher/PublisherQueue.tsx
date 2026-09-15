@@ -18,6 +18,7 @@ interface QueueItem {
   deadline: string | null;
   artistName: string | null;
   brandGroupName: string | null;
+  brandGroupUrl: string | null;
   updatedAt: string;
 }
 
@@ -107,13 +108,26 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
           </p>
         </div>
         {item.brandGroupName ? (
-          <div
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400"
-            data-testid={`brand-group-${item.sku}`}
-          >
-            <Tags className="h-3.5 w-3.5" />
-            Upload to: {item.brandGroupName}
-          </div>
+          item.brandGroupUrl ? (
+            <a
+              href={item.brandGroupUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
+              data-testid={`brand-group-${item.sku}`}
+            >
+              <Tags className="h-3.5 w-3.5" />
+              Upload to: {item.brandGroupName}
+            </a>
+          ) : (
+            <div
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400"
+              data-testid={`brand-group-${item.sku}`}
+            >
+              <Tags className="h-3.5 w-3.5" />
+              Upload to: {item.brandGroupName}
+            </div>
+          )
         ) : (
           <div
             className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400"

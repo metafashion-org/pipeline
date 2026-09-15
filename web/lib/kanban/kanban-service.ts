@@ -4,6 +4,8 @@ import { statusTransitionRules } from "@/lib/db/schema/status_transition_rules";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
 import { brandGroups } from "@/lib/db/schema/brand_groups";
+import { artifactSkuLinks } from "@/lib/db/schema/artifact_sku_links";
+import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, and, asc, sql } from "drizzle-orm";
@@ -19,6 +21,12 @@ export interface KanbanColumnData {
   assets: KanbanAssetCard[];
 }
 
+export interface KanbanLinkedArtifact {
+  id: string;
+  artifactId: string;
+  title: string;
+}
+
 export interface KanbanAssetCard {
   id: string;
   sku: string;
@@ -30,8 +38,14 @@ export interface KanbanAssetCard {
   artistId: string | null;
   artistName: string | null;
   artistEmail: string | null;
+  // Used only to sort the board's artist filter (active people first) — not shown on the card itself.
+  artistStatus: string | null;
   brandGroupId: string | null;
   brandGroupName: string | null;
+  brandGroupUrl: string | null;
+  // Registry artifacts linked to this asset, so the board's filter can answer "which assets came
+  // out of this artifact" (e.g. a seasonal trend report) without a per-card network request.
+  linkedArtifacts: KanbanLinkedArtifact[];
   // Full deep-link (https://discord.com/channels/{guild}/{channel}), built
   // server-side so the client never needs the guild id as a public env var.
   // Null when the artist hasn't been linked to a Discord channel yet — see
@@ -63,9 +77,11 @@ export type KanbanAssetCardClient = Omit<KanbanAssetCard, "deadline" | "updatedA
 export type KanbanColumnDataClient = Omit<KanbanColumnData, "assets"> & { assets: KanbanAssetCardClient[] };
 
 export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[] }> {
-  // The status config and the asset list are independent, so they are fetched concurrently.
-  // Awaiting them in sequence spent two full network round trips where one would do, which is the dominant cost of rendering this page against a remote database.
-  const [allStatuses, fetchedAssets] = await Promise.all([
+  // The status config, the asset list, and the artist<->artifact link list are independent, so
+  // they are fetched concurrently. Links are queried separately rather than joined onto the main
+  // asset query because an asset can carry more than one link — a join would multiply its row
+  // (and every other joined column, artist/brand group included) once per link.
+  const [allStatuses, fetchedAssets, allLinks] = await Promise.all([
     db.select().from(statuses).orderBy(asc(statuses.sortOrder)),
     db
     .select({
@@ -79,9 +95,11 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       artistId: assets.currentArtistId,
       artistName: personnel.name,
       artistEmail: personnel.email,
+      artistStatus: personnel.status,
       artistDiscordChannelId: personnel.discordChannelId,
       brandGroupId: assets.brandGroupId,
       brandGroupName: brandGroups.name,
+      brandGroupUrl: brandGroups.robloxGroupUrl,
       gmailThreadId: assets.gmailThreadId,
       deadline: assets.deadline,
       updatedAt: assets.updatedAt,
@@ -95,9 +113,25 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
     // table and then discarded all but their own in JavaScript, on every page load. Compared
     // lowercase on both sides so this keeps the case-insensitive behaviour the filter had.
     .where(artistEmail ? sql`lower(${personnel.email}) = ${artistEmail.toLowerCase()}` : undefined),
+    db
+      .select({
+        assetId: artifactSkuLinks.assetId,
+        id: knowledgeArtifacts.id,
+        artifactId: knowledgeArtifacts.artifactId,
+        title: knowledgeArtifacts.title,
+      })
+      .from(artifactSkuLinks)
+      .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id)),
   ]);
 
   const guildId = process.env.DISCORD_GUILD_ID;
+
+  const linksByAsset = new Map<string, KanbanLinkedArtifact[]>();
+  for (const link of allLinks) {
+    const list = linksByAsset.get(link.assetId) ?? [];
+    list.push({ id: link.id, artifactId: link.artifactId, title: link.title });
+    linksByAsset.set(link.assetId, list);
+  }
 
   // Maps the raw query row (which selected the artist's discordChannelId, an
   // internal id) into the public KanbanAssetCard shape (a full deep-link URL,
@@ -105,6 +139,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   const allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
     ...rest,
     artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
+    linkedArtifacts: linksByAsset.get(rest.id) ?? [],
   }));
 
   const columnsMap = new Map<string, KanbanColumnData>();
