@@ -17,6 +17,8 @@ function testAssetDrawerRoleGating() {
     artistName: "Alice Smith",
     artistEmail: "alice@example.com",
     artistDiscordUrl: null,
+    brandGroupId: null,
+    brandGroupName: null,
     gmailThreadId: "thread-123",
     deadline: null,
     updatedAt: new Date(),

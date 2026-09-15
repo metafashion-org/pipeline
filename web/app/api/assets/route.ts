@@ -17,6 +17,7 @@ const CreateAssetSchema = z.object({
   deadline: z.string().trim().min(1).optional(),
   feeAmount: z.string().trim().min(1).optional(),
   currency: z.string().trim().min(1).optional(),
+  brandGroupId: z.string().trim().min(1).optional(),
   // Free text holding one or more links, the same shape the reference columns already hold in the database.
   referenceImages: z.string().optional(),
   recolorReferenceImages: z.string().optional(),
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
   }
 
-  const { itemName, category, feeAmount, currency } = parseResult.data;
+  const { itemName, category, feeAmount, currency, brandGroupId } = parseResult.data;
   // Continues the MF-<year>-<nnnn> sequence the rest of the table already uses. A concurrent create could pick the same number, which the unique constraint on assets.sku rejects and the 23505 branch below reports.
   let sku = parseResult.data.sku;
   if (!sku) {
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
         deadline,
         feeAmount: feeAmount || null,
         currency: currency || "INR",
+        brandGroupId: brandGroupId || null,
         referenceImages: toFileStoreEntries(parseResult.data.referenceImages),
         recolorReferenceImages: toFileStoreEntries(parseResult.data.recolorReferenceImages),
       })

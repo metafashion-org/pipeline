@@ -28,12 +28,13 @@ export async function PATCH(
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
   }
 
-  const { itemName, category, feeAmount, currency, deadline, paymentReceiptUrl } = parseResult.data;
+  const { itemName, category, feeAmount, currency, brandGroupId, deadline, paymentReceiptUrl } = parseResult.data;
   if (
     itemName === undefined &&
     category === undefined &&
     feeAmount === undefined &&
     currency === undefined &&
+    brandGroupId === undefined &&
     deadline === undefined &&
     paymentReceiptUrl === undefined &&
     parseResult.data.referenceImages === undefined &&
@@ -54,6 +55,7 @@ export async function PATCH(
       category: current.category,
       feeAmount: current.feeAmount,
       currency: current.currency,
+      brandGroupId: current.brandGroupId,
       deadline: current.deadline,
       paymentReceiptUrl: current.paymentReceiptUrl,
       referenceImages: current.referenceImages,
