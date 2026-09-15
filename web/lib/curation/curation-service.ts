@@ -414,6 +414,7 @@ export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 export interface UpdateAssetPaymentDetailsInput {
   currency?: SupportedCurrency;
   paymentReceiptUrl?: string;
+  paymentBatchId?: string;
 }
 
 // Sets an asset's currency and/or payment receipt URL without changing currentStatus.

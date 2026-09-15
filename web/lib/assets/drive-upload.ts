@@ -114,15 +114,26 @@ async function createFolder(name: string, driveId: string): Promise<string> {
   return folder.id;
 }
 
-// Finds (or creates) the one Drive folder holding an asset's reference files. Naming mirrors
-// catalog-intel's "Catalog Intel — <Focus Group Name>" convention.
-async function getOrCreateAssetFolder(sku: string): Promise<string> {
+// Finds (or creates) a named Drive folder directly under the shared drive root. Naming mirrors
+// catalog-intel's "Catalog Intel — <Focus Group Name>" convention — every folder this app creates
+// is "Meta Fashion Pipeline — <what it's for>", just with a different suffix per caller.
+async function getOrCreateFolder(name: string): Promise<string> {
   const driveId = sharedDriveId();
   if (!driveId) throw new Error("GOOGLE_SHARED_DRIVE_ID not set");
-  const name = `Meta Fashion Pipeline — ${sku}`.slice(0, 200);
-  const existing = await findFolder(name, driveId);
+  const truncated = name.slice(0, 200);
+  const existing = await findFolder(truncated, driveId);
   if (existing) return existing;
-  return createFolder(name, driveId);
+  return createFolder(truncated, driveId);
+}
+
+async function getOrCreateAssetFolder(sku: string): Promise<string> {
+  return getOrCreateFolder(`Meta Fashion Pipeline — ${sku}`);
+}
+
+// Payment summaries are grouped per artist rather than per asset — one payout can cover several
+// SKUs at once, so there's no single asset folder a receipt for the whole batch belongs in.
+async function getOrCreatePaymentFolder(artistName: string): Promise<string> {
+  return getOrCreateFolder(`Meta Fashion Pipeline — Payments — ${artistName}`);
 }
 
 export interface UploadedReference {
@@ -130,22 +141,13 @@ export interface UploadedReference {
   fileId: string;
 }
 
-/**
- * Uploads one file into the asset's Drive folder (created on first upload) and returns a
- * link usable directly as a pasted reference link — lib/assets/drive-links.ts's
- * extractDriveFileId() recognizes the /file/d/<id>/view shape returned here.
- */
-export async function uploadReferenceFile(
-  sku: string,
+/** The actual multipart upload, shared by every caller below — only the destination folder differs. */
+async function uploadFileToFolder(
+  folderId: string,
   fileName: string,
   mimeType: string,
   bytes: Buffer
 ): Promise<UploadedReference> {
-  if (!isConfigured()) {
-    throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
-  }
-  const folderId = await getOrCreateAssetFolder(sku);
-
   const boundary = `metafashion-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const metadata = JSON.stringify({ name: fileName, parents: [folderId] });
   const body = Buffer.concat([
@@ -178,4 +180,40 @@ export async function uploadReferenceFile(
     url: `https://drive.google.com/file/d/${created.id}/view`,
     fileId: created.id,
   };
+}
+
+/**
+ * Uploads one file into the asset's Drive folder (created on first upload) and returns a
+ * link usable directly as a pasted reference link — lib/assets/drive-links.ts's
+ * extractDriveFileId() recognizes the /file/d/<id>/view shape returned here.
+ */
+export async function uploadReferenceFile(
+  sku: string,
+  fileName: string,
+  mimeType: string,
+  bytes: Buffer
+): Promise<UploadedReference> {
+  if (!isConfigured()) {
+    throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
+  }
+  const folderId = await getOrCreateAssetFolder(sku);
+  return uploadFileToFolder(folderId, fileName, mimeType, bytes);
+}
+
+/**
+ * Uploads a payment summary (the bank's payout confirmation) into that artist's payments folder.
+ * Same underlying upload as uploadReferenceFile — only which folder it lands in differs, because
+ * a payout batch belongs to an artist, not to any one of the SKUs it covers.
+ */
+export async function uploadPaymentSummaryFile(
+  artistName: string,
+  fileName: string,
+  mimeType: string,
+  bytes: Buffer
+): Promise<UploadedReference> {
+  if (!isConfigured()) {
+    throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
+  }
+  const folderId = await getOrCreatePaymentFolder(artistName);
+  return uploadFileToFolder(folderId, fileName, mimeType, bytes);
 }
