@@ -25,6 +25,7 @@ export interface PublisherQueueItemView {
   deadline: string | null;
   artistName: string | null;
   brandGroupName: string | null;
+  brandGroupUrl: string | null;
   updatedAt: string;
 }
 

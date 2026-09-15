@@ -19,6 +19,7 @@ export interface ReadyForUploadItem {
   // front and center, since uploading to the wrong group is the whole failure mode
   // this field exists to prevent. Null means nobody has set a group on this asset yet.
   brandGroupName: string | null;
+  brandGroupUrl: string | null;
   updatedAt: Date;
 }
 
@@ -36,6 +37,7 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
       deadline: assets.deadline,
       artistName: personnel.name,
       brandGroupName: brandGroups.name,
+      brandGroupUrl: brandGroups.robloxGroupUrl,
       updatedAt: assets.updatedAt,
     })
     .from(assets)

@@ -13,7 +13,7 @@ import {
     closestCorners,
 } from "@dnd-kit/core";
 import useSWR from "swr";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, ChevronDown } from "lucide-react";
 
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
@@ -22,13 +22,89 @@ import { toast } from "sonner";
 // server render and ISO strings when SWR refetched it.
 import type { KanbanColumnDataClient, KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface BoardProps {
     initialColumns?: KanbanColumnDataClient[];
     role: string;
+}
+
+interface MultiFilterOption {
+    value: string;
+    label: string;
+    /** Options with this true are grouped and listed ahead of the rest — used to put active artists first. */
+    prioritized?: boolean;
+}
+
+/** A "N selected" dropdown of checkboxes, used for both the artist and registry-link filters below. */
+function MultiFilterDropdown({
+    label,
+    options,
+    selected,
+    onChange,
+}: {
+    label: string;
+    options: MultiFilterOption[];
+    selected: string[];
+    onChange: (next: string[]) => void;
+}) {
+    const toggle = (value: string) => {
+        onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+    };
+
+    const prioritized = options.filter((o) => o.prioritized);
+    const rest = options.filter((o) => !o.prioritized);
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+                    {selected.length === 0 ? label : `${label}: ${selected.length} selected`}
+                    <ChevronDown className="h-3 w-3" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+                {options.length === 0 && (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">Nothing to filter by yet.</div>
+                )}
+                {prioritized.length > 0 && (
+                    <>
+                        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider">Active</DropdownMenuLabel>
+                        {prioritized.map((o) => (
+                            <DropdownMenuCheckboxItem
+                                key={o.value}
+                                checked={selected.includes(o.value)}
+                                onCheckedChange={() => toggle(o.value)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                {o.label}
+                            </DropdownMenuCheckboxItem>
+                        ))}
+                        {rest.length > 0 && <DropdownMenuSeparator />}
+                    </>
+                )}
+                {rest.map((o) => (
+                    <DropdownMenuCheckboxItem
+                        key={o.value}
+                        checked={selected.includes(o.value)}
+                        onCheckedChange={() => toggle(o.value)}
+                        onSelect={(e) => e.preventDefault()}
+                    >
+                        {o.label}
+                    </DropdownMenuCheckboxItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
 export function Board({ initialColumns = [], role }: BoardProps) {
@@ -45,32 +121,70 @@ export function Board({ initialColumns = [], role }: BoardProps) {
     const [activeTask, setActiveTask] = useState<KanbanAssetCardClient | null>(null);
     const [mounted, setMounted] = useState(false);
 
-    // Filters — artist-wise and deadline-date-wise, both requested from the
-    // team meeting notes. Purely client-side: the data's already loaded, so
-    // filtering it again over the network would just be added latency for
-    // no reason. "Deadline from/to" rather than a single date, since a
-    // range covers both "what's due this week" and "what's due today"
-    // without needing two different controls.
-    const [artistFilter, setArtistFilter] = useState<string>("all");
+    // Filters — artist, deadline range, deadline month, and registry-artifact links. Purely
+    // client-side: the data's already loaded, so filtering it again over the network would just
+    // be added latency for no reason. "Deadline from/to" rather than a single date, since a range
+    // covers both "what's due this week" and "what's due today" without needing two controls.
+    // Month is a distinct control from that range — "what shipped in a given month" (e.g.
+    // reviewing everything tagged for a season) is a different question than "what's due between
+    // two arbitrary dates", so it isn't merged into the range inputs.
+    const [artistFilter, setArtistFilter] = useState<string[]>([]);
     const [deadlineFrom, setDeadlineFrom] = useState<string>("");
     const [deadlineTo, setDeadlineTo] = useState<string>("");
+    const [monthFilter, setMonthFilter] = useState<string>(""); // "YYYY-MM", from <input type="month">
+    const [artifactFilter, setArtifactFilter] = useState<string[]>([]);
 
-    const allArtists = Array.from(
-        new Set(allColumns.flatMap((c) => c.assets.map((a) => a.artistName).filter((n): n is string => !!n)))
-    ).sort();
+    const allAssetsFlat = allColumns.flatMap((c) => c.assets);
 
-    const hasActiveFilters = artistFilter !== "all" || deadlineFrom !== "" || deadlineTo !== "";
+    // Active artists first, per the ask — everyone else follows, both groups alphabetical.
+    const artistOptions = (() => {
+        const byName = new Map<string, { active: boolean }>();
+        for (const a of allAssetsFlat) {
+            if (!a.artistName) continue;
+            if (!byName.has(a.artistName)) byName.set(a.artistName, { active: a.artistStatus === "Active" });
+        }
+        return Array.from(byName.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, { active }]) => ({ value: name, label: name, prioritized: active }));
+    })();
+
+    // Every registry artifact currently linked to at least one asset on the board — an artifact
+    // nothing is linked to yet would just be a dead option, so the list is derived from real
+    // links rather than the full registry.
+    const artifactOptions = (() => {
+        const byId = new Map<string, string>();
+        for (const a of allAssetsFlat) {
+            for (const link of a.linkedArtifacts) {
+                if (!byId.has(link.id)) byId.set(link.id, `${link.artifactId} — ${link.title}`);
+            }
+        }
+        return Array.from(byId.entries())
+            .sort(([, a], [, b]) => a.localeCompare(b))
+            .map(([id, label]) => ({ value: id, label }));
+    })();
+
+    const hasActiveFilters =
+        artistFilter.length > 0 || deadlineFrom !== "" || deadlineTo !== "" || monthFilter !== "" || artifactFilter.length > 0;
 
     const columns: KanbanColumnDataClient[] = hasActiveFilters
         ? allColumns.map((col) => ({
               ...col,
               assets: col.assets.filter((a) => {
-                  if (artistFilter !== "all" && a.artistName !== artistFilter) return false;
+                  if (artistFilter.length > 0 && (!a.artistName || !artistFilter.includes(a.artistName))) return false;
                   if (deadlineFrom || deadlineTo) {
                       if (!a.deadline) return false;
                       const d = new Date(a.deadline);
                       if (deadlineFrom && d < new Date(deadlineFrom)) return false;
                       if (deadlineTo && d > new Date(`${deadlineTo}T23:59:59`)) return false;
+                  }
+                  if (monthFilter) {
+                      if (!a.deadline) return false;
+                      const d = new Date(a.deadline);
+                      const assetMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                      if (assetMonth !== monthFilter) return false;
+                  }
+                  if (artifactFilter.length > 0 && !a.linkedArtifacts.some((link) => artifactFilter.includes(link.id))) {
+                      return false;
                   }
                   return true;
               }),
@@ -176,19 +290,12 @@ export function Board({ initialColumns = [], role }: BoardProps) {
     return (
         <>
             <div className="flex flex-wrap items-center gap-2 mb-3">
-                <Select value={artistFilter} onValueChange={setArtistFilter}>
-                    <SelectTrigger className="w-[160px] h-8 text-xs">
-                        <SelectValue placeholder="All artists" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All artists</SelectItem>
-                        {allArtists.map((name) => (
-                            <SelectItem key={name} value={name}>
-                                {name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                <MultiFilterDropdown
+                    label="All artists"
+                    options={artistOptions}
+                    selected={artistFilter}
+                    onChange={setArtistFilter}
+                />
 
                 <Input
                     type="date"
@@ -206,15 +313,33 @@ export function Board({ initialColumns = [], role }: BoardProps) {
                     aria-label="Deadline to"
                 />
 
+                <span className="text-xs text-muted-foreground pl-1">month</span>
+                <Input
+                    type="month"
+                    value={monthFilter}
+                    onChange={(e) => setMonthFilter(e.target.value)}
+                    className="w-[140px] h-8 text-xs"
+                    aria-label="Deadline month"
+                />
+
+                <MultiFilterDropdown
+                    label="All registry links"
+                    options={artifactOptions}
+                    selected={artifactFilter}
+                    onChange={setArtifactFilter}
+                />
+
                 {hasActiveFilters && (
                     <Button
                         variant="ghost"
                         size="sm"
                         className="h-8 text-xs text-muted-foreground"
                         onClick={() => {
-                            setArtistFilter("all");
+                            setArtistFilter([]);
                             setDeadlineFrom("");
                             setDeadlineTo("");
+                            setMonthFilter("");
+                            setArtifactFilter([]);
                         }}
                     >
                         <X className="h-3 w-3 mr-1" /> Clear filters

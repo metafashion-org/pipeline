@@ -126,9 +126,22 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{formatDate(asset.deadline, "Not set")}</p></div>
             <div>
               <span className="text-xs text-muted-foreground">Upload Group:</span>{" "}
-              <p className={asset.brandGroupName ? undefined : "text-amber-600 dark:text-amber-400"}>
-                {asset.brandGroupName || "Not set"}
-              </p>
+              {asset.brandGroupName ? (
+                asset.brandGroupUrl ? (
+                  <a
+                    href={asset.brandGroupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    {asset.brandGroupName}
+                  </a>
+                ) : (
+                  <p>{asset.brandGroupName}</p>
+                )
+              ) : (
+                <p className="text-amber-600 dark:text-amber-400">Not set</p>
+              )}
             </div>
             <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{formatDate(asset.updatedAt)}</p></div>
           </div>
