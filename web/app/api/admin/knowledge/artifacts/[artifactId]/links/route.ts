@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -71,6 +72,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const links = await getLinksForArtifact(artifactId);
     return NextResponse.json({ links });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create link" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to create link") }, { status: 400 });
   }
 }

@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { rejectOnboardingRequest } from "@/lib/personnel/onboarding-sync";
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to reject request" },
+      { error: errorMessage(error, "Failed to reject request") },
       { status: 400 }
     );
   }

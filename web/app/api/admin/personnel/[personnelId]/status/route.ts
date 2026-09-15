@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { setPersonnelStatus } from "@/lib/forms/onboarding";
@@ -41,7 +42,7 @@ export async function POST(
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update status" },
+      { error: errorMessage(error, "Failed to update status") },
       { status: 400 }
     );
   }

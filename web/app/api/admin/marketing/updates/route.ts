@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { addMarketingUpdate, INITIAL_MARKETING_STATUSES } from "@/lib/marketing/marketing-service";
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, update });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to add marketing update" },
+      { error: errorMessage(error, "Failed to add marketing update") },
       { status: 400 }
     );
   }

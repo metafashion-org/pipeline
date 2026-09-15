@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { uploadReferenceFile, isConfigured } from "@/lib/assets/drive-upload";
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Reference upload failed:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Upload failed" },
+      { error: errorMessage(error, "Upload failed") },
       { status: 500 }
     );
   }

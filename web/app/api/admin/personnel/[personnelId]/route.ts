@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { db } from "@/lib/db/client";
@@ -96,7 +97,7 @@ export async function DELETE(
         { status: 400 }
       );
     }
-    const message = error instanceof Error ? error.message : "Failed to delete personnel";
+    const message = errorMessage(error, "Failed to delete personnel");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 

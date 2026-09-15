@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { jsonFetcher } from "@/lib/fetcher";
+import { apiCall } from "@/lib/api-client";
 import {
     Dialog,
     DialogContent,
@@ -52,10 +53,9 @@ export function NewAssetDialog() {
 
         setSubmitting(true);
         try {
-            const response = await fetch("/api/assets", {
+            const { ok, data: result } = await apiCall<{ asset: { sku: string } }>("/api/assets", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+                body: {
                     sku: form.sku.trim() || undefined,
                     itemName: form.itemName.trim(),
                     category: form.category.trim() || undefined,
@@ -65,20 +65,17 @@ export function NewAssetDialog() {
                     brandGroupId: form.brandGroupId || undefined,
                     referenceImages: form.referenceImages.trim() || undefined,
                     recolorReferenceImages: form.recolorReferenceImages.trim() || undefined,
-                }),
+                },
             });
 
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || "Failed to create asset");
+            if (!ok) {
+                toast.error(result.error || "Failed to create asset");
+                return;
             }
 
             toast.success(`Asset created: ${result.asset.sku}`);
             handleOpenChange(false);
             mutate("/api/assets");
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to create asset";
-            toast.error(message);
         } finally {
             setSubmitting(false);
         }

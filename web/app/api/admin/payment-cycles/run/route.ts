@@ -1,8 +1,8 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { getAuthedUser } from "@/lib/auth/authed-user";
+import { ENV } from "@/lib/env";
 import { runPaymentCyclePull } from "@/lib/payments/payment-cycle-service";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 
 // Two ways in: an authenticated admin (the "Run pull now" button on /admin/archive),
 // or Vercel's own cron invocation, authenticated via a shared CRON_SECRET per
@@ -11,15 +11,13 @@ import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 // vars for the cron path to work; without it, only admin sessions can call this.
 async function isAuthorized(request: NextRequest): Promise<boolean> {
   const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`) {
+  if (ENV.CRON_SECRET && authHeader === `Bearer ${ENV.CRON_SECRET}`) {
     return true;
   }
-  const session = await getServerSession(authOptions);
-  if (!session) return false;
-  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
-  // Running a payment cycle pull is a money action, so it stays on the same capability that gates
-  // marking payments done rather than on the deprecated collapsed session.user.role.
-  return caps.canMarkPaymentDone;
+  // getAuthedUser returns null for Inactive and Blacklisted personnel, whose sessions stay valid until they expire.
+  const user = await getAuthedUser();
+  // Running a payment cycle pull is a money action, so it uses the same capability that gates marking payments done.
+  return user?.caps.canMarkPaymentDone ?? false;
 }
 
 // Shared by both methods: Vercel Cron Jobs invoke this path with GET, while the
@@ -34,7 +32,7 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to run payment cycle pull" },
+      { error: errorMessage(error, "Failed to run payment cycle pull") },
       { status: 500 }
     );
   }

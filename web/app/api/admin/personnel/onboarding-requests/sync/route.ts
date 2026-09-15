@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { syncOnboardingRequests, listOnboardingRequests } from "@/lib/personnel/onboarding-sync";
@@ -25,7 +26,7 @@ export async function POST() {
     return NextResponse.json({ result, requests: await listOnboardingRequests() });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to sync onboarding requests" },
+      { error: errorMessage(error, "Failed to sync onboarding requests") },
       { status: 500 }
     );
   }

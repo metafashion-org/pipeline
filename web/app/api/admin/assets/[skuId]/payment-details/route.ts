@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { updateAssetPaymentDetails, SUPPORTED_CURRENCIES } from "@/lib/curation/curation-service";
@@ -35,6 +36,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     );
     return NextResponse.json({ success: true, result });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to update payment details" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(err, "Failed to update payment details") }, { status: 400 });
   }
 }

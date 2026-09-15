@@ -1,6 +1,7 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
-import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
+import { TransitionRefusedError, updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { z } from "zod";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
@@ -47,9 +48,8 @@ export async function PATCH(
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     console.error("Error in status update endpoint:", error);
-    // A refusal by the transition rules is an authorization answer, not a malformed request.
-    const message = error instanceof Error ? error.message : "Failed to update status";
-    const status = /forbidden|not permitted/.test(message) ? 403 : 400;
-    return NextResponse.json({ error: message }, { status });
+    // A refused transition is an authorization answer (403). Any other failure is a bad request (400).
+    const status = error instanceof TransitionRefusedError ? 403 : 400;
+    return NextResponse.json({ error: errorMessage(error, "Failed to update status") }, { status });
   }
 }

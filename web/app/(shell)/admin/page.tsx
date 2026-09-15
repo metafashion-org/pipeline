@@ -15,17 +15,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { DEFAULT_CURRENCY, formatFee } from "@/lib/format-money";
 
 export const dynamic = "force-dynamic";
 
-const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", INR: "₹", RUB: "₽" };
-
 /**
- * Formats an amount in its own currency.
+ * Formats an amount in its own currency, rounded to a whole unit.
  * Amounts are never summed across currencies anywhere on this page: adding dollars to rupees produces a figure that means nothing, and converting at today's rate would make every historical total drift daily.
  */
-function money(amount: number, currency = "INR"): string {
-    return `${CURRENCY_SYMBOLS[currency] || ""}${Math.round(amount).toLocaleString("en-US")}`;
+function money(amount: number, currency = DEFAULT_CURRENCY): string {
+    return formatFee(Math.round(amount), currency);
 }
 
 function monthLabel(key: string): string {

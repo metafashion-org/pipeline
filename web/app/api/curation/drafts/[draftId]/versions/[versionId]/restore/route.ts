@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -22,6 +23,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ dr
     const draft = await restoreDraftVersion(draftId, session.user.personnelId, versionId);
     return NextResponse.json({ draft });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to restore version" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to restore version") }, { status: 400 });
   }
 }

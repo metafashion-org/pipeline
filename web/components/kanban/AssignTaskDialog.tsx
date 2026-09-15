@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { jsonFetcher } from "@/lib/fetcher";
+import { apiCall } from "@/lib/api-client";
 import { Label } from "@/components/ui/label";
 import {
     Select,
@@ -78,19 +79,17 @@ export function AssignTaskDialog({ sku, currentArtistId, currentArtistName }: As
         if (!artistId) return;
         setSubmitting(true);
         try {
-            const res = await fetch(`/api/assets/${encodeURIComponent(sku)}/assign`, {
+            const { ok, data: result } = await apiCall(`/api/assets/${encodeURIComponent(sku)}/assign`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+                body: {
                     artistId,
                     deadline: deadline || undefined,
                     feeAmount: feeAmount.trim() || undefined,
                     ccEmails: ccEmails.split(",").map((e) => e.trim()).filter(Boolean),
                     reason: isReassign ? `Reassigned from ${currentArtistName || "previous artist"}` : undefined,
-                }),
+                },
             });
-            const result = await res.json();
-            if (!res.ok) {
+            if (!ok) {
                 toast.error(result.error || "Failed to assign artist");
                 return;
             }
