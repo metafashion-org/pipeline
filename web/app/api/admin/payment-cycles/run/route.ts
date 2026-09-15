@@ -5,7 +5,7 @@ import { ENV } from "@/lib/env";
 import { runPaymentCyclePull } from "@/lib/payments/payment-cycle-service";
 
 // The payment_cycles snapshot this produces is no longer read anywhere — payments moved to a
-// live, per-artist view at /admin/payments (see lib/payments/payment-batch-service.ts) instead of
+// live, per-artist view at /admin/archive (see lib/payments/payment-batch-service.ts) instead of
 // a 15th/last-day-of-month pull, and vercel.json's cron entry calling this route was removed
 // along with the "Run pull now" button that used to POST here manually. Left in place rather than
 // deleted: it's harmless, still properly gated, and the historical payment_cycles/
