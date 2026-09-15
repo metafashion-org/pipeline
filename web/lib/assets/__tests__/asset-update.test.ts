@@ -9,6 +9,7 @@ function testFeeAmountNumericComparison() {
     category: null,
     feeAmount: "1000.00",
     currency: "USD",
+    brandGroupId: null,
     deadline: null,
     paymentReceiptUrl: null, referenceImages: [], recolorReferenceImages: [],
   };
@@ -54,6 +55,7 @@ function testNoFieldsSentMeansNoChange() {
     category: "Tops",
     feeAmount: "1000.00",
     currency: "USD",
+    brandGroupId: null,
     deadline: new Date("2026-01-01T00:00:00.000Z"),
     paymentReceiptUrl: null, referenceImages: [], recolorReferenceImages: [],
   };

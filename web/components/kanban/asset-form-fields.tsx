@@ -1,5 +1,6 @@
 "use client";
 
+import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,12 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ReferenceUploadButton } from "./reference-upload-button";
+import { jsonFetcher } from "@/lib/fetcher";
+
+interface BrandGroup {
+    id: string;
+    name: string;
+}
 
 /**
  * The asset fields shared by the create and edit dialogs.
@@ -28,6 +35,10 @@ export interface AssetFormValues {
     category: string;
     feeAmount: string;
     currency: string;
+    // The Roblox creator group/brand this asset uploads to. Empty string means unset (the
+    // "(none)" option) — converted to null before it reaches the API, since brandGroupId is a
+    // real uuid column, never an empty string.
+    brandGroupId: string;
     deadline: string;
     referenceImages: string;
     recolorReferenceImages: string;
@@ -39,6 +50,7 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
     category: "",
     feeAmount: "",
     currency: "INR",
+    brandGroupId: "",
     deadline: "",
     referenceImages: "",
     recolorReferenceImages: "",
@@ -72,6 +84,11 @@ export function AssetFormFields({
     const uploadSku = values.sku || skuPreview || "";
     const appendLinks = (field: "referenceImages" | "recolorReferenceImages", urls: string[]) =>
         set({ [field]: [values[field], ...urls].filter(Boolean).join("\n") });
+
+    // Open to any signed-in user (not gated on canManageSystemConfig) — see app/api/admin/brand-groups/route.ts's GET comment.
+    const { data: brandGroupsData } = useSWR<{ brandGroups?: BrandGroup[] }>("/api/admin/brand-groups", jsonFetcher);
+    const brandGroups = brandGroupsData?.brandGroups ?? [];
+    const NO_GROUP = "__none__";
 
     return (
         <div className="grid gap-3 py-2">
@@ -107,6 +124,27 @@ export function AssetFormFields({
                         onChange={(e) => set({ category: e.target.value })}
                     />
                 </div>
+            </div>
+
+            <div className="grid gap-1.5">
+                <Label htmlFor={id("brand-group")}>Upload group / brand</Label>
+                <Select
+                    value={values.brandGroupId || NO_GROUP}
+                    onValueChange={(v) => set({ brandGroupId: v === NO_GROUP ? "" : v })}
+                >
+                    <SelectTrigger id={id("brand-group")} className="w-full">
+                        <SelectValue placeholder="Not set" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value={NO_GROUP}>Not set</SelectItem>
+                        {brandGroups.map((g) => (
+                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                    Which Roblox creator group this asset uploads to. Shown to the uploader once it&apos;s ready to publish.
+                </p>
             </div>
 
             <div className="grid grid-cols-3 gap-3">

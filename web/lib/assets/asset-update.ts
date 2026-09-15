@@ -12,6 +12,10 @@ export const UpdateAssetSchema = z.object({
       message: "feeAmount must be a numeric string or null",
     }),
   currency: z.string().trim().min(1).optional(),
+  // Which Roblox creator group/brand this uploads to. The client sends a real group id or null
+  // (never empty string) to clear it — same "null means unset" convention category/
+  // paymentReceiptUrl already use.
+  brandGroupId: z.string().nullable().optional(),
   deadline: z
     .string()
     .nullable()
@@ -32,6 +36,7 @@ export interface AssetCurrentValues {
   category: string | null;
   feeAmount: string | null;
   currency: string | null;
+  brandGroupId: string | null;
   deadline: Date | null;
   paymentReceiptUrl: string | null;
   referenceImages: unknown;
@@ -81,6 +86,11 @@ export function computeAssetChanges(current: AssetCurrentValues, patch: AssetUpd
   if (patch.currency !== undefined && patch.currency !== current.currency) {
     changes.currency = { from: current.currency, to: patch.currency };
     updates.currency = patch.currency;
+  }
+
+  if (patch.brandGroupId !== undefined && patch.brandGroupId !== current.brandGroupId) {
+    changes.brandGroupId = { from: current.brandGroupId, to: patch.brandGroupId };
+    updates.brandGroupId = patch.brandGroupId;
   }
 
   if (patch.deadline !== undefined) {

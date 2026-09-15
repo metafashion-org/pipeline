@@ -62,6 +62,7 @@ export function NewAssetDialog() {
                     deadline: form.deadline || undefined,
                     feeAmount: form.feeAmount.trim() || undefined,
                     currency: form.currency,
+                    brandGroupId: form.brandGroupId || undefined,
                     referenceImages: form.referenceImages.trim() || undefined,
                     recolorReferenceImages: form.recolorReferenceImages.trim() || undefined,
                 }),

@@ -5,6 +5,7 @@ import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { listStatuses, listTransitionRules } from "@/lib/settings/settings-service";
 import { getCurationFieldConfigs, seedDefaultCurationFieldConfig } from "@/lib/curation/curation-service";
 import { SettingsManager } from "@/components/settings/SettingsManager";
+import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -38,7 +39,8 @@ export default async function SettingsPage() {
         description="Statuses, transition rules, and which fields go in the assignment email."
       />
 
-      <main className="flex-1 overflow-auto p-4 sm:p-6">
+      <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
+        <BrandGroupsManager />
         <SettingsManager initialStatuses={statuses} initialRules={rules} initialCurationFields={curationFields} />
       </main>
     </div>

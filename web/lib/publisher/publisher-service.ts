@@ -1,6 +1,7 @@
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
+import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
@@ -14,6 +15,10 @@ export interface ReadyForUploadItem {
   category: string | null;
   deadline: Date | null;
   artistName: string | null;
+  // Which Roblox creator group/brand this asset uploads to — the uploader needs this
+  // front and center, since uploading to the wrong group is the whole failure mode
+  // this field exists to prevent. Null means nobody has set a group on this asset yet.
+  brandGroupName: string | null;
   updatedAt: Date;
 }
 
@@ -30,10 +35,12 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
       category: assets.category,
       deadline: assets.deadline,
       artistName: personnel.name,
+      brandGroupName: brandGroups.name,
       updatedAt: assets.updatedAt,
     })
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
+    .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
     .where(eq(assets.currentStatus, "ready_for_upload"))
     .orderBy(asc(assets.updatedAt));
 

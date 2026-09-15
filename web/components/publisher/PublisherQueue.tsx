@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { PackageCheck, ExternalLink, Plus, X, AlertCircle } from "lucide-react";
+import { PackageCheck, ExternalLink, Plus, X, AlertCircle, Tags, TriangleAlert } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 import { apiCall } from "@/lib/api-client";
 import { parseRobloxLinkLines, splitRobloxLinkText } from "@/lib/publisher/roblox-links";
@@ -17,6 +17,7 @@ interface QueueItem {
   category: string | null;
   deadline: string | null;
   artistName: string | null;
+  brandGroupName: string | null;
   updatedAt: string;
 }
 
@@ -105,6 +106,23 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
             {item.category || "Uncategorised"} · Artist: {item.artistName || "-"} · Deadline: {formatDate(item.deadline, "Not set")}
           </p>
         </div>
+        {item.brandGroupName ? (
+          <div
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400"
+            data-testid={`brand-group-${item.sku}`}
+          >
+            <Tags className="h-3.5 w-3.5" />
+            Upload to: {item.brandGroupName}
+          </div>
+        ) : (
+          <div
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400"
+            data-testid={`brand-group-missing-${item.sku}`}
+          >
+            <TriangleAlert className="h-3.5 w-3.5" />
+            No upload group set — confirm with an operator
+          </div>
+        )}
       </div>
 
       <div className="grid gap-1">

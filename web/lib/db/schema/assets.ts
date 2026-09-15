@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, timestamp, numeric, jsonb, index } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
+import { brandGroups } from "./brand_groups";
 
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -8,6 +9,9 @@ export const assets = pgTable("assets", {
   category: text("category"),
   currentStatus: text("current_status").notNull().default("unassigned"),
   currentArtistId: uuid("current_artist_id").references(() => personnel.id),
+  // Which Roblox creator group/brand this asset gets uploaded under — the uploader's own queue
+  // reads and surfaces this directly, since it's specifically for them.
+  brandGroupId: uuid("brand_group_id").references(() => brandGroups.id),
   deadline: timestamp("deadline", { withTimezone: true }),
   feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }),
   currency: text("currency").default("INR"), // MetaFashion pays in INR by default; USD/EUR/RUB stay selectable for artists paid elsewhere.
@@ -26,4 +30,5 @@ export const assets = pgTable("assets", {
   // were sequential scans; sku already has one from its unique constraint.
   index("assets_current_status_idx").on(table.currentStatus),
   index("assets_current_artist_idx").on(table.currentArtistId),
+  index("assets_brand_group_idx").on(table.brandGroupId),
 ]);

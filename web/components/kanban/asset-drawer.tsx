@@ -124,6 +124,12 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <div><span className="text-xs text-muted-foreground">Category:</span> <p>{asset.category || "N/A"}</p></div>
             <div><span className="text-xs text-muted-foreground">Status:</span> <p className="capitalize">{asset.currentStatus}</p></div>
             <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{formatDate(asset.deadline, "Not set")}</p></div>
+            <div>
+              <span className="text-xs text-muted-foreground">Upload Group:</span>{" "}
+              <p className={asset.brandGroupName ? undefined : "text-amber-600 dark:text-amber-400"}>
+                {asset.brandGroupName || "Not set"}
+              </p>
+            </div>
             <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{formatDate(asset.updatedAt)}</p></div>
           </div>
         </section>

@@ -3,6 +3,7 @@ import { statuses } from "@/lib/db/schema/statuses";
 import { statusTransitionRules } from "@/lib/db/schema/status_transition_rules";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
+import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, and, asc, sql } from "drizzle-orm";
@@ -29,6 +30,8 @@ export interface KanbanAssetCard {
   artistId: string | null;
   artistName: string | null;
   artistEmail: string | null;
+  brandGroupId: string | null;
+  brandGroupName: string | null;
   // Full deep-link (https://discord.com/channels/{guild}/{channel}), built
   // server-side so the client never needs the guild id as a public env var.
   // Null when the artist hasn't been linked to a Discord channel yet — see
@@ -77,6 +80,8 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       artistName: personnel.name,
       artistEmail: personnel.email,
       artistDiscordChannelId: personnel.discordChannelId,
+      brandGroupId: assets.brandGroupId,
+      brandGroupName: brandGroups.name,
       gmailThreadId: assets.gmailThreadId,
       deadline: assets.deadline,
       updatedAt: assets.updatedAt,
@@ -85,6 +90,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
     })
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
+    .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
     // Filter in the query rather than after it. An artist's board read every asset in the
     // table and then discarded all but their own in JavaScript, on every page load. Compared
     // lowercase on both sides so this keeps the case-insensitive behaviour the filter had.
