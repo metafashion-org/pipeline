@@ -10,6 +10,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { ReferenceUploadButton } from "./reference-upload-button";
 
 /**
  * The asset fields shared by the create and edit dialogs.
@@ -65,6 +66,12 @@ export function AssetFormFields({
 }) {
     const set = (patch: Partial<AssetFormValues>) => onChange({ ...values, ...patch });
     const id = (name: string) => `${idPrefix}-${name}`;
+    // Edit mode already has the real SKU in values.sku (EditAssetDialog seeds it even though the
+    // field itself is hidden there). Create mode never writes to values.sku — the SKU field is
+    // display-only — so it falls back to the previewed one instead.
+    const uploadSku = values.sku || skuPreview || "";
+    const appendLinks = (field: "referenceImages" | "recolorReferenceImages", urls: string[]) =>
+        set({ [field]: [values[field], ...urls].filter(Boolean).join("\n") });
 
     return (
         <div className="grid gap-3 py-2">
@@ -141,25 +148,39 @@ export function AssetFormFields({
             </div>
 
             <div className="grid gap-1.5">
-                <Label htmlFor={id("refs")}>Reference links</Label>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor={id("refs")}>Reference links</Label>
+                    <ReferenceUploadButton
+                        sku={uploadSku}
+                        disabled={!uploadSku}
+                        onUploaded={(urls) => appendLinks("referenceImages", urls)}
+                    />
+                </div>
                 <Textarea
                     id={id("refs")}
                     rows={2}
-                    placeholder="Paste Drive links, one per line"
+                    placeholder="Paste Drive links, or upload image files directly"
                     value={values.referenceImages}
                     onChange={(e) => set({ referenceImages: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                    The first link becomes the card&apos;s thumbnail image. All links show as previews in the asset drawer.
+                    The first link becomes the card&apos;s thumbnail image. All links show as previews in the asset drawer. Uploaded files land in the team Shared Drive automatically.
                 </p>
             </div>
 
             <div className="grid gap-1.5">
-                <Label htmlFor={id("recolours")}>Recolour references</Label>
+                <div className="flex items-center justify-between">
+                    <Label htmlFor={id("recolours")}>Recolour references</Label>
+                    <ReferenceUploadButton
+                        sku={uploadSku}
+                        disabled={!uploadSku}
+                        onUploaded={(urls) => appendLinks("recolorReferenceImages", urls)}
+                    />
+                </div>
                 <Textarea
                     id={id("recolours")}
                     rows={2}
-                    placeholder="Optional, one link per line"
+                    placeholder="Optional, one link per line, or upload directly"
                     value={values.recolorReferenceImages}
                     onChange={(e) => set({ recolorReferenceImages: e.target.value })}
                 />
