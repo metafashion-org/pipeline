@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { db } from "@/lib/db/client";
 import { onboardingRequests } from "@/lib/db/schema/onboarding_requests";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
@@ -250,7 +251,7 @@ export async function syncOnboardingRequests(): Promise<SyncResult> {
       updated: email.updated + discord.updated,
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = errorMessage(error, "Unknown error");
     console.error("[onboarding-sync] Discord side failed:", message);
     return {
       emailFound: email.found,

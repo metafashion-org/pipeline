@@ -1,5 +1,7 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { isConfigured, expireTempAccessGrants } from "@/lib/discord/team-service";
+import { ENV } from "@/lib/env";
 
 // Hit by an hourly VM crontab entry (temp access is day-granular, hourly is
 // more than tight enough) — see scripts/discord-temp-access-cron.sh.
@@ -13,7 +15,7 @@ import { isConfigured, expireTempAccessGrants } from "@/lib/discord/team-service
 // reachable by anyone who found the URL. Gated on a shared secret instead
 // (DISCORD_CRON_SECRET) - fails closed if the env var isn't set at all.
 export async function POST(request: NextRequest) {
-  const expectedSecret = process.env.DISCORD_CRON_SECRET;
+  const expectedSecret = ENV.DISCORD_CRON_SECRET;
   const providedSecret = request.headers.get("x-cron-secret");
   if (!expectedSecret || providedSecret !== expectedSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,6 +29,6 @@ export async function POST(request: NextRequest) {
     const result = await expireTempAccessGrants();
     return NextResponse.json({ ok: true, ...result });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to expire temp access grants" }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to expire temp access grants") }, { status: 500 });
   }
 }

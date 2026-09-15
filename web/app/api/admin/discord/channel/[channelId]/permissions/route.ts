@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -17,6 +18,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cha
     const detail = await getChannelPermissionDetail(channelId);
     return NextResponse.json(detail);
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load channel permissions" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to load channel permissions") }, { status: 400 });
   }
 }

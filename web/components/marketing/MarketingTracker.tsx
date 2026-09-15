@@ -46,6 +46,7 @@ import { Switch } from "@/components/ui/switch";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
+import { apiCall } from "@/lib/api-client";
 
 const COMMON_PLATFORMS = ["Pinterest", "Instagram", "TikTok", "YouTube Shorts", "Twitter/X"];
 const COMMON_POST_TYPES = ["Reel", "Story", "Carousel", "Video", "Static Post"];
@@ -80,6 +81,9 @@ export interface MarketingUpdateRow {
   nextAction: string | null;
   createdAt: string;
 }
+
+// The marketing_updates row returned by POST /api/admin/marketing/updates, as JSON.
+type CreatedMarketingUpdate = Omit<MarketingUpdateRow, "updateId" | "sku" | "itemName"> & { id: string };
 
 export interface StatusColumn {
   id: string;
@@ -482,10 +486,9 @@ function LogMarketingDialog({
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/admin/marketing/updates", {
+      const { ok, data } = await apiCall<{ update: CreatedMarketingUpdate }>("/api/admin/marketing/updates", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           sku,
           campaign: campaign.trim() || undefined,
           platform: platform.trim(),
@@ -498,10 +501,9 @@ function LogMarketingDialog({
           caption: caption.trim() || undefined,
           notes: notes.trim() || undefined,
           nextAction: nextAction.trim() || undefined,
-        }),
+        },
       });
-      const data = await res.json();
-      if (!res.ok) {
+      if (!ok) {
         toast.error(data.error || "Failed to log marketing activity");
         return;
       }

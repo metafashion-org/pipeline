@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { db } from "@/lib/db/client";
 import { formDefinitions } from "@/lib/db/schema/form_definitions";
 import { formFields } from "@/lib/db/schema/form_fields";
@@ -239,7 +240,7 @@ async function syncDiscordChannelForStatusChange(
     }
     return undefined;
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
+    const msg = errorMessage(e, "Unknown error");
     console.error("[discord] Failed to sync channel for personnel status change:", msg);
     return `Status updated, but syncing their Discord channel failed: ${msg}`;
   }

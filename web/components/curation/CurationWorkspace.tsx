@@ -7,6 +7,7 @@ import { PlusCircle, FileEdit } from "lucide-react";
 import { CurationIdeaForm, type DraftRecord } from "./CurationIdeaForm";
 import { DraftsList, type DraftListItem } from "./DraftsList";
 import type { FieldOption } from "@/lib/forms/field-options";
+import { apiCall } from "@/lib/api-client";
 
 interface FieldConfig {
   fieldKey: string;
@@ -37,13 +38,9 @@ export function CurationWorkspace({ fields, initialDrafts = [] }: { fields: Fiel
   // every mount, which would just be a redundant refetch of what was
   // already rendered server-side.
   const refreshDrafts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/curation/drafts");
-      const data = await res.json();
-      if (res.ok) setDrafts(data.drafts || []);
-    } catch {
-      // A failed background refresh isn't worth surfacing an error toast for.
-    }
+    const { ok, data } = await apiCall<{ drafts?: DraftListItem[] }>("/api/curation/drafts");
+    // A failed background refresh isn't worth surfacing an error toast for.
+    if (ok) setDrafts(data.drafts || []);
   }, []);
 
   function startNew() {

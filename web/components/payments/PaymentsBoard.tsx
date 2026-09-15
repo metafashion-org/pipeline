@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { toast } from "sonner";
 import { Wallet, FileUp, Loader2, CheckCircle2 } from "lucide-react";
 import { jsonFetcher } from "@/lib/fetcher";
-import { formatCurrency } from "@/lib/format-currency";
+import { formatFee } from "@/lib/format-money";
 import type { ArtistPendingPayment } from "@/lib/payments/payment-batch-service";
 
 // A small, stable set of accent colors so each artist's card reads distinctly at a glance without
@@ -58,7 +58,7 @@ function ArtistPayoutCard({ artist, onAttached }: { artist: ArtistPendingPayment
         toast.error(data.error || "Failed to attach payment summary");
         return;
       }
-      toast.success(`${artist.artistName} marked as paid — ${data.assetCount} asset${data.assetCount === 1 ? "" : "s"}, ${formatCurrency(data.totalAmount, data.currency)}`);
+      toast.success(`${artist.artistName} marked as paid — ${data.assetCount} asset${data.assetCount === 1 ? "" : "s"}, ${formatFee(data.totalAmount, data.currency)}`);
       onAttached();
     } catch {
       toast.error("Upload failed — check your connection and try again");
@@ -109,9 +109,7 @@ function ArtistPayoutCard({ artist, onAttached }: { artist: ArtistPendingPayment
                 {a.category ? ` · ${a.category}` : ""}
               </p>
             </div>
-            <p className="shrink-0 text-sm font-medium tabular-nums">
-              {a.feeAmount ? formatCurrency(Number(a.feeAmount), a.currency || "INR") : "—"}
-            </p>
+            <p className="shrink-0 text-sm font-medium tabular-nums">{formatFee(a.feeAmount, a.currency, "—")}</p>
           </div>
         ))}
       </div>
@@ -121,10 +119,10 @@ function ArtistPayoutCard({ artist, onAttached }: { artist: ArtistPendingPayment
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total</span>
         {mixedCurrency ? (
           <span className="text-sm font-semibold text-amber-500">
-            {currencies.map((c) => formatCurrency(artist.totalsByCurrency[c], c)).join(" + ")}
+            {currencies.map((c) => formatFee(artist.totalsByCurrency[c], c)).join(" + ")}
           </span>
         ) : (
-          <span className="text-lg font-bold tabular-nums">{formatCurrency(artist.totalsByCurrency[currencies[0]], currencies[0])}</span>
+          <span className="text-lg font-bold tabular-nums">{formatFee(artist.totalsByCurrency[currencies[0]], currencies[0])}</span>
         )}
       </div>
 
@@ -180,7 +178,7 @@ export function PaymentsBoard({ initialArtists }: { initialArtists: ArtistPendin
     }
   }
   const grandTotalLabel = Object.entries(grandTotalsByCurrency)
-    .map(([currency, amount]) => formatCurrency(amount, currency))
+    .map(([currency, amount]) => formatFee(amount, currency))
     .join(" + ");
 
   if (!isLoading && artists.length === 0) {

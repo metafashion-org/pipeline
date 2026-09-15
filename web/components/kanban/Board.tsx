@@ -22,6 +22,7 @@ import { toast } from "sonner";
 // server render and ISO strings when SWR refetched it.
 import type { KanbanColumnDataClient, KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
+import { apiCall } from "@/lib/api-client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -225,7 +226,9 @@ export function Board({ initialColumns = [], role }: BoardProps) {
           }))
         : allColumns;
 
+    // Marks the component as mounted so the board renders on the client only (see `if (!mounted) return null` below). No render-time value can tell server from client here, so this one setState in an effect is intended.
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         const saved = loadStoredFilters();
         if (saved) {
             setArtistFilter(saved.artistFilter);
@@ -279,25 +282,20 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         newStatus: string,
         previousColumns: KanbanColumnDataClient[]
     ) => {
-        try {
-            const response = await fetch(`/api/assets/${sku}/status`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: newStatus }),
-            });
+        const { ok, data } = await apiCall(`/api/assets/${sku}/status`, {
+            method: "PATCH",
+            body: { status: newStatus },
+        });
 
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || "Failed to update status");
-            }
-            toast.success("Task status updated successfully");
-            mutate();
-        } catch (error: unknown) {
-            console.error(error);
-            const message = error instanceof Error ? error.message : "Failed to update task";
+        if (!ok) {
+            const message = data.error || "Failed to update status";
+            console.error(message);
             toast.error(message);
             mutate({ data: previousColumns }, false);
+            return;
         }
+        toast.success("Task status updated successfully");
+        mutate();
     }, [mutate]);
 
     const onDragStart = (event: DragStartEvent) => {

@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { apiCall } from "@/lib/api-client";
 
 /**
  * "Submit Final Files" — the brief's §8 handoff, gated server-side (and
@@ -40,13 +41,11 @@ export function SubmitFinalFilesDialog({ sku }: { sku: string }) {
     }
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/assets/${encodeURIComponent(sku)}/submit-final`, {
+      const { ok, data: result } = await apiCall(`/api/assets/${encodeURIComponent(sku)}/submit-final`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileUrls, notes: notes.trim() || undefined }),
+        body: { fileUrls, notes: notes.trim() || undefined },
       });
-      const result = await res.json();
-      if (!res.ok) {
+      if (!ok) {
         toast.error(result.error || "Failed to submit final files");
         return;
       }
@@ -119,13 +118,11 @@ export function NotifyUploaderButton({ sku }: { sku: string }) {
   async function submit() {
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/assets/${encodeURIComponent(sku)}/notify-uploader`, {
+      const { ok, data: result } = await apiCall(`/api/assets/${encodeURIComponent(sku)}/notify-uploader`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: notes.trim() || undefined }),
+        body: { notes: notes.trim() || undefined },
       });
-      const result = await res.json();
-      if (!res.ok) {
+      if (!ok) {
         toast.error(result.error || "Failed to notify uploader");
         return;
       }

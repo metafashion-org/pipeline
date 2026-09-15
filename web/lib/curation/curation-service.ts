@@ -5,6 +5,7 @@ import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, asc, and, like } from "drizzle-orm";
 import { nextSequentialSku } from "@/lib/assets/sku";
+import { formatDate } from "@/lib/format-date";
 
 export type CurationFieldType = "text" | "textarea" | "select" | "multi_select" | "url" | "image" | "number";
 
@@ -91,7 +92,8 @@ export async function updateCurationFieldConfig(fieldKey: string, input: UpdateC
 // Maps a curation_field_config.fieldKey to how its value is read off an assets row.
 // Only fields with a real backing column are eligible to be selected as brief fields.
 const ASSET_FIELD_ACCESSORS: Record<string, (asset: typeof assets.$inferSelect) => string | null> = {
-  deadline: (asset) => (asset.deadline ? new Date(asset.deadline).toLocaleDateString() : null),
+  // formatDate pins locale and timezone (Asia/Kolkata), so the brief shows the same date wherever the email is built.
+  deadline: (asset) => (asset.deadline ? formatDate(asset.deadline) : null),
   // Keyed 'recolorInstructions' until now, while the seeded field key is 'recolorDirections'.
   // The two never matched, so this accessor could not fire and recolor reference images never
   // reached an artist brief.

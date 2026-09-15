@@ -23,6 +23,10 @@ const serverEnvSchema = z.object({
     NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET is required"),
     ADMIN_EMAILS: z.string().optional().transform((val) => val ? val.split(",").map((e) => e.trim()) : []),
     ARTIST_EMAILS: z.string().optional().transform((val) => val ? val.split(",").map((e) => e.trim()) : []),
+    // Bearer token Vercel Cron sends to /api/admin/payment-cycles/run. When unset, only signed-in users with canMarkPaymentDone can run the pull.
+    CRON_SECRET: z.string().optional(),
+    // Shared secret the Discord temp-access cron sends in the x-cron-secret header. When unset, that endpoint refuses every call.
+    DISCORD_CRON_SECRET: z.string().optional(),
 });
 
 const isServer = typeof window === "undefined";

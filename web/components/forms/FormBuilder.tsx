@@ -1,5 +1,6 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Input } from "@/components/ui/input";
@@ -242,7 +243,7 @@ function CreateFormDialog({
       onOpenChange(false);
       onCreated(form.id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not create the form");
+      toast.error(errorMessage(e, "Could not create the form"));
     } finally {
       setSaving(false);
     }
@@ -361,7 +362,7 @@ function FormDetail({ formId, onChanged }: { formId: string; onChanged: () => vo
       mutate();
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save");
+      toast.error(errorMessage(e, "Could not save"));
     }
   }
 
@@ -378,7 +379,7 @@ function FormDetail({ formId, onChanged }: { formId: string; onChanged: () => vo
       });
       mutate();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not reorder");
+      toast.error(errorMessage(e, "Could not reorder"));
     }
   }
 
@@ -390,7 +391,7 @@ function FormDetail({ formId, onChanged }: { formId: string; onChanged: () => vo
       mutate();
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not remove the field");
+      toast.error(errorMessage(e, "Could not remove the field"));
     }
   }
 
@@ -626,7 +627,7 @@ function FieldEditor({
       }
       onSaved();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save the field");
+      toast.error(errorMessage(e, "Could not save the field"));
     } finally {
       setSaving(false);
     }

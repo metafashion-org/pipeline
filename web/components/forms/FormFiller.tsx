@@ -14,6 +14,10 @@ import {
   type FormFieldSpec,
   type FormValues,
 } from "./form-field-spec";
+import { apiCall } from "@/lib/api-client";
+
+// apiCall reports a request that never got a response (offline, DNS failure, connection reset) with status 0.
+const NO_RESPONSE_STATUS = 0;
 
 /**
  * Where a form in progress is kept.
@@ -175,13 +179,15 @@ export function FormFiller({
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/forms/${encodeURIComponent(formKey)}/submit`, {
+      const { ok, status, data } = await apiCall(`/api/forms/${encodeURIComponent(formKey)}/submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values, submitterEmail: asksForContactEmail ? contactEmail.trim() : undefined }),
+        body: { values, submitterEmail: asksForContactEmail ? contactEmail.trim() : undefined },
       });
-      const data = await res.json();
-      if (!res.ok) {
+      if (status === NO_RESPONSE_STATUS) {
+        toast.error("Could not reach the server. Your answers are saved in this browser.");
+        return;
+      }
+      if (!ok) {
         toast.error(data.error || "Could not submit the form.");
         return;
       }
@@ -191,8 +197,6 @@ export function FormFiller({
         // best-effort
       }
       setSubmitted(true);
-    } catch {
-      toast.error("Could not reach the server. Your answers are saved in this browser.");
     } finally {
       setSubmitting(false);
     }

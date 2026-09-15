@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -49,6 +50,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(result);
   } catch (e: unknown) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to submit idea" }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, "Failed to submit idea") }, { status: 500 });
   }
 }

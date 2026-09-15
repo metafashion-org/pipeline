@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { listStatuses, upsertStatus } from "@/lib/settings/settings-service";
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, status: row });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to save status" },
+      { error: errorMessage(error, "Failed to save status") },
       { status: 400 }
     );
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
 import { useState } from "react";
 import {
   Dialog,
@@ -122,7 +123,7 @@ export function KnowledgeRegistry({
       toast.success(`Created ${data.artifact.artifactId}`);
       handleOpenChange(false);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to create artifact");
+      toast.error(errorMessage(e, "Failed to create artifact"));
     } finally {
       setSubmitting(false);
     }

@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as dotenv from "dotenv";
 import * as schema from "./schema";
+import { parseConnectionPassword } from "./connection";
 
 // Next.js loads .env.local automatically at runtime, so this is a no-op there
 // (dotenv never overrides an already-set var) - but standalone scripts run via
@@ -10,24 +11,6 @@ import * as schema from "./schema";
 dotenv.config({ path: ".env.local" });
 
 const connectionString = process.env.DATABASE_URL || "";
-
-// The `postgres` library doesn't percent-decode the password component of the
-// connection string, so a password containing a reserved URL character (e.g. "@")
-// sent literally instead of decoded, and auth fails even with the right password.
-// Decoding it explicitly here and passing it as an override fixes that.
-/**
- * Reads and percent-decodes the password out of a Postgres connection string.
- * Input: the connection string, possibly empty or malformed. Output: the decoded password, or undefined when there is none to read.
- * A malformed DATABASE_URL would otherwise throw a bare URL parse error at module load, which surfaces as an unexplained crash on the first request rather than a configuration message.
- */
-function parseConnectionPassword(value: string): string | undefined {
-  if (!value) return undefined;
-  try {
-    return decodeURIComponent(new URL(value).password) || undefined;
-  } catch {
-    throw new Error("DATABASE_URL is not a valid connection string URL");
-  }
-}
 
 const password = parseConnectionPassword(connectionString);
 

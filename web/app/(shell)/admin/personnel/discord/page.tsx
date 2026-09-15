@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
@@ -37,7 +38,7 @@ export default async function DiscordTeamManagerPage() {
     try {
       [overview, tempGrants] = await Promise.all([getDiscordOverview(), listTempAccessGrants()]);
     } catch (e) {
-      fetchError = e instanceof Error ? e.message : "Failed to reach Discord.";
+      fetchError = errorMessage(e, "Failed to reach Discord.");
     }
   }
 

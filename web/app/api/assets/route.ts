@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
@@ -47,7 +48,7 @@ export async function GET() {
   } catch (error: unknown) {
     console.error("Error fetching kanban board data:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch kanban board data" },
+      { error: errorMessage(error, "Failed to fetch kanban board data") },
       { status: 500 }
     );
   }
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     if (cause?.code === "23505") {
       return NextResponse.json({ error: `SKU '${sku}' is already in use` }, { status: 400 });
     }
-    const message = error instanceof Error ? error.message : "Failed to create asset";
+    const message = errorMessage(error, "Failed to create asset");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

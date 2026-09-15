@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { updateField, removeField, FIELD_TYPES } from "@/lib/forms/form-builder-service";
@@ -28,7 +29,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     revalidateViews(CACHE_TAGS.forms);
     return NextResponse.json({ field });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to update field" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to update field") }, { status: 400 });
   }
 }
 
@@ -42,6 +43,6 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     revalidateViews(CACHE_TAGS.forms);
     return NextResponse.json(result);
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to remove field" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to remove field") }, { status: 400 });
   }
 }

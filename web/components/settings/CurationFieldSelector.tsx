@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { apiCall } from "@/lib/api-client";
 
 interface CurationFieldRow {
   fieldKey: string;
@@ -26,14 +27,12 @@ export function CurationFieldSelector({ initialFields }: { initialFields: Curati
     // Optimistic update, rolled back on failure
     setFields((prev) => prev.map((f) => (f.fieldKey === fieldKey ? { ...f, includeInArtistEmail } : f)));
 
-    const res = await fetch("/api/admin/curation-fields", {
+    const { ok, data } = await apiCall<{ field: { displayName: string } }>("/api/admin/curation-fields", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fieldKey, includeInArtistEmail }),
+      body: { fieldKey, includeInArtistEmail },
     });
-    const data = await res.json();
 
-    if (!res.ok) {
+    if (!ok) {
       setFields((prev) => prev.map((f) => (f.fieldKey === fieldKey ? { ...f, includeInArtistEmail: !includeInArtistEmail } : f)));
       toast.error(data.error || "Failed to update field");
       return;
