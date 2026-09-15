@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { apiCall } from "@/lib/api-client";
 
 const CURRENCIES = ["INR", "USD", "EUR"] as const;
 
@@ -32,13 +33,11 @@ export function PendingPaymentControls({
   async function save() {
     setSaving(true);
     try {
-      const res = await fetch(`/api/admin/assets/${sku}/payment-details`, {
+      const { ok, data } = await apiCall(`/api/admin/assets/${sku}/payment-details`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: selectedCurrency, paymentReceiptUrl: receiptUrl }),
+        body: { currency: selectedCurrency, paymentReceiptUrl: receiptUrl },
       });
-      const data = await res.json();
-      if (!res.ok) {
+      if (!ok) {
         toast.error(data.error || "Failed to save payment details");
         return;
       }

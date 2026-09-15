@@ -17,6 +17,7 @@ import { AssetFormFields, AssetFormValues } from "./asset-form-fields";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { toLinkText } from "@/lib/assets/file-store";
 import { toast } from "sonner";
+import { apiCall } from "@/lib/api-client";
 
 /**
  * Corrects the fields of an existing asset.
@@ -55,10 +56,9 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
         }
         setSubmitting(true);
         try {
-            const res = await fetch(`/api/assets/${encodeURIComponent(asset.sku)}`, {
+            const { ok, data } = await apiCall<{ changed?: boolean }>(`/api/assets/${encodeURIComponent(asset.sku)}`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+                body: {
                     itemName: form.itemName.trim(),
                     category: form.category.trim() || null,
                     feeAmount: form.feeAmount.trim() || null,
@@ -67,10 +67,9 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                     deadline: form.deadline || null,
                     referenceImages: form.referenceImages,
                     recolorReferenceImages: form.recolorReferenceImages,
-                }),
+                },
             });
-            const data = await res.json();
-            if (!res.ok) {
+            if (!ok) {
                 toast.error(data.error || "Failed to save changes");
                 return;
             }

@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { approveOnboardingRequest } from "@/lib/personnel/onboarding-sync";
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to approve request" },
+      { error: errorMessage(error, "Failed to approve request") },
       { status: 400 }
     );
   }

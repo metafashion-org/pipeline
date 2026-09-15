@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { createForm, SUBMISSION_BEHAVIORS, FORM_AUDIENCES } from "@/lib/forms/form-builder-service";
@@ -37,6 +38,6 @@ export async function POST(request: NextRequest) {
     revalidateViews(CACHE_TAGS.forms);
     return NextResponse.json({ form });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to create form" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to create form") }, { status: 400 });
   }
 }

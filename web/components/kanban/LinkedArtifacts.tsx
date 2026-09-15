@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { jsonFetcher } from "@/lib/fetcher";
+import { apiCall } from "@/lib/api-client";
 import { toast } from "sonner";
 import { ExternalLink, BookOpen, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,22 +30,6 @@ interface RegistryArtifact {
   artifactId: string;
   title: string;
   typeLabel: string;
-}
-
-/**
- * Same status-check-before-parse shape as lib/fetcher.ts's jsonFetcher, for POST/DELETE instead
- * of GET (jsonFetcher takes no RequestInit, so it doesn't fit here as-is). Checking `res.ok`
- * before trusting the body avoids two different failure modes: reading an error payload as if it
- * were the real result, and a non-JSON error page throwing an opaque parse error instead of a
- * useful message.
- */
-async function requestJson<T>(url: string, init: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error((body as { error?: string } | null)?.error || `Request failed with ${res.status}`);
-  }
-  return res.json().catch(() => null) as Promise<T>;
 }
 
 /**
@@ -133,28 +118,27 @@ export function LinkedArtifacts({
   const [attaching, setAttaching] = useState(false);
 
   async function handleAttach(artifactId: string) {
-    try {
-      await requestJson(`/api/admin/knowledge/artifacts/${artifactId}/links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "sku", value: assetId }),
-      });
-      toast.success("Artifact attached");
-      setAttaching(false);
-      mutate();
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Failed to attach artifact");
+    const { ok, data } = await apiCall(`/api/admin/knowledge/artifacts/${artifactId}/links`, {
+      method: "POST",
+      body: { type: "sku", value: assetId },
+    });
+    if (!ok) {
+      toast.error(data.error || "Failed to attach artifact");
+      return;
     }
+    toast.success("Artifact attached");
+    setAttaching(false);
+    mutate();
   }
 
   async function handleRemove(a: LinkedArtifact) {
-    try {
-      await requestJson(`/api/admin/knowledge/artifacts/${a.id}/links/sku/${a.linkId}`, { method: "DELETE" });
-      toast.success("Artifact removed");
-      mutate();
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "Failed to remove artifact");
+    const { ok, data } = await apiCall(`/api/admin/knowledge/artifacts/${a.id}/links/sku/${a.linkId}`, { method: "DELETE" });
+    if (!ok) {
+      toast.error(data.error || "Failed to remove artifact");
+      return;
     }
+    toast.success("Artifact removed");
+    mutate();
   }
 
   // Someone who can't manage links and has nothing linked has no action to take here, so the

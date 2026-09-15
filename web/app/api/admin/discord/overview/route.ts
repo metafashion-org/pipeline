@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -28,6 +29,6 @@ export async function GET(request: Request) {
     const overview = await getDiscordOverview();
     return NextResponse.json(overview);
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to reach Discord" }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to reach Discord") }, { status: 500 });
   }
 }

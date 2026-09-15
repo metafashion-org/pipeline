@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ExternalLink, Loader2, Search } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
+import { formatFee } from "@/lib/format-money";
 
 export interface ArchivedTaskRow {
     id: string;
@@ -34,14 +35,6 @@ export interface ArchivedTaskRow {
     paymentReceiptUrl: string | null;
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", INR: "₹", RUB: "₽" };
-
-function formatFee(fee: string | number | null, currency: string | null): string {
-    if (fee === null || fee === "") return "-";
-    const symbol = CURRENCY_SYMBOLS[currency || "INR"] || "";
-    const amount = Number(fee);
-    return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
-}
 
 const ALL_MONTHS = "all";
 

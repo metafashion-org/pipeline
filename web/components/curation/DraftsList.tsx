@@ -16,14 +16,11 @@ import {
 import { toast } from "sonner";
 import { FileEdit, Trash2, Inbox } from "lucide-react";
 import { formatDateTime } from "@/lib/format-date";
+import { apiCall } from "@/lib/api-client";
 import type { DraftRecord } from "./CurationIdeaForm";
 
 export interface DraftListItem extends DraftRecord {
   updatedAt: string;
-}
-
-function errMessage(e: unknown, fallback: string): string {
-  return e instanceof Error && e.message ? e.message : fallback;
 }
 
 // The other half of "no redundant drafts": this is where a curator actually
@@ -40,15 +37,13 @@ export function DraftsList({
   onChanged: () => void;
 }) {
   async function discard(id: string) {
-    try {
-      const res = await fetch(`/api/curation/drafts/${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      toast.success("Draft discarded");
-      onChanged();
-    } catch (e) {
-      toast.error(errMessage(e, "Couldn't discard draft"));
+    const { ok, data } = await apiCall(`/api/curation/drafts/${id}`, { method: "DELETE" });
+    if (!ok) {
+      toast.error(data.error || "Couldn't discard draft");
+      return;
     }
+    toast.success("Draft discarded");
+    onChanged();
   }
 
   if (drafts.length === 0) {

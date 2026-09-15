@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getCurationFieldConfigs, updateCurationFieldConfig } from "@/lib/curation/curation-service";
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, field: row });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update field" },
+      { error: errorMessage(error, "Failed to update field") },
       { status: 400 }
     );
   }

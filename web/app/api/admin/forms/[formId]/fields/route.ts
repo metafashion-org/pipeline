@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { addField, reorderFields, FIELD_TYPES } from "@/lib/forms/form-builder-service";
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     revalidateViews(CACHE_TAGS.forms);
     return NextResponse.json({ field });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to add field" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to add field") }, { status: 400 });
   }
 }
 

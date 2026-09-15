@@ -27,3 +27,8 @@ export * from "./discord_temp_access";
 export * from "./artifact_type_config";
 export * from "./onboarding_requests";
 export * from "./brand_groups";
+export * from "./curation_idea_versions";
+export * from "./style_systems";
+export * from "./artifact_style_system_links";
+export * from "./artifact_assignment_links";
+export * from "./artifact_campaign_links";

@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
@@ -22,6 +23,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dra
     const versions = await listDraftVersions(draftId, session.user.personnelId);
     return NextResponse.json({ versions });
   } catch (error: unknown) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load version history" }, { status: 400 });
+    return NextResponse.json({ error: errorMessage(error, "Failed to load version history") }, { status: 400 });
   }
 }

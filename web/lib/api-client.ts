@@ -1,3 +1,5 @@
+import { errorMessage } from "./errors";
+
 // One place for "call our own API and find out what happened".
 //
 // This pattern was written out by hand in seventeen places across six components:
@@ -45,7 +47,7 @@ export async function apiCall<T = Record<string, unknown>>(
       signal,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Network request failed";
+    const message = errorMessage(error, "Network request failed");
     return { ok: false, status: 0, data: { error: message } as T & { error?: string } };
   }
 

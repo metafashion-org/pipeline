@@ -188,6 +188,14 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
 // below, which reads the `role` those seeded rows already carry.
 const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
 
+// Thrown when a status move is refused by ownership, status_transition_rules, role checks or the receipt gate. Route handlers answer it with 403, and any other error from updateAssetStatusInKanban is a bad request.
+export class TransitionRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TransitionRefusedError";
+  }
+}
+
 // Who is asking for the transition. `system` is for transitions the pipeline performs on
 // its own behalf in response to a real event (an assignment email going out, a valid final
 // file arriving) rather than someone dragging a card — those have no human role to check,
@@ -266,7 +274,7 @@ export async function updateAssetStatusInKanban(
   const isArtistOnly =
     !actor?.system && roles.has("artist") && !roles.has("admin") && !roles.has("operator");
   if (isArtistOnly && asset.currentArtistId !== (actor && !actor.system ? actor.personnelId : undefined)) {
-    throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: this asset is not assigned to you`);
+    throw new TransitionRefusedError(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: this asset is not assigned to you`);
   }
 
   // Check status transition rules: deny by default, per PLAN.md §4 - a transition is only
@@ -289,12 +297,12 @@ export async function updateAssetStatusInKanban(
     const adminOverride =
       (actor?.system || roles.has("admin")) && !PAYMENT_GATED_STATUSES.includes(targetStatusKey);
     if (!adminOverride) {
-      throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is not permitted: no matching rule in status_transition_rules`);
+      throw new TransitionRefusedError(`Transition from '${fromStatus}' to '${targetStatusKey}' is not permitted: no matching rule in status_transition_rules`);
     }
   } else if (!rule[0].isAllowed) {
     // An explicit forbid always applies, admin included - only the "no rule exists" gap
     // above gets the admin override, never an explicit isAllowed: false row.
-    throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${rule[0].failureReason || "Rule restriction"}`);
+    throw new TransitionRefusedError(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${rule[0].failureReason || "Rule restriction"}`);
   }
 
   // A rule saying the transition is possible is not the same as this caller being allowed to
@@ -303,7 +311,7 @@ export async function updateAssetStatusInKanban(
   // authenticated user - including uploaded_to_roblox -> marked_for_payment.
   const refusal = refuseTransition(actor, rule[0], targetStatus[0]);
   if (refusal) {
-    throw new Error(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${refusal}`);
+    throw new TransitionRefusedError(`Transition from '${fromStatus}' to '${targetStatusKey}' is forbidden: ${refusal}`);
   }
 
   const actorPersonnelId = actor && !actor.system ? actor.personnelId ?? null : null;
@@ -312,7 +320,7 @@ export async function updateAssetStatusInKanban(
   // (admin must attach a payment receipt before marking a task paid) enforced here so
   // it holds for every role including admin, not just checked in the UI.
   if (targetStatusKey === "payment_done" && !asset.paymentReceiptUrl) {
-    throw new Error(
+    throw new TransitionRefusedError(
       `Transition from '${fromStatus}' to 'payment_done' is forbidden: no payment receipt attached to this asset`
     );
   }

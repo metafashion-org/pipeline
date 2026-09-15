@@ -1,3 +1,4 @@
+import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { listBrandGroups, createBrandGroup } from "@/lib/settings/brand-groups-service";
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `A group named "${body.name.trim()}" already exists` }, { status: 400 });
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create brand/upload group" },
+      { error: errorMessage(error, "Failed to create brand/upload group") },
       { status: 400 }
     );
   }

@@ -8,6 +8,7 @@
 // submissions to review. A form with an approval workflow but no way to
 // actually submit it was a real, confirmed dead end.
 
+import { errorMessage } from "@/lib/errors";
 import { db } from "@/lib/db/client";
 import { formDefinitions } from "@/lib/db/schema/form_definitions";
 import { formFields } from "@/lib/db/schema/form_fields";
@@ -131,7 +132,7 @@ async function runSubmissionBehavior(
         return null;
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = errorMessage(error, "Unknown error");
     console.error(`[forms] on-submission behavior '${behavior}' failed for submission ${submissionId}:`, message);
     return message;
   }

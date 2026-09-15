@@ -27,23 +27,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { formatDate } from "@/lib/format-date";
+import { formatFee } from "@/lib/format-money";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
-const CURRENCY_SYMBOLS: Record<string, string> = { INR: "₹", USD: "$", EUR: "€", RUB: "₽" };
-
-// Formats a fee amount with its currency symbol, e.g. "₹800" / "€1,200" / "₽5,000".
-// Input: the raw numeric-string fee and the asset's currency code. Output: a display string, or "Not set" when there's no fee.
-// INR was missing from CURRENCY_SYMBOLS entirely until this fix — any real
-// INR-denominated asset would have silently shown a "$" sign instead of "₹".
-function formatFee(fee: string | null, currency: string | null): string {
-  if (!fee) return "Not set";
-  const symbol = CURRENCY_SYMBOLS[currency || "INR"] || "₹";
-  const amount = Number(fee);
-  return Number.isFinite(amount) ? `${symbol}${amount.toLocaleString("en-US")}` : `${symbol}${fee}`;
-}
+// Shown in the pending-payments table for an asset with no fee recorded.
+const FEE_NOT_SET = "Not set";
 
 interface PendingPayment {
     id: string;
@@ -188,7 +179,7 @@ export default async function ArchivePage({
                                         <TableCell className="font-mono text-sm">{p.sku}</TableCell>
                                         <TableCell className="font-medium">{p.title}</TableCell>
                                         <TableCell>{p.artistName || "Unassigned"}</TableCell>
-                                        <TableCell>{formatFee(p.feeAmount, p.currency)}</TableCell>
+                                        <TableCell>{formatFee(p.feeAmount, p.currency, FEE_NOT_SET)}</TableCell>
                                         <TableCell>
                                             {p.currentStatus === "payment_done" ? (
                                                 <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
