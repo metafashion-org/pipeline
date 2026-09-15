@@ -35,7 +35,7 @@ export default async function KnowledgePage() {
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
       <PageHeader
-        title="Knowledge Registry"
+        title="Registry"
         description="Trend briefs, insights, recolor kits and references, each with a permanent ID."
       />
 
