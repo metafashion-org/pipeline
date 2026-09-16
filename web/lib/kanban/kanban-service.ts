@@ -9,6 +9,7 @@ import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, and, asc, sql } from "drizzle-orm";
+import type { CapabilitySet } from "@/lib/auth/rbac";
 
 export interface KanbanColumnData {
   key: string;
@@ -202,7 +203,7 @@ export class TransitionRefusedError extends Error {
 // and the event that triggered them is authorised at its own entry point.
 export type TransitionActor =
   | { system: true }
-  | { system?: false; roles: string[]; personnelId?: string };
+  | { system?: false; roles: string[]; personnelId?: string; caps?: CapabilitySet };
 
 function actorRoles(actor: TransitionActor | undefined): Set<string> {
   if (!actor || actor.system) return new Set();
@@ -229,6 +230,13 @@ function refuseTransition(
 
   const roles = actorRoles(actor);
   if (roles.has("admin")) return null;
+
+  // canMarkForPayment is a narrower grant than the payment_admin role: someone can flag an
+  // asset as ready to be paid without also being able to release the payment. Scoped to this
+  // one target status only, so it never touches the marked_for_payment -> payment_done rule
+  // below, which stays reserved for the literal payment_admin/admin role either way.
+  const caps = actor && !actor.system ? actor.caps : undefined;
+  if (targetStatus.key === "marked_for_payment" && caps?.canMarkForPayment) return null;
 
   if (rule?.role && !roles.has(rule.role.toLowerCase())) {
     return `moving a card into '${targetStatus.key}' from '${rule.fromStatus}' is reserved for the '${rule.role}' role`;

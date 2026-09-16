@@ -3,12 +3,37 @@ import { updateAssetStatusInKanban } from "../kanban-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { eq } from "drizzle-orm";
+import type { CapabilitySet } from "@/lib/auth/rbac";
 
 const TEST_SKU = "TEST-TRANSITION-GATE-SKU";
 
 const ADMIN = { roles: ["admin"] };
 const ARTIST = { roles: ["artist"] };
 const PAYMENT_ADMIN = { roles: ["payment_admin"] };
+
+const NO_CAPS: CapabilitySet = {
+  canAssignArtists: false,
+  canMoveToInProduction: false,
+  canMoveToInReview: false,
+  canRequestRevisions: false,
+  canApprove: false,
+  canAssignPublisher: false,
+  canPublishToRoblox: false,
+  canMarkForPayment: false,
+  canMarkPaymentDone: false,
+  canViewAllAssets: false,
+  canManageSystemConfig: false,
+  canAccessCuratorTools: false,
+  canAccessMarketingTools: false,
+};
+
+// An operator granted canMarkForPayment as a per-person override, but not the payment_admin
+// role and not canMarkPaymentDone — someone who can flag an asset as ready to be paid without
+// being able to release the payment itself.
+const OPERATOR_WITH_MARK_FOR_PAYMENT = {
+  roles: ["operator"],
+  caps: { ...NO_CAPS, canAssignArtists: true, canViewAllAssets: true, canMarkForPayment: true },
+};
 
 async function testTransitionRulesEnforcement() {
   console.log("Verifying transition rule enforcement server-side...");
@@ -71,6 +96,46 @@ async function testTransitionRulesEnforcement() {
     assert.strictEqual(result.changed, true);
     assert.strictEqual(result.toStatus, "marked_for_payment");
     console.log("Confirmed allowed transition succeeds for payment_admin: uploaded_to_roblox -> marked_for_payment");
+  } finally {
+    await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+  }
+
+  // canMarkForPayment: an operator without the payment_admin role, granted just this one
+  // capability as a per-person override, can flag an asset for payment but must still be
+  // denied payment_done — the split this capability exists for.
+  await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+  await db.insert(assets).values({
+    sku: TEST_SKU,
+    itemName: "Mark For Payment Capability Test Asset",
+    currentStatus: "uploaded_to_roblox",
+  });
+  try {
+    const operatorWithoutCap = { roles: ["operator"], caps: NO_CAPS };
+    try {
+      await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", operatorWithoutCap);
+      assert.fail("An operator without canMarkForPayment must not be able to move an asset into marked_for_payment");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
+      console.log("Confirmed operator without canMarkForPayment is denied marked_for_payment:", message);
+    }
+
+    const markedResult = await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", OPERATOR_WITH_MARK_FOR_PAYMENT);
+    assert.strictEqual(markedResult.changed, true);
+    assert.strictEqual(markedResult.toStatus, "marked_for_payment");
+    console.log("Confirmed canMarkForPayment lets a non-payment_admin operator reach marked_for_payment");
+
+    // The same capability must not leak into payment_done - that stays reserved for the
+    // literal payment_admin/admin role, receipt attached or not.
+    await db.update(assets).set({ paymentReceiptUrl: "https://example.com/receipt.pdf" }).where(eq(assets.sku, TEST_SKU));
+    try {
+      await updateAssetStatusInKanban(TEST_SKU, "payment_done", OPERATOR_WITH_MARK_FOR_PAYMENT);
+      assert.fail("canMarkForPayment must not also unlock payment_done");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
+      console.log("Confirmed canMarkForPayment does not unlock payment_done:", message);
+    }
   } finally {
     await db.delete(assets).where(eq(assets.sku, TEST_SKU));
   }
