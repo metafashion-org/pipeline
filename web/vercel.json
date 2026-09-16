@@ -1,10 +1,4 @@
 {
   "framework": "nextjs",
-  "regions": ["bom1"],
-  "crons": [
-    {
-      "path": "/api/admin/payment-cycles/run",
-      "schedule": "0 6 * * *"
-    }
-  ]
+  "regions": ["bom1"]
 }

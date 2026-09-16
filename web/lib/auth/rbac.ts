@@ -213,6 +213,11 @@ const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   ["/admin/forms", "canManageSystemConfig"],
   ["/admin/curation-fields", "canManageSystemConfig"],
   ["/admin/marketing", "canAccessMarketingTools"],
+  // Exact fee amounts live here (the live payout board and the paid-out history both), so this
+  // is gated on the payment capability specifically rather than falling through to the generic
+  // canViewAllAssets check every other /admin/* page not listed above gets — several roles other
+  // than payment_admin/admin have that capability too.
+  ["/admin/archive", "canMarkPaymentDone"],
 ];
 
 /**

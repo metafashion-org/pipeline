@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, timestamp, numeric, jsonb, index } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
 import { brandGroups } from "./brand_groups";
+import { paymentBatches } from "./payment_batches";
 
 export const assets = pgTable("assets", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -16,6 +17,10 @@ export const assets = pgTable("assets", {
   feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }),
   currency: text("currency").default("INR"), // MetaFashion pays in INR by default; USD/EUR/RUB stay selectable for artists paid elsewhere.
   paymentReceiptUrl: text("payment_receipt_url"),
+  // Which payout this asset was paid under, once it has been — set together with
+  // paymentReceiptUrl when a payment_admin attaches a payment summary for the artist. Null for
+  // anything not yet paid, and for anything paid before this column existed.
+  paymentBatchId: uuid("payment_batch_id").references(() => paymentBatches.id),
   marketingStatus: text("marketing_status"),
   lastMarketingUpdate: timestamp("last_marketing_update", { withTimezone: true }),
   gmailThreadId: text("gmail_thread_id"),
@@ -31,4 +36,5 @@ export const assets = pgTable("assets", {
   index("assets_current_status_idx").on(table.currentStatus),
   index("assets_current_artist_idx").on(table.currentArtistId),
   index("assets_brand_group_idx").on(table.brandGroupId),
+  index("assets_payment_batch_idx").on(table.paymentBatchId),
 ]);

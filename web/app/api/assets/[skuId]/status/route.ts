@@ -39,6 +39,7 @@ export async function PATCH(
     const result = await updateAssetStatusInKanban(skuId, newStatus, {
       roles: user.roles,
       personnelId: user.personnelId,
+      caps: user.caps,
     });
 
     // A status change can move an asset into or out of the Uploader Queue, and into Marketing's

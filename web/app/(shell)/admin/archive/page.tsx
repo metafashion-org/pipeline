@@ -1,210 +1,66 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { db } from "@/lib/db/client";
-import { assets } from "@/lib/db/schema/assets";
-import { personnel } from "@/lib/db/schema/personnel";
-import { statusHistory } from "@/lib/db/schema/status_history";
-import { paymentCycles } from "@/lib/db/schema/payment_cycles";
-import { paymentCycleItems } from "@/lib/db/schema/payment_cycle_items";
-import { eq, inArray, desc } from "drizzle-orm";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { PendingPaymentControls } from "@/components/archive/PendingPaymentControls";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArchiveTable } from "@/components/archive/ArchiveTable";
+import { PaymentsBoard } from "@/components/payments/PaymentsBoard";
 import { getArchivedAssets, getArchivedTotal } from "@/lib/archive/archive-service";
-import { RunPaymentPullButton } from "@/components/archive/RunPaymentPullButton";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { getArtistsPendingPayment } from "@/lib/payments/payment-batch-service";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { formatDate } from "@/lib/format-date";
-import { formatFee } from "@/lib/format-money";
+import { History } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
 
-// Shown in the pending-payments table for an asset with no fee recorded.
-const FEE_NOT_SET = "Not set";
-
-interface PendingPayment {
-    id: string;
-    sku: string;
-    title: string;
-    currentStatus: string;
-    artistName: string | null;
-    feeAmount: string | null;
-    currency: string | null;
-    paymentReceiptUrl: string | null;
-    since: Date | null;
-}
-
+// One page for everything payment-related, rather than splitting the live payout queue and its
+// settled history across two sidebar entries. Used to be admin-only (checked the deprecated
+// collapsed session.user.role); now gated on canMarkPaymentDone so a payment_admin who isn't a
+// full admin can actually reach it, matching who's allowed to act on any of this.
 export default async function ArchivePage({
     searchParams,
 }: {
     searchParams: Promise<{ q?: string; month?: string }>;
 }) {
-    // Independent: the URL's query string and the caller's session have nothing to do with
-    // each other, so awaiting them in sequence spent two waits where one does.
     const [filters, session] = await Promise.all([searchParams, getServerSession(authOptions)]);
+    const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
 
-    if (!session || session.user?.role !== "admin") {
+    if (!session || !caps.canMarkPaymentDone) {
         redirect("/unauthorized");
     }
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
     let archive: Awaited<ReturnType<typeof getArchivedAssets>> = { rows: [], total: 0, months: [], truncated: false };
     let archiveTotal: Awaited<ReturnType<typeof getArchivedTotal>> = { total: 0, currencies: [] };
-    let pendingPayments: PendingPayment[] = [];
-    let latestCycleDate: string | null = null;
+    let pendingArtists: Awaited<ReturnType<typeof getArtistsPendingPayment>> = [];
     try {
-        [archive, archiveTotal] = await Promise.all([
+        [archive, archiveTotal, pendingArtists] = await Promise.all([
             getArchivedAssets({ q: filters.q, month: filters.month }),
             getArchivedTotal({ q: filters.q, month: filters.month }),
+            getArtistsPendingPayment(),
         ]);
-
-        // Pending Payments: who to pay, how much, and since when they entered
-        // marked_for_payment/uploaded_to_roblox. This used to be a live continuous
-        // query, but the client only pays out on a scheduled pull (the 15th and the
-        // last day of the month, see lib/payments/payment-cycle-service.ts) - so this
-        // now reads the latest payment_cycles run's items instead, joined against
-        // current asset data for fee/receipt-attached status since payment can still
-        // be marked done after the pull ran.
-        const [latestCycle] = await db
-            .select()
-            .from(paymentCycles)
-            .orderBy(desc(paymentCycles.cycleDate), desc(paymentCycles.createdAt))
-            .limit(1);
-
-        if (latestCycle) {
-            latestCycleDate = latestCycle.cycleDate;
-
-            const pendingRows = await db
-                .select({
-                    id: assets.id,
-                    sku: assets.sku,
-                    title: assets.itemName,
-                    currentStatus: assets.currentStatus,
-                    artistName: personnel.name,
-                    feeAmount: assets.feeAmount,
-                    currency: assets.currency,
-                    paymentReceiptUrl: assets.paymentReceiptUrl,
-                })
-                .from(paymentCycleItems)
-                .innerJoin(assets, eq(paymentCycleItems.assetId, assets.id))
-                .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
-                .where(eq(paymentCycleItems.cycleId, latestCycle.id));
-
-            const sinceByAssetId = new Map<string, Date>();
-            if (pendingRows.length > 0) {
-                const historyRows = await db
-                    .select({ assetId: statusHistory.assetId, toStatus: statusHistory.toStatus, createdAt: statusHistory.createdAt })
-                    .from(statusHistory)
-                    .where(inArray(statusHistory.assetId, pendingRows.map((r) => r.id)))
-                    .orderBy(desc(statusHistory.createdAt));
-                for (const row of pendingRows) {
-                    const match = historyRows.find((h) => h.assetId === row.id && h.toStatus === row.currentStatus);
-                    if (match) sinceByAssetId.set(row.id, match.createdAt);
-                }
-            }
-
-            pendingPayments = pendingRows
-                .map((r) => ({ ...r, since: sinceByAssetId.get(r.id) ?? null }))
-                .sort((a, b) => (a.since?.getTime() ?? 0) - (b.since?.getTime() ?? 0));
-        }
     } catch (error) {
-        console.error("Error fetching archived tasks:", error);
+        console.error("Error fetching archive/payments data:", error);
     }
 
     return (
         <div className="flex flex-col h-full bg-background text-foreground">
       <PageHeader
-        title="Archive"
-        description="Assets paid out more than 7 days ago."
+        title="Payments"
+        description="Who's owed money right now, and everything already paid out."
       />
 
             <main className="flex-1 overflow-auto p-4 sm:p-6 flex flex-col gap-6">
-            <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardHeader className="flex flex-row items-start justify-between gap-2">
-                    <div>
-                        <CardTitle>Pending Payments</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                            {latestCycleDate
-                                ? `Who to pay, how much, and since when - from the ${formatDate(latestCycleDate)} payout pull. Client pays out on the 15th and the last day of each month.`
-                                : "Who to pay, how much, and since when. Client pays out on the 15th and the last day of each month."}
-                        </p>
-                    </div>
-                    <RunPaymentPullButton />
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>SKU</TableHead>
-                                <TableHead>Title</TableHead>
-                                <TableHead>Artist</TableHead>
-                                <TableHead>Fee</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Since</TableHead>
-                                <TableHead>Payment Receipt</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {!latestCycleDate ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">
-                                        No payment cycle has run yet. Click &quot;Run pull now&quot; to pull the current pending payments, or wait for the next scheduled pull.
-                                    </TableCell>
-                                </TableRow>
-                            ) : pendingPayments.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center h-24">
-                                        No pending payments in the latest cycle.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                pendingPayments.map((p) => (
-                                    <TableRow key={p.id}>
-                                        <TableCell className="font-mono text-sm">{p.sku}</TableCell>
-                                        <TableCell className="font-medium">{p.title}</TableCell>
-                                        <TableCell>{p.artistName || "Unassigned"}</TableCell>
-                                        <TableCell>{formatFee(p.feeAmount, p.currency, FEE_NOT_SET)}</TableCell>
-                                        <TableCell>
-                                            {p.currentStatus === "payment_done" ? (
-                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                                                    Payment Done
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant={p.currentStatus === "marked_for_payment" ? "default" : "secondary"}>
-                                                    {p.currentStatus === "marked_for_payment" ? "Marked for Payment" : "Uploaded to Roblox"}
-                                                </Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground text-sm">{formatDate(p.since, "N/A")}</TableCell>
-                                        <TableCell>
-                                            <PendingPaymentControls sku={p.sku} currency={p.currency} paymentReceiptUrl={p.paymentReceiptUrl} />
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+            <PaymentsBoard initialArtists={pendingArtists} />
 
             <Card className="shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="pt-6">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <History className="h-4 w-4" /> Archive
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">Assets paid out more than 7 days ago.</p>
+                </CardHeader>
+                <CardContent>
                 {/* ArchiveTable reads the query string with useSearchParams. Without a Suspense
                     boundary that hook forces the whole route into client-side rendering during
                     prerender, and Next errors on it in a static build. The page is
@@ -231,8 +87,6 @@ export default async function ArchivePage({
                 </Suspense>
                 </CardContent>
             </Card>
-
-
             </main>
         </div>
     );
