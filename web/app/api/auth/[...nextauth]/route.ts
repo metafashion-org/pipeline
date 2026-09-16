@@ -21,7 +21,12 @@ const providers: Provider[] = [
             params: {
                 scope: "openid email profile https://www.googleapis.com/auth/spreadsheets",
                 access_type: "offline",
-                prompt: "consent",
+                // select_account forces Google's account chooser even when the browser already
+                // has one Google account active. Without it, someone rejected on /unauthorized
+                // who clicks "Sign in with another account" silently gets the same account back
+                // and the same rejection, with no way to switch — this is what "consent" alone
+                // was missing.
+                prompt: "consent select_account",
             }
         }
     }),

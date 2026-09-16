@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { SignOutButton } from "@/components/SignOutButton";
 import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 
@@ -22,6 +23,7 @@ export default function UnauthorizedPage() {
           <Button asChild variant="ghost">
             <Link href="/apply">Request artist access</Link>
           </Button>
+          <SignOutButton />
         </div>
       </div>
     </div>
