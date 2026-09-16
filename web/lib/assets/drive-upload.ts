@@ -93,6 +93,22 @@ async function shareWithDomain(fileId: string): Promise<void> {
   }
 }
 
+// Freelance artists are never on the metafashion.in domain, and driveThumbnailUrl() (see
+// lib/assets/drive-links.ts) renders reference images by hitting Drive's public thumbnail
+// endpoint with no credentials at all — both need a file readable by anyone with the link, which
+// the domain-only grant above does not provide. Best-effort for the same reason as that grant.
+async function shareWithAnyoneReader(fileId: string): Promise<void> {
+  try {
+    await authedFetch(`${DRIVE_API}/files/${fileId}/permissions?supportsAllDrives=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "anyone", role: "reader" }),
+    });
+  } catch {
+    // Best-effort, same as the domain grant above.
+  }
+}
+
 async function findFolder(name: string, driveId: string): Promise<string | null> {
   const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   const q = encodeURIComponent(
@@ -175,6 +191,7 @@ async function uploadFileToFolder(
   }
   const created = await res.json();
   await shareWithDomain(created.id);
+  await shareWithAnyoneReader(created.id);
 
   return {
     url: `https://drive.google.com/file/d/${created.id}/view`,
