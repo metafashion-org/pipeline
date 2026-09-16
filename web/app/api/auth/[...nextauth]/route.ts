@@ -19,14 +19,18 @@ const providers: Provider[] = [
         clientSecret: ENV.GOOGLE_OAUTH_CLIENT_SECRET,
         authorization: {
             params: {
-                scope: "openid email profile https://www.googleapis.com/auth/spreadsheets",
-                access_type: "offline",
-                // select_account forces Google's account chooser even when the browser already
-                // has one Google account active. Without it, someone rejected on /unauthorized
-                // who clicks "Sign in with another account" silently gets the same account back
-                // and the same rejection, with no way to switch — this is what "consent" alone
-                // was missing.
-                prompt: "consent select_account",
+                // Sign-in only. These three scopes are non-sensitive, so Google shows the plain
+                // account chooser instead of the "this app hasn't been verified" interstitial and
+                // no OAuth verification review is needed. The app previously also asked for
+                // .../auth/spreadsheets, which is a sensitive scope: that is what put the warning
+                // screen in front of every user and capped the app at its test-user list. Nothing
+                // reads a user's Sheets any more (the Sheets integration was removed), and the
+                // Drive work in lib/assets/drive-upload.ts runs on a service account, not on the
+                // signed-in person's token, so no Google API scope belongs here.
+                //
+                // Adding any googleapis.com scope back reinstates the warning screen. Use the
+                // service account instead unless the feature genuinely has to act as the user.
+                scope: "openid email profile",
             }
         }
     }),
@@ -75,11 +79,7 @@ export const authOptions: NextAuthOptions = {
 
             return "/unauthorized";
         },
-        async jwt({ token, account, user }) {
-            if (account) {
-                token.accessToken = account.access_token;
-                token.refreshToken = account.refresh_token;
-            }
+        async jwt({ token }) {
             if (token.email) {
                 const authResult = await getActivePersonnelByEmail(token.email);
                 token.personnelId = authResult.personnelId;
@@ -90,9 +90,6 @@ export const authOptions: NextAuthOptions = {
             return token;
         },
         async session({ session, token }) {
-            session.accessToken = token.accessToken as string | undefined;
-            session.refreshToken = token.refreshToken as string | undefined;
-
             if (session.user && token.email) {
                 const status = token.status as string | undefined;
                 session.user.status = status;
