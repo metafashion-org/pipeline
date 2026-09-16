@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getKanbanBoardData, KanbanColumnData } from "@/lib/kanban/kanban-service";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { Board } from "@/components/kanban/Board";
 import { NewAssetDialog } from "@/components/kanban/NewAssetDialog";
 import { redirect } from "next/navigation";
@@ -11,8 +12,14 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminBoardPage() {
     const session = await getServerSession(authOptions);
+    const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
 
-    if (!session || session.user?.role !== "admin") {
+    // canViewAllAssets, not the deprecated collapsed session.user.role, which only ever holds
+    // "admin", "operator" or "artist" — someone whose roles include operator but not admin (a
+    // production manager without full admin, granted canViewAllAssets through the operator
+    // role) collapses to "operator" and was rejected here even though the sidebar's own
+    // isRouteAllowedForRoles check already promises them this page.
+    if (!session || !(caps.canViewAllAssets || caps.canManageSystemConfig)) {
         redirect("/unauthorized");
     }
 
@@ -35,7 +42,7 @@ export default async function AdminBoardPage() {
             <main className="flex-1 overflow-hidden p-4 sm:p-6">
                 <Board
                     initialColumns={initialColumns}
-                    role="admin"
+                    role={session.user.role || "artist"}
                 />
             </main>
         </div>
