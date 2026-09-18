@@ -12,6 +12,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ReferenceUploadButton } from "./reference-upload-button";
+import { DriveThumbnail } from "./drive-thumbnail";
+import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { jsonFetcher } from "@/lib/fetcher";
 
 interface BrandGroup {
@@ -84,6 +86,15 @@ export function AssetFormFields({
     const uploadSku = values.sku || skuPreview || "";
     const appendLinks = (field: "referenceImages" | "recolorReferenceImages", urls: string[]) =>
         set({ [field]: [values[field], ...urls].filter(Boolean).join("\n") });
+    // Drops whichever line is exactly this URL. Line-exact rather than a substring replace, so a
+    // legacy row that packs a URL alongside other text or other links on the same line (see
+    // lib/assets/drive-links.ts's own comment on that shape) is left untouched instead of mangled
+    // — its thumbnail just won't offer a working remove button, which beats corrupting the row.
+    const removeLink = (field: "referenceImages" | "recolorReferenceImages", url: string) =>
+        set({ [field]: values[field].split("\n").filter((line) => line.trim() !== url).join("\n") });
+
+    const referenceRefs = parseDriveRefs(values.referenceImages);
+    const recolorRefs = parseDriveRefs(values.recolorReferenceImages);
 
     // Open to any signed-in user (not gated on canManageSystemConfig) — see app/api/admin/brand-groups/route.ts's GET comment.
     const { data: brandGroupsData } = useSWR<{ brandGroups?: BrandGroup[] }>("/api/admin/brand-groups", jsonFetcher);
@@ -187,38 +198,75 @@ export function AssetFormFields({
 
             <div className="grid gap-1.5">
                 <div className="flex items-center justify-between">
-                    <Label htmlFor={id("refs")}>Reference links</Label>
+                    <Label>Reference images</Label>
                     <ReferenceUploadButton
                         sku={uploadSku}
                         disabled={!uploadSku}
                         onUploaded={(urls) => appendLinks("referenceImages", urls)}
                     />
                 </div>
+                {referenceRefs.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        {referenceRefs.map((ref) => (
+                            <DriveThumbnail
+                                key={ref.url}
+                                driveRef={ref}
+                                size={64}
+                                onRemove={() => removeLink("referenceImages", ref.url)}
+                            />
+                        ))}
+                    </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                    The first image becomes the card&apos;s thumbnail. Upload files directly, or{" "}
+                    <label htmlFor={id("refs")} className="cursor-pointer underline underline-offset-2">
+                        paste Drive links instead
+                    </label>
+                    .
+                </p>
                 <Textarea
                     id={id("refs")}
                     rows={2}
-                    placeholder="Paste Drive links, or upload image files directly"
+                    className="text-xs"
+                    placeholder="Paste Drive links, one per line"
                     value={values.referenceImages}
                     onChange={(e) => set({ referenceImages: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">
-                    The first link becomes the card&apos;s thumbnail image. All links show as previews in the asset drawer. Uploaded files land in the team Shared Drive automatically.
-                </p>
             </div>
 
             <div className="grid gap-1.5">
                 <div className="flex items-center justify-between">
-                    <Label htmlFor={id("recolours")}>Recolour references</Label>
+                    <Label>Recolour references</Label>
                     <ReferenceUploadButton
                         sku={uploadSku}
                         disabled={!uploadSku}
                         onUploaded={(urls) => appendLinks("recolorReferenceImages", urls)}
                     />
                 </div>
+                {recolorRefs.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                        {recolorRefs.map((ref) => (
+                            <DriveThumbnail
+                                key={ref.url}
+                                driveRef={ref}
+                                size={64}
+                                onRemove={() => removeLink("recolorReferenceImages", ref.url)}
+                            />
+                        ))}
+                    </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                    Optional. Upload files directly, or{" "}
+                    <label htmlFor={id("recolours")} className="cursor-pointer underline underline-offset-2">
+                        paste Drive links instead
+                    </label>
+                    .
+                </p>
                 <Textarea
                     id={id("recolours")}
                     rows={2}
-                    placeholder="Optional, one link per line, or upload directly"
+                    className="text-xs"
+                    placeholder="One link per line"
                     value={values.recolorReferenceImages}
                     onChange={(e) => set({ recolorReferenceImages: e.target.value })}
                 />

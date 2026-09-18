@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { parseDriveRefs, DriveRef } from "@/lib/assets/drive-links";
-import { DriveImage } from "./drive-image";
+import { DriveThumbnail } from "./drive-thumbnail";
 import { getEffectiveCapabilities, canManageKnowledge } from "@/lib/auth/rbac";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
@@ -20,42 +20,6 @@ export interface AssetDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userRoles?: string[];
-}
-
-/**
- * One Drive reference, shown as a thumbnail linking out to the file.
- * Folders, non-Drive links, and files no source can fetch degrade to an "Open in Drive" tile so a reference is never silently dropped.
- */
-// Constant, so it is built once at module scope rather than rebuilt for every thumbnail on every render.
-const OPEN_IN_DRIVE = (
-  <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-xs text-muted-foreground">
-    <ExternalLink className="h-3.5 w-3.5" />
-    Open in Drive
-  </span>
-);
-
-function DriveThumbnail({ driveRef }: { driveRef: DriveRef }) {
-  return (
-    <a
-      href={driveRef.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group relative block h-24 w-24 shrink-0 overflow-hidden rounded-md border bg-muted"
-      title={driveRef.url}
-    >
-      {driveRef.fileId ? (
-        <DriveImage
-          fileId={driveRef.fileId}
-          alt="Reference"
-          sizes="96px"
-          className="object-cover transition-transform group-hover:scale-105"
-          fallback={OPEN_IN_DRIVE}
-        />
-      ) : (
-        OPEN_IN_DRIVE
-      )}
-    </a>
-  );
 }
 
 function ReferenceGallery({ label, refs }: { label: string; refs: DriveRef[] }) {
