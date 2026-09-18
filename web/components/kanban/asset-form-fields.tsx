@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Loader2 } from "lucide-react";
 import {
     Select,
     SelectContent,
@@ -20,6 +21,24 @@ import { jsonFetcher } from "@/lib/fetcher";
 interface BrandGroup {
     id: string;
     name: string;
+}
+
+/**
+ * A file mid-upload, shown from its local object URL rather than a Drive link — there is no
+ * Drive link yet, and even once there is, Drive hasn't generated a thumbnail for a file this new.
+ * A plain `<img>` rather than next/image: `objectUrl` is a blob: URL, which next/image's remote
+ * optimizer does not accept.
+ */
+function UploadingPreview({ objectUrl }: { objectUrl: string }) {
+    return (
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={objectUrl} alt="Uploading" className="h-full w-full object-cover opacity-50" />
+            <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin text-white drop-shadow" />
+            </div>
+        </div>
+    );
 }
 
 /**
@@ -106,6 +125,18 @@ export function AssetFormFields({
     const [showRecolorLinks, setShowRecolorLinks] = useState(
         values.recolorReferenceImages.trim() !== "" && recolorRefs.length === 0
     );
+
+    // Local object-URL previews for files mid-upload, shown instead of waiting on Drive's own
+    // thumbnail (which isn't generated yet for a file that just landed — see
+    // ReferenceUploadButton's onFilesSelected doc comment). Cleared, revoking each URL, once the
+    // batch that created them settles either way.
+    const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
+    const [recolorPreviews, setRecolorPreviews] = useState<string[]>([]);
+    const clearPreviews = (setPreviews: Dispatch<SetStateAction<string[]>>) =>
+        setPreviews((prev) => {
+            prev.forEach((url) => URL.revokeObjectURL(url));
+            return [];
+        });
 
     // Open to any signed-in user (not gated on canManageSystemConfig) — see app/api/admin/brand-groups/route.ts's GET comment.
     const { data: brandGroupsData } = useSWR<{ brandGroups?: BrandGroup[] }>("/api/admin/brand-groups", jsonFetcher);
@@ -213,10 +244,14 @@ export function AssetFormFields({
                     <ReferenceUploadButton
                         sku={uploadSku}
                         disabled={!uploadSku}
+                        onFilesSelected={(files) =>
+                            setReferencePreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))])
+                        }
                         onUploaded={(urls) => appendLinks("referenceImages", urls)}
+                        onSettled={() => clearPreviews(setReferencePreviews)}
                     />
                 </div>
-                {referenceRefs.length > 0 && (
+                {(referenceRefs.length > 0 || referencePreviews.length > 0) && (
                     <div className="flex flex-wrap gap-2">
                         {referenceRefs.map((ref) => (
                             <DriveThumbnail
@@ -225,6 +260,9 @@ export function AssetFormFields({
                                 size={64}
                                 onRemove={() => removeLink("referenceImages", ref.url)}
                             />
+                        ))}
+                        {referencePreviews.map((url) => (
+                            <UploadingPreview key={url} objectUrl={url} />
                         ))}
                     </div>
                 )}
@@ -255,10 +293,14 @@ export function AssetFormFields({
                     <ReferenceUploadButton
                         sku={uploadSku}
                         disabled={!uploadSku}
+                        onFilesSelected={(files) =>
+                            setRecolorPreviews((prev) => [...prev, ...files.map((f) => URL.createObjectURL(f))])
+                        }
                         onUploaded={(urls) => appendLinks("recolorReferenceImages", urls)}
+                        onSettled={() => clearPreviews(setRecolorPreviews)}
                     />
                 </div>
-                {recolorRefs.length > 0 && (
+                {(recolorRefs.length > 0 || recolorPreviews.length > 0) && (
                     <div className="flex flex-wrap gap-2">
                         {recolorRefs.map((ref) => (
                             <DriveThumbnail
@@ -267,6 +309,9 @@ export function AssetFormFields({
                                 size={64}
                                 onRemove={() => removeLink("recolorReferenceImages", ref.url)}
                             />
+                        ))}
+                        {recolorPreviews.map((url) => (
+                            <UploadingPreview key={url} objectUrl={url} />
                         ))}
                     </div>
                 )}
