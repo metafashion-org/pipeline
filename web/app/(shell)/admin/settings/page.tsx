@@ -6,6 +6,7 @@ import { listStatuses, listTransitionRules } from "@/lib/settings/settings-servi
 import { getCurationFieldConfigs, seedDefaultCurationFieldConfig } from "@/lib/curation/curation-service";
 import { SettingsManager } from "@/components/settings/SettingsManager";
 import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
+import { CategoriesManager } from "@/components/settings/CategoriesManager";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -41,6 +42,7 @@ export default async function SettingsPage() {
 
       <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
         <BrandGroupsManager />
+        <CategoriesManager />
         <SettingsManager initialStatuses={statuses} initialRules={rules} initialCurationFields={curationFields} />
       </main>
     </div>
