@@ -22,6 +22,11 @@ interface BrandGroup {
     name: string;
 }
 
+interface Category {
+    id: string;
+    name: string;
+}
+
 /**
  * The asset fields shared by the create and edit dialogs.
  *
@@ -112,6 +117,15 @@ export function AssetFormFields({
     const brandGroups = brandGroupsData?.brandGroups ?? [];
     const NO_GROUP = "__none__";
 
+    // Same reasoning as brand groups — open to any signed-in user, gated only on the admin side.
+    const { data: categoriesData } = useSWR<{ categories?: Category[] }>("/api/admin/categories", jsonFetcher);
+    const categoryOptions = categoriesData?.categories ?? [];
+    const NO_CATEGORY = "__none__";
+    // An older asset's category can be free text that predates this managed list (see
+    // categories.ts's own doc comment) — kept as a selectable option of its own so editing the
+    // asset never silently drops or overwrites a value nobody's added to the list yet.
+    const hasUnlistedCategory = values.category !== "" && !categoryOptions.some((c) => c.name === values.category);
+
     return (
         <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">
@@ -139,12 +153,23 @@ export function AssetFormFields({
                 )}
                 <div className="grid gap-1.5">
                     <Label htmlFor={id("category")}>Category</Label>
-                    <Input
-                        id={id("category")}
-                        placeholder="Necklace, Vest, ..."
-                        value={values.category}
-                        onChange={(e) => set({ category: e.target.value })}
-                    />
+                    <Select
+                        value={values.category || NO_CATEGORY}
+                        onValueChange={(v) => set({ category: v === NO_CATEGORY ? "" : v })}
+                    >
+                        <SelectTrigger id={id("category")} className="w-full">
+                            <SelectValue placeholder="Not set" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={NO_CATEGORY}>Not set</SelectItem>
+                            {hasUnlistedCategory && (
+                                <SelectItem value={values.category}>{values.category}</SelectItem>
+                            )}
+                            {categoryOptions.map((c) => (
+                                <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
 
