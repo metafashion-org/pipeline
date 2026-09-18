@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,6 +96,16 @@ export function AssetFormFields({
 
     const referenceRefs = parseDriveRefs(values.referenceImages);
     const recolorRefs = parseDriveRefs(values.recolorReferenceImages);
+    // The raw link textarea stays out of sight until asked for — someone uploading files only
+    // ever needs to look at the thumbnails, never at a Drive URL. Starts open if the field
+    // already holds a link with no matching thumbnail (an unparsed/legacy value), so existing
+    // text is never hidden out from under whoever's editing it.
+    const [showRefLinks, setShowRefLinks] = useState(
+        values.referenceImages.trim() !== "" && referenceRefs.length === 0
+    );
+    const [showRecolorLinks, setShowRecolorLinks] = useState(
+        values.recolorReferenceImages.trim() !== "" && recolorRefs.length === 0
+    );
 
     // Open to any signed-in user (not gated on canManageSystemConfig) — see app/api/admin/brand-groups/route.ts's GET comment.
     const { data: brandGroupsData } = useSWR<{ brandGroups?: BrandGroup[] }>("/api/admin/brand-groups", jsonFetcher);
@@ -217,21 +228,25 @@ export function AssetFormFields({
                         ))}
                     </div>
                 )}
-                <p className="text-xs text-muted-foreground">
-                    The first image becomes the card&apos;s thumbnail. Upload files directly, or{" "}
-                    <label htmlFor={id("refs")} className="cursor-pointer underline underline-offset-2">
-                        paste Drive links instead
-                    </label>
-                    .
-                </p>
-                <Textarea
-                    id={id("refs")}
-                    rows={2}
-                    className="text-xs"
-                    placeholder="Paste Drive links, one per line"
-                    value={values.referenceImages}
-                    onChange={(e) => set({ referenceImages: e.target.value })}
-                />
+                {showRefLinks ? (
+                    <Textarea
+                        id={id("refs")}
+                        rows={2}
+                        autoFocus
+                        className="text-xs"
+                        placeholder="Paste Drive links, one per line"
+                        value={values.referenceImages}
+                        onChange={(e) => set({ referenceImages: e.target.value })}
+                    />
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setShowRefLinks(true)}
+                        className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                    >
+                        Have a link instead of a file?
+                    </button>
+                )}
             </div>
 
             <div className="grid gap-1.5">
@@ -255,21 +270,25 @@ export function AssetFormFields({
                         ))}
                     </div>
                 )}
-                <p className="text-xs text-muted-foreground">
-                    Optional. Upload files directly, or{" "}
-                    <label htmlFor={id("recolours")} className="cursor-pointer underline underline-offset-2">
-                        paste Drive links instead
-                    </label>
-                    .
-                </p>
-                <Textarea
-                    id={id("recolours")}
-                    rows={2}
-                    className="text-xs"
-                    placeholder="One link per line"
-                    value={values.recolorReferenceImages}
-                    onChange={(e) => set({ recolorReferenceImages: e.target.value })}
-                />
+                {showRecolorLinks ? (
+                    <Textarea
+                        id={id("recolours")}
+                        rows={2}
+                        autoFocus
+                        className="text-xs"
+                        placeholder="Paste Drive links, one per line"
+                        value={values.recolorReferenceImages}
+                        onChange={(e) => set({ recolorReferenceImages: e.target.value })}
+                    />
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => setShowRecolorLinks(true)}
+                        className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                    >
+                        Have a link instead of a file?
+                    </button>
+                )}
             </div>
         </div>
     );
