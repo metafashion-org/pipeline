@@ -1,7 +1,8 @@
 import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
-import { TransitionRefusedError, updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
+import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
+import { TransitionRefusedError } from "@/lib/kanban/transition-errors";
 import { z } from "zod";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
@@ -49,8 +50,15 @@ export async function PATCH(
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     console.error("Error in status update endpoint:", error);
-    // A refused transition is an authorization answer (403). Any other failure is a bad request (400).
-    const status = error instanceof TransitionRefusedError ? 403 : 400;
-    return NextResponse.json({ error: errorMessage(error, "Failed to update status") }, { status });
+    // A refused move carries its own status (403 for a permission refusal) plus a code, a title,
+    // the reason and what to do instead, which the board shows as they are. Any other failure is a
+    // bad request (400).
+    if (error instanceof TransitionRefusedError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, title: error.title, reason: error.reason, hint: error.hint },
+        { status: error.httpStatus }
+      );
+    }
+    return NextResponse.json({ error: errorMessage(error, "Failed to update status") }, { status: 400 });
   }
 }
