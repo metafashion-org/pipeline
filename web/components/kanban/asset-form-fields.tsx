@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { ReferenceUploadButton } from "./reference-upload-button";
+import { ReferenceDropzone } from "./reference-dropzone";
 import { DriveThumbnail } from "./drive-thumbnail";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { jsonFetcher } from "@/lib/fetcher";
@@ -232,89 +233,103 @@ export function AssetFormFields({
                 </div>
             </div>
 
-            <div className="grid gap-1.5">
-                <div className="flex items-center justify-between">
-                    <Label>Reference files</Label>
-                    <ReferenceUploadButton
-                        sku={uploadSku}
-                        disabled={!uploadSku}
-                        onUploaded={(urls) => appendLinks("referenceImages", urls)}
-                    />
-                </div>
-                {referenceRefs.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {referenceRefs.map((ref) => (
-                            <DriveThumbnail
-                                key={ref.url}
-                                driveRef={ref}
-                                size={64}
-                                onRemove={() => removeLink("referenceImages", ref.url)}
+            <ReferenceDropzone
+                sku={uploadSku}
+                disabled={!uploadSku}
+                onUploaded={(urls) => appendLinks("referenceImages", urls)}
+            >
+                {({ uploading, uploadFiles }) => (
+                    <>
+                        <div className="flex items-center justify-between">
+                            <Label>Reference files</Label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">or drop files here</span>
+                                <ReferenceUploadButton disabled={!uploadSku} uploading={uploading} onFiles={uploadFiles} />
+                            </div>
+                        </div>
+                        {referenceRefs.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {referenceRefs.map((ref) => (
+                                    <DriveThumbnail
+                                        key={ref.url}
+                                        driveRef={ref}
+                                        size={64}
+                                        onRemove={() => removeLink("referenceImages", ref.url)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                        {showRefLinks ? (
+                            <Textarea
+                                id={id("refs")}
+                                rows={2}
+                                autoFocus
+                                className="text-xs"
+                                placeholder="Paste Drive links, one per line"
+                                value={values.referenceImages}
+                                onChange={(e) => set({ referenceImages: e.target.value })}
                             />
-                        ))}
-                    </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setShowRefLinks(true)}
+                                className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                            >
+                                Have a link instead of a file?
+                            </button>
+                        )}
+                    </>
                 )}
-                {showRefLinks ? (
-                    <Textarea
-                        id={id("refs")}
-                        rows={2}
-                        autoFocus
-                        className="text-xs"
-                        placeholder="Paste Drive links, one per line"
-                        value={values.referenceImages}
-                        onChange={(e) => set({ referenceImages: e.target.value })}
-                    />
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setShowRefLinks(true)}
-                        className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
-                    >
-                        Have a link instead of a file?
-                    </button>
-                )}
-            </div>
+            </ReferenceDropzone>
 
-            <div className="grid gap-1.5">
-                <div className="flex items-center justify-between">
-                    <Label>Recolour references</Label>
-                    <ReferenceUploadButton
-                        sku={uploadSku}
-                        disabled={!uploadSku}
-                        onUploaded={(urls) => appendLinks("recolorReferenceImages", urls)}
-                    />
-                </div>
-                {recolorRefs.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {recolorRefs.map((ref) => (
-                            <DriveThumbnail
-                                key={ref.url}
-                                driveRef={ref}
-                                size={64}
-                                onRemove={() => removeLink("recolorReferenceImages", ref.url)}
+            <ReferenceDropzone
+                sku={uploadSku}
+                disabled={!uploadSku}
+                onUploaded={(urls) => appendLinks("recolorReferenceImages", urls)}
+            >
+                {({ uploading, uploadFiles }) => (
+                    <>
+                        <div className="flex items-center justify-between">
+                            <Label>Recolour references</Label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">or drop files here</span>
+                                <ReferenceUploadButton disabled={!uploadSku} uploading={uploading} onFiles={uploadFiles} />
+                            </div>
+                        </div>
+                        {recolorRefs.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {recolorRefs.map((ref) => (
+                                    <DriveThumbnail
+                                        key={ref.url}
+                                        driveRef={ref}
+                                        size={64}
+                                        onRemove={() => removeLink("recolorReferenceImages", ref.url)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                        {showRecolorLinks ? (
+                            <Textarea
+                                id={id("recolours")}
+                                rows={2}
+                                autoFocus
+                                className="text-xs"
+                                placeholder="Paste Drive links, one per line"
+                                value={values.recolorReferenceImages}
+                                onChange={(e) => set({ recolorReferenceImages: e.target.value })}
                             />
-                        ))}
-                    </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setShowRecolorLinks(true)}
+                                className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                            >
+                                Have a link instead of a file?
+                            </button>
+                        )}
+                    </>
                 )}
-                {showRecolorLinks ? (
-                    <Textarea
-                        id={id("recolours")}
-                        rows={2}
-                        autoFocus
-                        className="text-xs"
-                        placeholder="Paste Drive links, one per line"
-                        value={values.recolorReferenceImages}
-                        onChange={(e) => set({ recolorReferenceImages: e.target.value })}
-                    />
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setShowRecolorLinks(true)}
-                        className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
-                    >
-                        Have a link instead of a file?
-                    </button>
-                )}
-            </div>
+            </ReferenceDropzone>
         </div>
     );
 }
