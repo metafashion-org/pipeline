@@ -11,9 +11,11 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
- * Uploads one reference image straight into the team's Shared Drive (see lib/assets/drive-upload.ts)
- * and returns a link in the same shape a pasted Drive link already takes — the client appends it
- * to the reference-links textarea itself, nothing about assets.reference_images changes.
+ * Uploads one reference file — an image, a PDF, a zipped texture pack, whatever an artist needs
+ * as reference — straight into the team's Shared Drive (see lib/assets/drive-upload.ts) and
+ * returns a link in the same shape a pasted Drive link already takes. No file-type check here:
+ * an artist reference isn't always a picture. The client appends the link to the reference-links
+ * textarea itself, nothing about assets.reference_images changes.
  *
  * Gated the same as creating/editing an asset (canAssignArtists) — uploading a reference is part
  * of the same production-management action, not a separate capability.

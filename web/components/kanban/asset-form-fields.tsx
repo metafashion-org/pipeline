@@ -234,7 +234,7 @@ export function AssetFormFields({
 
             <div className="grid gap-1.5">
                 <div className="flex items-center justify-between">
-                    <Label>Reference images</Label>
+                    <Label>Reference files</Label>
                     <ReferenceUploadButton
                         sku={uploadSku}
                         disabled={!uploadSku}
