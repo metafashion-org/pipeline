@@ -19,22 +19,35 @@ export function ReferenceUploadButton({
   sku,
   disabled,
   onUploaded,
+  onFilesSelected,
+  onSettled,
 }: {
   /** The SKU (real, or the create-dialog's previewed one) to file this upload under. */
   sku: string;
   /** True while the SKU preview hasn't loaded yet — nothing to upload against so far. */
   disabled?: boolean;
   onUploaded: (urls: string[]) => void;
+  /**
+   * Fires synchronously on file selection, before the network upload starts. A file Google Drive
+   * only just received doesn't have a thumbnail yet — its thumbnail endpoint can lag or fail for
+   * the first several seconds — so the caller uses this to show an instant local preview instead
+   * of waiting on Drive.
+   */
+  onFilesSelected?: (files: File[]) => void;
+  /** Fires once the whole batch has finished, success or failure, so the caller can clear those local previews either way. */
+  onSettled?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    onFilesSelected?.(files);
     setUploading(true);
     const uploaded: string[] = [];
     try {
-      for (const file of Array.from(fileList)) {
+      for (const file of files) {
         const body = new FormData();
         body.append("sku", sku);
         body.append("file", file);
@@ -53,6 +66,7 @@ export function ReferenceUploadButton({
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
+      onSettled?.();
     }
     if (uploaded.length > 0) {
       onUploaded(uploaded);
