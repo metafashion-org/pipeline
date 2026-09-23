@@ -14,6 +14,7 @@ import { LinkedArtifacts } from "./LinkedArtifacts";
 import { SubmitFinalFilesDialog, NotifyUploaderButton } from "./FinalFilesActions";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
+import { formatFee } from "@/lib/format-money";
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -127,6 +128,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                   sku={asset.sku}
                   currentArtistId={asset.artistId}
                   currentArtistName={asset.artistName}
+                  currentDeadline={asset.deadline}
+                  currentFeeAmount={asset.feeAmount}
                 />
               )}
             </div>
@@ -171,7 +174,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
               <DollarSign className="h-3.5 w-3.5" /> 5. Financials & Budget
             </h4>
             <div className="bg-muted/30 p-3 rounded-md text-sm">
-              <p><span className="text-xs text-muted-foreground">Budget/Fee:</span> {asset.feeAmount ? `$${asset.feeAmount}` : "Not set"}</p>
+              <p><span className="text-xs text-muted-foreground">Budget/Fee:</span> {formatFee(asset.feeAmount, asset.currency, "Not set")}</p>
             </div>
           </section>
         )}

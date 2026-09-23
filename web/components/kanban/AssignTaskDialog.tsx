@@ -37,6 +37,15 @@ interface AssignTaskDialogProps {
     sku: string;
     currentArtistId?: string | null;
     currentArtistName?: string | null;
+    /** The asset's own deadline/fee, already set when it was created or edited — pre-fills the fields below so assigning doesn't ask for the same values twice. Either can still be changed for this assignment specifically. */
+    currentDeadline?: Date | string | null;
+    currentFeeAmount?: string | null;
+}
+
+// The date input needs exactly YYYY-MM-DD regardless of locale, same conversion EditAssetDialog
+// already uses for the same field.
+function toDateInputValue(deadline: Date | string | null | undefined): string {
+    return deadline ? new Date(deadline).toISOString().slice(0, 10) : "";
 }
 
 /**
@@ -51,12 +60,22 @@ interface AssignTaskDialogProps {
  * so whoever's assigning can see exactly what's about to go out, without
  * a second, competing place to configure the same thing.
  */
-export function AssignTaskDialog({ sku, currentArtistId, currentArtistName }: AssignTaskDialogProps) {
+export function AssignTaskDialog({
+    sku,
+    currentArtistId,
+    currentArtistName,
+    currentDeadline,
+    currentFeeAmount,
+}: AssignTaskDialogProps) {
     const [open, setOpen] = useState(false);
     // Starts empty rather than pre-selecting the current artist. The list only contains Active artists, so seeding it with the current id showed a wrong name whenever that artist is Inactive or Blacklisted - the Select cannot render a value it has no option for and fell through to another name. An empty start also matches what the dialog is for: choosing someone new.
     const [artistId, setArtistId] = useState<string>("");
-    const [deadline, setDeadline] = useState<string>("");
-    const [feeAmount, setFeeAmount] = useState<string>("");
+    // Deadline and fee, unlike the artist, are pre-filled from the asset's own values — they were
+    // already set when the asset was created or edited, and this dialog used to ask for them a
+    // second time with no indication that leaving them blank keeps the existing ones. Still
+    // editable, for the rare assignment that genuinely needs a different deadline or fee.
+    const [deadline, setDeadline] = useState<string>(() => toDateInputValue(currentDeadline));
+    const [feeAmount, setFeeAmount] = useState<string>(() => currentFeeAmount || "");
     const [ccEmails, setCcEmails] = useState<string>("");
     const [submitting, setSubmitting] = useState(false);
     const { mutate } = useSWRConfig();
