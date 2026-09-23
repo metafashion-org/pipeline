@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 /**
- * Uploads one or more images straight into the team's Shared Drive (lib/assets/drive-upload.ts)
+ * Uploads one or more files straight into the team's Shared Drive (lib/assets/drive-upload.ts)
  * and hands back their links — the caller appends them to its own reference-links text, same as
  * if they'd been pasted by hand. Split out of asset-form-fields.tsx since it owns real state
  * (the file input ref, the uploading flag) that doesn't belong in that form's own state.
+ *
+ * Not image-only: a rig spec sheet, a zipped texture pack or a PDF moodboard is as much an
+ * artist reference as a picture, and the upload route (app/api/assets/reference-upload/route.ts)
+ * already accepts any file type — only this component's own `accept` used to narrow it down.
  */
 export function ReferenceUploadButton({
   sku,
@@ -52,7 +56,7 @@ export function ReferenceUploadButton({
     }
     if (uploaded.length > 0) {
       onUploaded(uploaded);
-      toast.success(uploaded.length === 1 ? "Image uploaded" : `${uploaded.length} images uploaded`);
+      toast.success(uploaded.length === 1 ? "File uploaded" : `${uploaded.length} files uploaded`);
     }
   }
 
@@ -61,7 +65,6 @@ export function ReferenceUploadButton({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
         multiple
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
@@ -72,7 +75,7 @@ export function ReferenceUploadButton({
         size="sm"
         className="h-6 px-2 text-xs gap-1"
         disabled={disabled || uploading}
-        title={disabled ? "Waiting on the SKU to finish generating" : "Upload image files directly"}
+        title={disabled ? "Waiting on the SKU to finish generating" : "Upload images, PDFs, zips or any other reference file"}
         onClick={() => inputRef.current?.click()}
       >
         {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
