@@ -10,7 +10,7 @@ import { listOnboardingRequests, ONBOARDING_STATUSES, type OnboardingStatus } fr
 export async function GET(request: NextRequest) {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.caps.canManageSystemConfig) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user.caps.canManagePersonnel) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const requested = request.nextUrl.searchParams.getAll("status");
   const statuses = requested.filter((s): s is OnboardingStatus =>
