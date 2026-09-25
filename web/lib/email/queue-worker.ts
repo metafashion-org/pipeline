@@ -3,6 +3,13 @@ import { emailQueue } from "@/lib/db/schema/email_queue";
 import { emailLog } from "@/lib/db/schema/email_log";
 import { assets } from "@/lib/db/schema/assets";
 import { eq, lte, and } from "drizzle-orm";
+import { isEmailSendingConfigured, sendViaResend } from "./resend-sender";
+
+export type EmailSender = (item: typeof emailQueue.$inferSelect) => Promise<{ gmailMessageId: string; gmailThreadId?: string }>;
+
+// How many due emails one run of the queue sends. Sends are sequential, so this bounds how long a
+// request that triggers a run can take.
+const EMAILS_PER_RUN = 10;
 
 export interface EnqueueEmailOptions {
   assetId?: string;
@@ -48,12 +55,23 @@ export async function enqueueEmail(options: EnqueueEmailOptions) {
   return queued;
 }
 
-export async function processEmailQueue(senderFn?: (item: typeof emailQueue.$inferSelect) => Promise<{ gmailMessageId: string; gmailThreadId?: string }>) {
+/**
+ * Sends every due email in the queue, up to EMAILS_PER_RUN, through `senderFn`.
+ *
+ * Input: the function that actually delivers one email. Output: one result per email attempted.
+ *
+ * The sender is required. This used to fall back to a fake sender when none was passed, which
+ * marked emails "sent" that nobody ever received. It also used to set the linked asset's status to
+ * "assigned" on every send. That skipped the transition rules and status history, and would have
+ * pulled any asset that got an email, not only a new assignment, back to Assigned. Assigning moves
+ * the asset itself (app/api/assets/[skuId]/assign/route.ts), so sending no longer touches status.
+ */
+export async function processEmailQueue(senderFn: EmailSender) {
   const pendingItems = await db
     .select()
     .from(emailQueue)
     .where(and(eq(emailQueue.status, "pending"), lte(emailQueue.nextAttemptAt, new Date())))
-    .limit(10);
+    .limit(EMAILS_PER_RUN);
 
   const results = [];
 
@@ -62,14 +80,7 @@ export async function processEmailQueue(senderFn?: (item: typeof emailQueue.$inf
       // Mark as sending
       await db.update(emailQueue).set({ status: "sending" }).where(eq(emailQueue.id, item.id));
 
-      let sendResult: { gmailMessageId: string; gmailThreadId?: string } = {
-        gmailMessageId: `msg_${Date.now()}`,
-        gmailThreadId: item.gmailThreadId || `thread_${Date.now()}`,
-      };
-
-      if (senderFn) {
-        sendResult = await senderFn(item);
-      }
+      const sendResult = await senderFn(item);
 
       // Mark as sent
       await db
@@ -81,15 +92,10 @@ export async function processEmailQueue(senderFn?: (item: typeof emailQueue.$inf
         })
         .where(eq(emailQueue.id, item.id));
 
-      // If asset exists, update asset's stored gmailThreadId and trigger automatic status transition to 'assigned'
-      if (item.assetId) {
+      if (item.assetId && sendResult.gmailThreadId) {
         await db
           .update(assets)
-          .set({
-            gmailThreadId: sendResult.gmailThreadId || item.gmailThreadId,
-            currentStatus: "assigned",
-            updatedAt: new Date(),
-          })
+          .set({ gmailThreadId: sendResult.gmailThreadId, updatedAt: new Date() })
           .where(eq(assets.id, item.assetId));
       }
 
@@ -135,4 +141,20 @@ export async function processEmailQueue(senderFn?: (item: typeof emailQueue.$inf
   }
 
   return results;
+}
+
+/**
+ * Sends whatever is due in the queue through Resend, when Resend is set up.
+ *
+ * Input: none. Output: the results of the run, or an empty list when sending isn't configured.
+ * Without configuration the emails stay "pending" rather than being marked sent, so they go out
+ * once RESEND_API_KEY and EMAIL_FROM are added. Called right after something is queued, and by
+ * the daily cron at /api/cron/email-queue, which retries anything that failed.
+ */
+export async function sendDueEmails() {
+  if (!isEmailSendingConfigured()) {
+    console.warn("[email] RESEND_API_KEY / EMAIL_FROM not set — emails stay queued until they are.");
+    return [];
+  }
+  return processEmailQueue(sendViaResend);
 }

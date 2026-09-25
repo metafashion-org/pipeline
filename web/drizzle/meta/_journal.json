@@ -218,6 +218,13 @@
       "when": 1789484000000,
       "tag": "0030_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789485000000,
+      "tag": "0031_asset_offers",
+      "breakpoints": true
     }
   ]
 }

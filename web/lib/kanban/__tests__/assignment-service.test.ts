@@ -48,7 +48,7 @@ async function testAssignAndReassignFlow() {
   const [artist2] = await db.insert(personnel).values({ name: "Test Assignment Artist Two", email: ARTIST2_EMAIL, roles: ["artist"] }).returning();
   const [asset] = await db
     .insert(assets)
-    .values({ sku: TEST_SKU, itemName: "Test Assignment Asset", currentStatus: "unassigned", feeAmount: "150.00" })
+    .values({ sku: TEST_SKU, itemName: "Test Assignment Asset", currentStatus: "unassigned", feeAmount: "150.00", deadline: new Date("2026-10-10") })
     .returning();
   assetId = asset.id;
 
@@ -98,11 +98,11 @@ async function testAssignAndReassignFlow() {
     );
 
     const queuedAfterFirst = await db.select().from(emailQueue).where(eq(emailQueue.assetId, assetId));
-    assert.strictEqual(queuedAfterFirst.length, 1, "Exactly one email must be queued");
-    assert.strictEqual(queuedAfterFirst[0].id, result.queuedEmailId);
+    assert.strictEqual(queuedAfterFirst.length, 1, "Exactly one email must be queued: the offer");
     assert.strictEqual(queuedAfterFirst[0].toEmail, ARTIST_EMAIL, "Queued email must go to the newly assigned artist");
-    assert.strictEqual(queuedAfterFirst[0].subject, `Meta Fashion Assignment | ${TEST_SKU} | Test Assignment Asset`);
+    assert.strictEqual(queuedAfterFirst[0].subject, `New asset offer | ${TEST_SKU} | Test Assignment Asset`);
     assert.strictEqual(queuedAfterFirst[0].status, "pending");
+    assert.ok(result.offerId, "The assignment returns the offer it sent");
 
     const [assetAfterFirst] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
     assert.strictEqual(assetAfterFirst.currentArtistId, artist.id, "Asset's currentArtistId must be updated to the new artist");
@@ -116,9 +116,8 @@ async function testAssignAndReassignFlow() {
     const payload1 = audit1.payload as Record<string, unknown>;
     assert.strictEqual(payload1.previousArtistId, null);
     assert.strictEqual(payload1.newArtistId, artist.id);
-    assert.strictEqual(payload1.queuedEmailId, result.queuedEmailId);
 
-    console.log("Confirmed first assignment: active row, CC resolution (linked + unlinked), queued email, audit log");
+    console.log("Confirmed first assignment: active row, CC resolution (linked + unlinked), offer email, audit log");
 
     // Reassign to a different artist with no explicit reason, to exercise the
     // real default unassign-reason path, not a re-typed assumption of it.
@@ -165,6 +164,7 @@ async function testFeeAndDeadlinePersistToAsset() {
   await cleanup();
 
   const [artist] = await db.insert(personnel).values({ name: "Test Assignment Artist", email: ARTIST_EMAIL, roles: ["artist"] }).returning();
+  // No deadline on the asset itself: the one passed to assignArtistToAsset is what gets offered and saved.
   const [asset] = await db
     .insert(assets)
     .values({ sku: TEST_SKU, itemName: "Test Fee/Deadline Asset", currentStatus: "unassigned" })

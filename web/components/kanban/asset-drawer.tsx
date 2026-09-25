@@ -16,6 +16,7 @@ import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, Shie
 import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
 import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
+import { AssetOfferStatus } from "@/components/offers/AssetOfferStatus";
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -141,6 +142,14 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                 />
               )}
             </div>
+            {(viewerCapabilities.canAssignArtists || viewerCapabilities.canViewAllAssets) && (
+              <AssetOfferStatus
+                sku={asset.sku}
+                hasArtist={Boolean(asset.artistId)}
+                canManage={viewerCapabilities.canAssignArtists}
+                enabled={open}
+              />
+            )}
           </div>
         </section>
 

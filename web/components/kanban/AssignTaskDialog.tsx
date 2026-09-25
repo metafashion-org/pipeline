@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import Link from "next/link";
+import { MAX_DEADLINE_EXTENSION_DAYS } from "@/lib/offers/offer-rules";
 
 interface Artist {
     id: string;
@@ -113,7 +114,7 @@ export function AssignTaskDialog({
                 return;
             }
             const assigned = artists.find((a) => a.id === artistId);
-            toast.success(`${sku} assigned to ${assigned?.name || "artist"} - brief email queued`);
+            toast.success(`Offer sent to ${assigned?.name || "the artist"} by email and Discord`);
             setOpen(false);
             mutate("/api/assets");
         } finally {
@@ -179,9 +180,14 @@ export function AssignTaskDialog({
                         <Input id="assign-cc" value={ccEmails} onChange={(e) => setCcEmails(e.target.value)} placeholder="reference-support@example.com" />
                     </div>
 
+                    <p className="text-xs text-muted-foreground">
+                        The artist is sent an offer by email and Discord: the asset&apos;s picture, name, SKU, accessory
+                        type, fee and deadline. They accept it, ask for up to {MAX_DEADLINE_EXTENSION_DAYS} more days
+                        (you approve it), or decline.
+                    </p>
                     {briefFieldNames.length > 0 && (
                         <p className="text-xs text-muted-foreground">
-                            Brief will include: {briefFieldNames.join(", ")}.{" "}
+                            Once they accept, the full brief follows: {briefFieldNames.join(", ")}.{" "}
                             <Link href="/admin/curation-fields" className="text-primary hover:underline">
                                 Change
                             </Link>
@@ -196,9 +202,10 @@ export function AssignTaskDialog({
                     <Button
                         data-testid="assign-submit"
                         onClick={submit}
-                        disabled={!artistId || artistId === currentArtistId || submitting}
+                        disabled={!artistId || !deadline || artistId === currentArtistId || submitting}
+                        title={!deadline ? "Set a deadline to offer the asset with" : undefined}
                     >
-                        {submitting ? "Assigning..." : isReassign ? "Reassign" : "Assign"}
+                        {submitting ? "Sending offer..." : isReassign ? "Reassign and send offer" : "Assign and send offer"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

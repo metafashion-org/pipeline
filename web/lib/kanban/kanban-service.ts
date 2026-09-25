@@ -8,7 +8,8 @@ import { artifactSkuLinks } from "@/lib/db/schema/artifact_sku_links";
 import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, and, asc, sql } from "drizzle-orm";
+import { assetOffers, type OfferStatus } from "@/lib/db/schema/asset_offers";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import type { CapabilitySet } from "@/lib/auth/rbac";
 
 export interface KanbanColumnData {
@@ -58,6 +59,9 @@ export interface KanbanAssetCard {
   // Raw JSONB straight from the assets table. Parse with parseDriveRefs (lib/assets/drive-links.ts) before rendering: one cell can hold several comma-joined Drive URLs, or free text that is not a link at all.
   referenceImages: unknown;
   recolorReferenceImages: unknown;
+  // Status of the asset's latest offer to an artist (see lib/offers/offer-service.ts), or null when
+  // it has never been offered. The card shows a badge while it's waiting on someone.
+  offerStatus: OfferStatus | null;
 }
 
 /**
@@ -82,7 +86,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   // they are fetched concurrently. Links are queried separately rather than joined onto the main
   // asset query because an asset can carry more than one link — a join would multiply its row
   // (and every other joined column, artist/brand group included) once per link.
-  const [allStatuses, fetchedAssets, allLinks] = await Promise.all([
+  const [allStatuses, fetchedAssets, allLinks, latestOffers] = await Promise.all([
     db.select().from(statuses).orderBy(asc(statuses.sortOrder)),
     db
     .select({
@@ -123,7 +127,14 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       })
       .from(artifactSkuLinks)
       .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id)),
+    // One row per asset: its newest offer.
+    db
+      .selectDistinctOn([assetOffers.assetId], { assetId: assetOffers.assetId, status: assetOffers.status })
+      .from(assetOffers)
+      .orderBy(assetOffers.assetId, desc(assetOffers.createdAt)),
   ]);
+
+  const offerStatusByAsset = new Map(latestOffers.map((offer) => [offer.assetId, offer.status]));
 
   const guildId = process.env.DISCORD_GUILD_ID;
 
@@ -141,6 +152,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
     ...rest,
     artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
     linkedArtifacts: linksByAsset.get(rest.id) ?? [],
+    offerStatus: offerStatusByAsset.get(rest.id) ?? null,
   }));
 
   const columnsMap = new Map<string, KanbanColumnData>();

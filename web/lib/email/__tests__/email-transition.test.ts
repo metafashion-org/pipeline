@@ -16,11 +16,11 @@ async function cleanup() {
 }
 
 async function testEmailStatusTransition() {
-  console.log("Verifying automatic status transition on email dispatch...");
+  console.log("Verifying a queued email is sent and logged, and leaves the asset's status alone...");
 
   await cleanup();
 
-  // currentStatus defaults to "unassigned" - dispatch is expected to flip it to "assigned".
+  // currentStatus defaults to "unassigned" and must still be that after the send.
   const [asset] = await db
     .insert(assets)
     .values({ sku: TEST_SKU, itemName: "Email Transition Test Asset" })
@@ -34,9 +34,8 @@ async function testEmailStatusTransition() {
       bodyHtml: "<p>Test</p>",
     });
 
-    // No senderFn passed, so processEmailQueue() falls back to its safe fake
-    // sender (fake message ID, no real Gmail call) - safe to run for real here.
-    const results = await processEmailQueue();
+    // A stand-in sender, so no real email leaves the test.
+    const results = await processEmailQueue(async () => ({ gmailMessageId: "test-message-id" }));
     const ourResult = results.find((r) => r.id === queued.id);
     assert.ok(ourResult, "processEmailQueue() result should include our queued item");
     assert.strictEqual(ourResult.status, "sent", "Our queued item should be marked sent");
@@ -49,10 +48,12 @@ async function testEmailStatusTransition() {
     assert.strictEqual(logRows.length, 1, "Exactly one email_log row should be written for our queue item");
     assert.strictEqual(logRows[0].status, "sent", "email_log row status should be sent");
 
+    // Sending an email must not move the asset. Assigning does that itself, through the transition
+    // rules; the queue used to set "assigned" on every send, for any email about any asset.
     const [updatedAsset] = await db.select().from(assets).where(eq(assets.id, asset.id)).limit(1);
-    assert.strictEqual(updatedAsset.currentStatus, "assigned", "Linked asset's currentStatus should flip to assigned on dispatch");
+    assert.strictEqual(updatedAsset.currentStatus, "unassigned", "Sending an email must not change the asset's status");
 
-    console.log("✓ All P2-T19 automatic status transition assertions passed cleanly!");
+    console.log("✓ All email queue assertions passed cleanly!");
   } finally {
     await cleanup();
   }
