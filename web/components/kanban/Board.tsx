@@ -39,6 +39,17 @@ interface BoardProps {
     role: string;
 }
 
+// What a refused move sends back besides `error`: see TransitionRefusedError in lib/kanban/transition-errors.ts.
+interface MoveRefusalBody {
+    code?: string;
+    title?: string;
+    reason?: string;
+    hint?: string;
+}
+
+// Long enough to read a reason and a next step; the default toast lifetime is too short for that.
+const MOVE_REFUSED_TOAST_MS = 10_000;
+
 interface StoredFilters {
     artistFilter: string[];
     deadlineFrom: string;
@@ -282,7 +293,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         newStatus: string,
         previousColumns: KanbanColumnDataClient[]
     ) => {
-        const { ok, data } = await apiCall(`/api/assets/${sku}/status`, {
+        const { ok, data } = await apiCall<MoveRefusalBody>(`/api/assets/${sku}/status`, {
             method: "PATCH",
             body: { status: newStatus },
         });
@@ -290,7 +301,20 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         if (!ok) {
             const message = data.error || "Failed to update status";
             console.error(message);
-            toast.error(message);
+            if (data.code && data.title) {
+                // The code is what someone quotes when asking the team why a move was refused.
+                toast.error(data.title, {
+                    description: (
+                        <div className="space-y-1">
+                            <p>{[data.reason, data.hint].filter(Boolean).join(" ")}</p>
+                            <p className="font-mono text-xs opacity-70">Code: {data.code}</p>
+                        </div>
+                    ),
+                    duration: MOVE_REFUSED_TOAST_MS,
+                });
+            } else {
+                toast.error(message);
+            }
             mutate({ data: previousColumns }, false);
             return;
         }

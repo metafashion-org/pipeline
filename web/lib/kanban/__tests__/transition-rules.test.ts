@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { updateAssetStatusInKanban } from "../kanban-service";
+import { TransitionRefusedError, type TransitionErrorCode } from "../transition-errors";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { eq } from "drizzle-orm";
@@ -25,6 +26,7 @@ const NO_CAPS: CapabilitySet = {
   canManageSystemConfig: false,
   canAccessCuratorTools: false,
   canAccessMarketingTools: false,
+  canManagePersonnel: false,
 };
 
 // An operator granted canMarkForPayment as a per-person override, but not the payment_admin
@@ -34,6 +36,18 @@ const OPERATOR_WITH_MARK_FOR_PAYMENT = {
   roles: ["operator"],
   caps: { ...NO_CAPS, canAssignArtists: true, canViewAllAssets: true, canMarkForPayment: true },
 };
+
+// A refused move is a 403 TransitionRefusedError. The code is checked where a test cares which
+// gate refused it; the message wording itself is covered by transition-errors.test.ts.
+function assertRefusal(err: unknown, expectedCode?: TransitionErrorCode): TransitionRefusedError {
+  assert.ok(
+    err instanceof TransitionRefusedError,
+    `Expected a TransitionRefusedError, got: ${err instanceof Error ? err.message : String(err)}`
+  );
+  assert.strictEqual(err.httpStatus, 403);
+  if (expectedCode) assert.strictEqual(err.code, expectedCode);
+  return err;
+}
 
 async function testTransitionRulesEnforcement() {
   console.log("Verifying transition rule enforcement server-side...");
@@ -62,9 +76,8 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "payment_done");
       assert.fail("Payment gate bypass should have been rejected (uploaded_to_roblox -> payment_done with no rule row)");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/not permitted|forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Caught expected rejection of payment-gate bypass:", message);
+      const refusal = assertRefusal(err, "PAYMENT_ORDER");
+      console.log("Caught expected rejection of payment-gate bypass:", refusal.message);
     }
 
     // Disallowed even for admin: the payment gate is structural per PLAN.md §4/§9,
@@ -73,9 +86,8 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "payment_done", ADMIN);
       assert.fail("Payment gate bypass should be rejected even for admin");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/not permitted|forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Caught expected rejection of payment-gate bypass for admin role too:", message);
+      const refusal = assertRefusal(err, "PAYMENT_ORDER");
+      console.log("Caught expected rejection of payment-gate bypass for admin role too:", refusal.message);
     }
 
     // A seeded rule row makes the transition possible, but the row's own `role` says who may
@@ -85,9 +97,10 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", ARTIST);
       assert.fail("An artist must not be able to move an asset into marked_for_payment");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Confirmed artist is denied marked_for_payment:", message);
+      // This artist has no personnelId and the seeded asset has no artist, so the ownership check
+      // refuses it before the role check is reached. Either way the artist is refused.
+      const refusal = assertRefusal(err);
+      console.log("Confirmed artist is denied marked_for_payment:", refusal.message);
     }
 
     // Allowed: uploaded_to_roblox -> marked_for_payment carries role 'payment_admin', and
@@ -115,9 +128,8 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", operatorWithoutCap);
       assert.fail("An operator without canMarkForPayment must not be able to move an asset into marked_for_payment");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Confirmed operator without canMarkForPayment is denied marked_for_payment:", message);
+      const refusal = assertRefusal(err, "ROLE_NOT_ALLOWED");
+      console.log("Confirmed operator without canMarkForPayment is denied marked_for_payment:", refusal.message);
     }
 
     const markedResult = await updateAssetStatusInKanban(TEST_SKU, "marked_for_payment", OPERATOR_WITH_MARK_FOR_PAYMENT);
@@ -132,9 +144,8 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "payment_done", OPERATOR_WITH_MARK_FOR_PAYMENT);
       assert.fail("canMarkForPayment must not also unlock payment_done");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Confirmed canMarkForPayment does not unlock payment_done:", message);
+      const refusal = assertRefusal(err, "ROLE_NOT_ALLOWED");
+      console.log("Confirmed canMarkForPayment does not unlock payment_done:", refusal.message);
     }
   } finally {
     await db.delete(assets).where(eq(assets.sku, TEST_SKU));
@@ -161,9 +172,9 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "approved", ARTIST);
       assert.fail("Non-admin should still be rejected for a transition with no matching rule row");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/not permitted|forbidden/.test(message), `Expected a rejection message, got: ${message}`);
-      console.log("Confirmed non-admin roles are still denied by default:", message);
+      // Refused by the ownership check first, for the same reason as the artist case above.
+      const refusal = assertRefusal(err);
+      console.log("Confirmed non-admin roles are still denied by default:", refusal.message);
     }
   } finally {
     await db.delete(assets).where(eq(assets.sku, TEST_SKU));
@@ -185,9 +196,8 @@ async function testTransitionRulesEnforcement() {
       await updateAssetStatusInKanban(TEST_SKU, "payment_done", ADMIN);
       assert.fail("payment_done should be rejected with no receipt attached, even for admin");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(/receipt/i.test(message), `Expected a receipt-related rejection, got: ${message}`);
-      console.log("Caught expected rejection of payment_done with no receipt attached:", message);
+      const refusal = assertRefusal(err, "RECEIPT_REQUIRED");
+      console.log("Caught expected rejection of payment_done with no receipt attached:", refusal.message);
     }
 
     // Once a receipt is attached, the same transition succeeds.

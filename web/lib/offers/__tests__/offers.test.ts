@@ -5,6 +5,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { assignments } from "@/lib/db/schema/assignments";
 import { assetOffers } from "@/lib/db/schema/asset_offers";
 import { emailQueue } from "@/lib/db/schema/email_queue";
+import { auditLog } from "@/lib/db/schema/audit_log";
 import { and, eq, inArray } from "drizzle-orm";
 import { assignArtistToAsset } from "@/lib/kanban/assignment-service";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
@@ -24,6 +25,15 @@ const OFFERED = "2026-10-10";
 
 async function cleanup() {
   await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+  // An artist's answers are audit-logged with them as the actor, and audit_log.actor_id references
+  // personnel, so those rows go first or the personnel delete is refused.
+  const testPeople = await db
+    .select({ id: personnel.id })
+    .from(personnel)
+    .where(inArray(personnel.email, [ARTIST_EMAIL, OTHER_EMAIL]));
+  if (testPeople.length > 0) {
+    await db.delete(auditLog).where(inArray(auditLog.actorId, testPeople.map((p) => p.id)));
+  }
   await db.delete(personnel).where(inArray(personnel.email, [ARTIST_EMAIL, OTHER_EMAIL]));
 }
 

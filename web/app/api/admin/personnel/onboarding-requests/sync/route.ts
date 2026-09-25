@@ -16,7 +16,7 @@ import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 export async function POST() {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.caps.canManageSystemConfig) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user.caps.canManagePersonnel) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   invalidateDiscordCache();
 

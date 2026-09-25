@@ -195,8 +195,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
-        {/* 5. Financials & Budget (Gated) */}
-        {isPaymentAdmin && (
+        {/* 5. Financials & Budget. The artist sees it too: it's the fee they're being paid for
+            this asset, and My Tasks only ever shows them their own assets. */}
+        {(isPaymentAdmin || userRoles.includes("artist")) && (
           <section className="space-y-2">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5" /> 5. Financials & Budget

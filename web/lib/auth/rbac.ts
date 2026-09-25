@@ -41,6 +41,10 @@ export interface CapabilitySet {
   canManageSystemConfig: boolean;
   canAccessCuratorTools: boolean;
   canAccessMarketingTools: boolean;
+  // Adding people, approving access requests and changing roles or status on the Personnel page.
+  // Split from canManageSystemConfig so someone can run onboarding without also getting Settings,
+  // Forms and the brief-field config. Only an admin can grant, change or remove admin access.
+  canManagePersonnel: boolean;
 }
 
 export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
@@ -58,6 +62,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: true,
     canAccessCuratorTools: true,
     canAccessMarketingTools: true,
+
+    canManagePersonnel: true,
   },
   operator: {
     canAssignArtists: true,
@@ -73,6 +79,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   },
   curator: {
     canAssignArtists: false,
@@ -88,6 +96,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: true,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   },
   artist: {
     canAssignArtists: false,
@@ -103,6 +113,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   },
   publisher: {
     canAssignArtists: false,
@@ -118,6 +130,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   },
   marketing: {
     canAssignArtists: false,
@@ -133,6 +147,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: true,
+
+    canManagePersonnel: false,
   },
   payment_admin: {
     canAssignArtists: false,
@@ -148,6 +164,8 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   },
 };
 
@@ -173,6 +191,8 @@ export function getEffectiveCapabilities(
     canManageSystemConfig: false,
     canAccessCuratorTools: false,
     canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
   };
 
   // Union capabilities granted by any assigned role
@@ -208,7 +228,7 @@ export function getEffectiveCapabilities(
 // Discord permission bits and rewriting the status machine behind the same permission as the
 // read-only board.
 const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
-  ["/admin/personnel", "canManageSystemConfig"],
+  ["/admin/personnel", "canManagePersonnel"],
   ["/admin/settings", "canManageSystemConfig"],
   ["/admin/forms", "canManageSystemConfig"],
   ["/admin/curation-fields", "canManageSystemConfig"],
