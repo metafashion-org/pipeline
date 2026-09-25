@@ -14,6 +14,9 @@ export const assets = pgTable("assets", {
   // reads and surfaces this directly, since it's specifically for them.
   brandGroupId: uuid("brand_group_id").references(() => brandGroups.id),
   deadline: timestamp("deadline", { withTimezone: true }),
+  // The day the team plans to upload it to Roblox, set by the team on the asset. The company
+  // calendar shows it next to the artist's deadline and the day it actually went live.
+  plannedUploadDate: timestamp("planned_upload_date", { withTimezone: true }),
   feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }),
   currency: text("currency").default("INR"), // MetaFashion pays in INR by default; USD/EUR/RUB stay selectable for artists paid elsewhere.
   paymentReceiptUrl: text("payment_receipt_url"),

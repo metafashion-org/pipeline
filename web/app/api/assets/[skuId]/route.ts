@@ -36,6 +36,7 @@ export async function PATCH(
     currency === undefined &&
     brandGroupId === undefined &&
     deadline === undefined &&
+    parseResult.data.plannedUploadDate === undefined &&
     paymentReceiptUrl === undefined &&
     parseResult.data.referenceImages === undefined &&
     parseResult.data.recolorReferenceImages === undefined
@@ -57,6 +58,7 @@ export async function PATCH(
       currency: current.currency,
       brandGroupId: current.brandGroupId,
       deadline: current.deadline,
+      plannedUploadDate: current.plannedUploadDate,
       paymentReceiptUrl: current.paymentReceiptUrl,
       referenceImages: current.referenceImages,
       recolorReferenceImages: current.recolorReferenceImages,

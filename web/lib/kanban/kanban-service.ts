@@ -55,6 +55,7 @@ export interface KanbanAssetCard {
   artistDiscordUrl: string | null;
   gmailThreadId: string | null;
   deadline: Date | null;
+  plannedUploadDate: Date | null;
   updatedAt: Date;
   // Raw JSONB straight from the assets table. Parse with parseDriveRefs (lib/assets/drive-links.ts) before rendering: one cell can hold several comma-joined Drive URLs, or free text that is not a link at all.
   referenceImages: unknown;
@@ -73,8 +74,9 @@ export interface KanbanAssetCard {
  * sources as SWR refetches, so a component receiving a card has to cope with both. It was typed
  * `any`, which hid that rather than answering it.
  */
-export type KanbanAssetCardClient = Omit<KanbanAssetCard, "deadline" | "updatedAt"> & {
+export type KanbanAssetCardClient = Omit<KanbanAssetCard, "deadline" | "plannedUploadDate" | "updatedAt"> & {
   deadline: string | Date | null;
+  plannedUploadDate: string | Date | null;
   updatedAt: string | Date;
 };
 
@@ -107,6 +109,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       brandGroupUrl: brandGroups.robloxGroupUrl,
       gmailThreadId: assets.gmailThreadId,
       deadline: assets.deadline,
+      plannedUploadDate: assets.plannedUploadDate,
       updatedAt: assets.updatedAt,
       referenceImages: assets.referenceImages,
       recolorReferenceImages: assets.recolorReferenceImages,

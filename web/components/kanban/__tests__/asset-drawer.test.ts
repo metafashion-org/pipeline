@@ -24,6 +24,7 @@ function testAssetDrawerRoleGating() {
     linkedArtifacts: [],
     gmailThreadId: "thread-123",
     deadline: null,
+    plannedUploadDate: null,
     updatedAt: new Date(),
     referenceImages: [{ provider: "drive", externalId: "https://drive.google.com/open?id=1uxOojyuNuRWkewqbO4xSMg5tZdimpMxh" }],
     recolorReferenceImages: [],

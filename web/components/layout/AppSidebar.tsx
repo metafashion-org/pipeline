@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   KanbanSquare,
+  CalendarDays,
   Megaphone,
   Settings,
   ClipboardList,
@@ -38,6 +39,7 @@ import {
 const NAV_ITEMS = [
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
+  { href: "/admin/calendar", icon: CalendarDays, label: "Calendar" },
   { href: "/curator", icon: Sparkles, label: "Curation" },
   { href: "/admin/knowledge", icon: BookOpen, label: "Registry" },
   { href: "/admin/archive", icon: Wallet, label: "Payments" },

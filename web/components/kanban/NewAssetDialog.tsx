@@ -60,6 +60,7 @@ export function NewAssetDialog() {
                     itemName: form.itemName.trim(),
                     category: form.category.trim() || undefined,
                     deadline: form.deadline || undefined,
+                    plannedUploadDate: form.plannedUploadDate || undefined,
                     feeAmount: form.feeAmount.trim() || undefined,
                     currency: form.currency,
                     brandGroupId: form.brandGroupId || undefined,

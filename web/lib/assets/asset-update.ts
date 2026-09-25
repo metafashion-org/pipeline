@@ -23,6 +23,13 @@ export const UpdateAssetSchema = z.object({
     .refine((v) => v === undefined || v === null || !isNaN(Date.parse(v)), {
       message: "Invalid deadline date",
     }),
+  plannedUploadDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine((v) => v === undefined || v === null || !isNaN(Date.parse(v)), {
+      message: "Invalid planned upload date",
+    }),
   paymentReceiptUrl: z.string().nullable().optional(),
   // Pasted blocks of links, the same form the create dialog takes.
   referenceImages: z.string().nullable().optional(),
@@ -38,6 +45,7 @@ export interface AssetCurrentValues {
   currency: string | null;
   brandGroupId: string | null;
   deadline: Date | null;
+  plannedUploadDate: Date | null;
   paymentReceiptUrl: string | null;
   referenceImages: unknown;
   recolorReferenceImages: unknown;
@@ -93,16 +101,19 @@ export function computeAssetChanges(current: AssetCurrentValues, patch: AssetUpd
     updates.brandGroupId = patch.brandGroupId;
   }
 
-  if (patch.deadline !== undefined) {
-    const nextDate = patch.deadline === null ? null : new Date(patch.deadline);
-    const currentTime = current.deadline ? current.deadline.getTime() : null;
+  for (const field of ["deadline", "plannedUploadDate"] as const) {
+    const incoming = patch[field];
+    if (incoming === undefined) continue;
+    const nextDate = incoming === null ? null : new Date(incoming);
+    const currentDate = current[field];
+    const currentTime = currentDate ? currentDate.getTime() : null;
     const nextTime = nextDate ? nextDate.getTime() : null;
     if (currentTime !== nextTime) {
-      changes.deadline = {
-        from: current.deadline ? current.deadline.toISOString() : null,
+      changes[field] = {
+        from: currentDate ? currentDate.toISOString() : null,
         to: nextDate ? nextDate.toISOString() : null,
       };
-      updates.deadline = nextDate;
+      updates[field] = nextDate;
     }
   }
 

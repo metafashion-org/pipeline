@@ -16,6 +16,7 @@ const CreateAssetSchema = z.object({
   itemName: z.string().trim().min(1),
   category: z.string().trim().min(1).optional(),
   deadline: z.string().trim().min(1).optional(),
+  plannedUploadDate: z.string().trim().min(1).optional(),
   feeAmount: z.string().trim().min(1).optional(),
   currency: z.string().trim().min(1).optional(),
   brandGroupId: z.string().trim().min(1).optional(),
@@ -85,6 +86,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let plannedUploadDate: Date | null = null;
+  if (parseResult.data.plannedUploadDate) {
+    plannedUploadDate = new Date(parseResult.data.plannedUploadDate);
+    if (isNaN(plannedUploadDate.getTime())) {
+      return NextResponse.json({ error: "Invalid planned upload date" }, { status: 400 });
+    }
+  }
+
   try {
     const [created] = await db
       .insert(assets)
@@ -94,6 +103,7 @@ export async function POST(request: NextRequest) {
         category: category || null,
         currentStatus: "unassigned",
         deadline,
+        plannedUploadDate,
         feeAmount: feeAmount || null,
         currency: currency || "INR",
         brandGroupId: brandGroupId || null,

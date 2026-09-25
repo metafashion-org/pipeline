@@ -37,6 +37,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
         currency: asset.currency || "INR",
         brandGroupId: asset.brandGroupId || "",
         deadline: asset.deadline ? new Date(asset.deadline).toISOString().slice(0, 10) : "",
+        plannedUploadDate: asset.plannedUploadDate ? new Date(asset.plannedUploadDate).toISOString().slice(0, 10) : "",
         referenceImages: toLinkText(asset.referenceImages),
         recolorReferenceImages: toLinkText(asset.recolorReferenceImages),
     });
@@ -65,6 +66,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                     currency: form.currency,
                     brandGroupId: form.brandGroupId || null,
                     deadline: form.deadline || null,
+                    plannedUploadDate: form.plannedUploadDate || null,
                     referenceImages: form.referenceImages,
                     recolorReferenceImages: form.recolorReferenceImages,
                 },

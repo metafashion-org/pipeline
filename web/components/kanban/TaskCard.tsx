@@ -161,6 +161,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
         currentStatus,
         currency: task.currency || "INR",
         deadline: task.deadline ? new Date(task.deadline) : null,
+        plannedUploadDate: task.plannedUploadDate ? new Date(task.plannedUploadDate) : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
         referenceImages: task.referenceImages ?? [],
         recolorReferenceImages: task.recolorReferenceImages ?? [],

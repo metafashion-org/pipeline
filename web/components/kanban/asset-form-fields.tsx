@@ -49,6 +49,8 @@ export interface AssetFormValues {
     // real uuid column, never an empty string.
     brandGroupId: string;
     deadline: string;
+    // The day the team plans to upload it to Roblox, shown on the company calendar. YYYY-MM-DD or "".
+    plannedUploadDate: string;
     referenceImages: string;
     recolorReferenceImages: string;
 }
@@ -61,6 +63,7 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
     currency: "INR",
     brandGroupId: "",
     deadline: "",
+    plannedUploadDate: "",
     referenceImages: "",
     recolorReferenceImages: "",
 };
@@ -231,6 +234,19 @@ export function AssetFormFields({
                         onChange={(e) => set({ deadline: e.target.value })}
                     />
                 </div>
+            </div>
+
+            <div className="grid gap-1.5">
+                <Label htmlFor={id("planned-upload")}>Planned upload date</Label>
+                <Input
+                    id={id("planned-upload")}
+                    type="date"
+                    value={values.plannedUploadDate}
+                    onChange={(e) => set({ plannedUploadDate: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                    When it should go live on Roblox. Shown on the company calendar next to the artist&apos;s deadline.
+                </p>
             </div>
 
             <ReferenceDropzone
