@@ -15,6 +15,7 @@ import { SubmitFinalFilesDialog, NotifyUploaderButton } from "./FinalFilesAction
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
+import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -38,6 +39,8 @@ function ReferenceGallery({ label, refs }: { label: string; refs: DriveRef[] }) 
 }
 
 export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }: AssetDrawerProps) {
+  // Before the early return below, since a hook can't sit behind a conditional one.
+  const viewerCapabilities = useViewerCapabilities();
   if (!asset) return null;
 
   const isAdminOrOperator = userRoles.includes("admin") || userRoles.includes("operator");
@@ -56,7 +59,12 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   const canEdit = canAssignArtists;
   // Same rule the Knowledge Registry's own admin page and its API routes already use (see
   // lib/auth/rbac.ts's canManageKnowledge doc comment) — admin, operator or curator.
-  const canManageLinks = canManageKnowledge(getEffectiveCapabilities(userRoles));
+  //
+  // Read from the viewer's real capabilities, not from `userRoles`. That prop is the board's
+  // collapsed role, which is only ever "admin", "operator" or "artist", so a curator, or anyone
+  // whose registry access comes from a capability override, was shown no Attach control even
+  // though the registry API would have accepted the link.
+  const canManageLinks = canManageKnowledge(viewerCapabilities);
 
   const references = parseDriveRefs(asset.referenceImages);
   const recolorReferences = parseDriveRefs(asset.recolorReferenceImages);
