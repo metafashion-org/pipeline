@@ -32,7 +32,7 @@ Before writing a helper, search `web/lib/` for an existing one. When two places 
 | Invalidate cached views after a write | `revalidateViews(CACHE_TAGS.x)` from `lib/cache/tags.ts` | `revalidateTag` directly, or a tag string missing from `CACHE_TAGS` |
 | Query the database | `db` from `lib/db/client.ts` and the table from `lib/db/schema/<table>.ts` | A new `postgres()` connection |
 | Open a separate database connection in a script | `parseConnectionPassword()` from `lib/db/connection.ts` for the password override | Passing the connection string to `postgres()` alone, which fails on a password containing `@` |
-| Change an asset's status | `updateAssetStatusInKanban()` from `lib/kanban/kanban-service.ts`, catching `TransitionRefusedError` for a 403 | `db.update(assets).set({ currentStatus })` |
+| Change an asset's status | `updateAssetStatusInKanban()` from `lib/kanban/kanban-service.ts`, catching `TransitionRefusedError` (from `lib/kanban/transition-errors.ts`) and answering with its `httpStatus` | `db.update(assets).set({ currentStatus })` |
 | Combine Tailwind classes | `cn()` from `lib/utils.ts` | Template strings or `+` on class names |
 | Buttons, dialogs, selects, tables, sheets, tabs | `components/ui/*` | A new hand-styled primitive |
 

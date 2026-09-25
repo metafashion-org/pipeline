@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { isSelfAdminRemovalAttempt } from "@/lib/auth/self-lockout";
+import { ADMIN_ONLY_MESSAGE, isAdminAccessChangeByNonAdmin } from "@/lib/auth/admin-guard";
 import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -23,7 +24,7 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -40,6 +41,9 @@ export async function PATCH(
   const existing = await db.select().from(personnel).where(eq(personnel.id, personnelId)).limit(1);
   if (existing.length === 0) {
     return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+  }
+  if (isAdminAccessChangeByNonAdmin(user.caps, existing[0].roles, parseResult.data.roles)) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
   }
 
   const [updated] = await db
@@ -70,7 +74,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -81,6 +85,9 @@ export async function DELETE(
   const existing = await db.select().from(personnel).where(eq(personnel.id, personnelId)).limit(1);
   if (existing.length === 0) {
     return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+  }
+  if (isAdminAccessChangeByNonAdmin(user.caps, existing[0].roles)) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
   }
 
   try {
