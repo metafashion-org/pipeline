@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { seedOnboardingFormDefinition } from "@/lib/forms/onboarding";
@@ -16,8 +17,11 @@ export const dynamic = "force-dynamic";
 
 export default async function PersonnelPage() {
   const session = await getServerSession(authOptions);
+  const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
 
-  if (!session || session.user?.role !== "admin") {
+  // canManagePersonnel, not the collapsed session.user.role: a personnel manager who isn't an admin
+  // collapses to "operator" and was refused here even though the sidebar and the API let them in.
+  if (!session || !caps.canManagePersonnel) {
     redirect("/unauthorized");
   }
 

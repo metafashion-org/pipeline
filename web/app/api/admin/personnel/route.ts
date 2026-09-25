@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
+import { ADMIN_ONLY_MESSAGE, isAdminAccessChangeByNonAdmin } from "@/lib/auth/admin-guard";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { formSubmissions } from "@/lib/db/schema/form_submissions";
@@ -22,7 +23,7 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
 
   const { name, email, roles } = parseResult.data;
   const normalizedEmail = email.trim().toLowerCase();
+
+  if (isAdminAccessChangeByNonAdmin(user.caps, [], roles)) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
+  }
 
   const existing = await db.select().from(personnel).where(eq(personnel.email, normalizedEmail)).limit(1);
   if (existing.length > 0) {

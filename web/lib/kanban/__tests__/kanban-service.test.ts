@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { getKanbanBoardData, updateAssetStatusInKanban } from "../kanban-service";
+import { TransitionRefusedError } from "../transition-errors";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
@@ -23,9 +24,10 @@ async function testUpdateStatusNotFoundSkuThrows() {
     await updateAssetStatusInKanban("NON_EXISTENT_SKU_123", "in_progress");
     assert.fail("Should have thrown for a non-existent SKU");
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    assert.strictEqual(message, "Asset with SKU 'NON_EXISTENT_SKU_123' not found");
-    console.log("Caught expected error:", message);
+    assert.ok(err instanceof TransitionRefusedError, "An unknown SKU must raise a TransitionRefusedError");
+    assert.strictEqual(err.code, "ASSET_NOT_FOUND");
+    assert.strictEqual(err.httpStatus, 404);
+    console.log("Caught expected error:", err.message);
   }
 }
 

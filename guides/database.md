@@ -59,7 +59,7 @@ const rows = await db
 
 ## Writing data
 
-- Change asset status with `updateAssetStatusInKanban(sku, statusKey, actor, note)` from `lib/kanban/kanban-service.ts`. It rejects unknown status keys, blocks artists from moving assets not assigned to them, and applies `status_transition_rules` with deny by default. Refusals throw `TransitionRefusedError`, which a route answers with 403. Admins may make a move that has no rule, except into `marked_for_payment` or `payment_done`.
+- Change asset status with `updateAssetStatusInKanban(sku, statusKey, actor, note)` from `lib/kanban/kanban-service.ts`. It rejects unknown status keys, blocks artists from moving assets not assigned to them, and applies `status_transition_rules` with deny by default. Refusals throw `TransitionRefusedError` (`lib/kanban/transition-errors.ts`). It carries a `code`, a plain-language `title`, `reason` and `hint`, and the `httpStatus` a route answers with: 403 for a permission refusal, 404 or 400 for a stale asset or status. Admins may make a move that has no rule, except into `marked_for_payment` or `payment_done`.
 - A write that changes more than one table goes inside `db.transaction(async (tx) => { ... })`, with every statement using `tx`. The codebase has no transactions today.
 - An admin change to personnel, assets or configuration inserts an `audit_log` row: `{ action, entityType, entityId, actorId, payload }`.
 - After changing `personnel.roles` or `personnel.status`, call `invalidatePersonnelAuthCache(email)` from `lib/auth/personnel-auth.ts`. Without it the old roles stay in effect for up to 60 seconds.
