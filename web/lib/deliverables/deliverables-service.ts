@@ -1,21 +1,50 @@
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
+import { assetDeliverables } from "@/lib/db/schema/asset_deliverables";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq } from "drizzle-orm";
+import { asc, desc, eq, max } from "drizzle-orm";
+import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
+import { driveFolderUrl } from "@/lib/assets/drive-upload";
 
-// Per the brief's §8: "The system validates that the SKU exists, is in
-// Approved status, and required files are present. If valid, the record is
-// stored... If invalid, the submission is rejected and the manager is
-// notified." This function had none of that validation before — it would
-// accept files and advance ANY asset regardless of current status. Fixed:
-// real status check, real "at least one file" check. "Manager notified" on
-// rejection means an audit log entry for now, same as every other
-// notification in this codebase until real email sending exists (see
-// HANDOFF.md) — not silently dropped, just not an email yet.
-export async function submitFinalDeliverables(
+// The only status an asset takes final files in: the design is approved and nothing is handed in yet.
+export const FINAL_FILES_ACCEPTED_FROM_STATUS = "approved";
+
+/** One file of a final-files submission, already verified to be in the submission's Drive folder. */
+export interface FinalFileInput {
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  driveFileId: string;
+  driveUrl: string;
+  driveFolderId: string;
+}
+
+/** The version number the asset's next final-files submission gets: 1, then one more than the last. */
+export async function nextFinalFilesVersion(assetId: string): Promise<number> {
+  const [row] = await db
+    .select({ latest: max(assetDeliverables.version) })
+    .from(assetDeliverables)
+    .where(eq(assetDeliverables.assetId, assetId));
+  return (row?.latest ?? 0) + 1;
+}
+
+/**
+ * Records a final-files submission and puts the asset in the uploader's queue.
+ *
+ * Input: the SKU, the submission's version, its files, who submitted, and optional notes.
+ * Output: the asset's new status.
+ *
+ * Per the brief's §8 the asset has to be Approved and the submission has to hold at least one
+ * file; either failure is refused and audit-logged. A valid submission writes one
+ * asset_deliverables row per file, moves Approved → Final Files Received, then straight on to
+ * Ready for Upload, so the uploader sees it without anyone clicking "Notify uploader". Both moves
+ * go through the seeded automatic transitions and are written to status history.
+ */
+export async function submitFinalFiles(
   sku: string,
-  fileUrls: string[],
+  version: number,
+  files: FinalFileInput[],
   submitterId?: string,
   notes?: string
 ) {
@@ -25,62 +54,86 @@ export async function submitFinalDeliverables(
   const asset = assetRecord[0];
   const fromStatus = asset.currentStatus;
 
-  if (fromStatus !== "approved") {
+  if (fromStatus !== FINAL_FILES_ACCEPTED_FROM_STATUS) {
     await db.insert(auditLog).values({
       action: "submitFinalDeliverables_rejected",
       entityType: "asset",
       entityId: asset.id,
       actorId: submitterId || null,
-      payload: { sku, reason: `Asset not in Approved status (currently: ${fromStatus})`, fileUrls },
+      payload: { sku, reason: `Asset not in Approved status (currently: ${fromStatus})`, version },
     });
     throw new Error(
       `Submission rejected: '${sku}' must be in Approved status to accept final files (currently: ${fromStatus}).`
     );
   }
 
-  const validFileUrls = fileUrls.map((u) => u.trim()).filter(Boolean);
-  if (validFileUrls.length === 0) {
+  if (files.length === 0) {
     await db.insert(auditLog).values({
       action: "submitFinalDeliverables_rejected",
       entityType: "asset",
       entityId: asset.id,
       actorId: submitterId || null,
-      payload: { sku, reason: "No files provided" },
+      payload: { sku, reason: "No files provided", version },
     });
     throw new Error("Submission rejected: at least one final file is required.");
   }
 
-  // Append new reference files
-  const existingRefs = (asset.referenceImages as any[]) || [];
-  const newRefs = validFileUrls.map((url) => ({ provider: "filestore", externalId: url }));
-  const updatedRefs = [...existingRefs, ...newRefs];
+  await db.insert(assetDeliverables).values(
+    files.map((file) => ({ ...file, assetId: asset.id, version, uploadedBy: submitterId || null }))
+  );
 
-  await db
-    .update(assets)
-    .set({
-      currentStatus: "final_files_received",
-      referenceImages: updatedRefs,
-      updatedAt: new Date(),
-    })
-    .where(eq(assets.id, asset.id));
-
-  await db.insert(statusHistory).values({
-    assetId: asset.id,
-    fromStatus,
-    toStatus: "final_files_received",
-    actorId: submitterId || null,
-    note: notes || "Final 3D asset files submitted",
-  });
+  await updateAssetStatusInKanban(
+    sku,
+    "final_files_received",
+    { system: true },
+    notes ? `Final files v${version} submitted: ${notes}` : `Final files v${version} submitted (${files.length} files)`
+  );
 
   await db.insert(auditLog).values({
     action: "submitFinalDeliverables",
     entityType: "asset",
     entityId: asset.id,
     actorId: submitterId || null,
-    payload: { sku, fileUrls },
+    payload: { sku, version, files: files.map((f) => ({ name: f.fileName, driveFileId: f.driveFileId })) },
   });
 
-  return { success: true, sku, currentStatus: "final_files_received" };
+  const queued = await notifyUploader(sku, submitterId, `Final files v${version} are in Drive, ready to upload`);
+  return { success: true, sku, version, currentStatus: queued.currentStatus };
+}
+
+export interface FinalFilesSubmission {
+  version: number;
+  folderUrl: string;
+  submittedAt: Date;
+  files: { id: string; fileName: string; mimeType: string | null; sizeBytes: number | null; driveUrl: string }[];
+}
+
+/** Every final-files submission for an asset, newest version first, each with its files and folder. */
+export async function getFinalFilesForAsset(assetId: string): Promise<FinalFilesSubmission[]> {
+  const rows = await db
+    .select()
+    .from(assetDeliverables)
+    .where(eq(assetDeliverables.assetId, assetId))
+    .orderBy(desc(assetDeliverables.version), asc(assetDeliverables.fileName));
+
+  const byVersion = new Map<number, FinalFilesSubmission>();
+  for (const row of rows) {
+    const submission = byVersion.get(row.version) ?? {
+      version: row.version,
+      folderUrl: driveFolderUrl(row.driveFolderId),
+      submittedAt: row.createdAt,
+      files: [],
+    };
+    submission.files.push({
+      id: row.id,
+      fileName: row.fileName,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      driveUrl: row.driveUrl,
+    });
+    byVersion.set(row.version, submission);
+  }
+  return Array.from(byVersion.values());
 }
 
 // "Notify uploader" is a real card action in the brief's §5 and a real

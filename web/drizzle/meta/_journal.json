@@ -225,6 +225,13 @@
       "when": 1789485000000,
       "tag": "0031_asset_offers",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789486000000,
+      "tag": "0032_asset_deliverables",
+      "breakpoints": true
     }
   ]
 }

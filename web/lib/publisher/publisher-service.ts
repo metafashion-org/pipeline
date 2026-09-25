@@ -5,7 +5,9 @@ import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, asc } from "drizzle-orm";
+import { assetDeliverables } from "@/lib/db/schema/asset_deliverables";
+import { driveFolderUrl } from "@/lib/assets/drive-upload";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 import { parseRobloxLinkLines } from "./roblox-links";
 
 export interface ReadyForUploadItem {
@@ -20,6 +22,9 @@ export interface ReadyForUploadItem {
   // this field exists to prevent. Null means nobody has set a group on this asset yet.
   brandGroupName: string | null;
   brandGroupUrl: string | null;
+  // The Drive folder of the latest final files handed in, which is what gets uploaded. Null for an
+  // asset handed in as pasted links, before files went into Drive.
+  finalFilesFolderUrl: string | null;
   updatedAt: Date;
 }
 
@@ -46,7 +51,20 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
     .where(eq(assets.currentStatus, "ready_for_upload"))
     .orderBy(asc(assets.updatedAt));
 
-  return rows;
+  if (rows.length === 0) return [];
+
+  // One row per asset: the folder of its highest version.
+  const latestFolders = await db
+    .selectDistinctOn([assetDeliverables.assetId], { assetId: assetDeliverables.assetId, folderId: assetDeliverables.driveFolderId })
+    .from(assetDeliverables)
+    .where(inArray(assetDeliverables.assetId, rows.map((r) => r.id)))
+    .orderBy(assetDeliverables.assetId, desc(assetDeliverables.version));
+  const folderByAsset = new Map(latestFolders.map((f) => [f.assetId, f.folderId]));
+
+  return rows.map((row) => {
+    const folderId = folderByAsset.get(row.id);
+    return { ...row, finalFilesFolderUrl: folderId ? driveFolderUrl(folderId) : null };
+  });
 }
 
 export interface RecordRobloxUploadOptions {

@@ -26,6 +26,7 @@ export interface PublisherQueueItemView {
   artistName: string | null;
   brandGroupName: string | null;
   brandGroupUrl: string | null;
+  finalFilesFolderUrl: string | null;
   updatedAt: string;
 }
 

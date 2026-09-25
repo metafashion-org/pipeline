@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { submitFinalDeliverables, notifyUploader } from "../deliverables-service";
+import { submitFinalFiles, notifyUploader, getFinalFilesForAsset, nextFinalFilesVersion, type FinalFileInput } from "../deliverables-service";
 import { recordRobloxUpload } from "@/lib/publisher/publisher-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
@@ -13,6 +13,18 @@ const TEST_SKU = "TEST-FINAL-FILES-FLOW-SKU";
 const ARTIST_EMAIL = "test-final-files-flow-artist@example.com";
 
 let assetId = "";
+
+// What the route passes in after reading the files back from Drive; no Drive call in this test.
+function fakeFile(name: string): FinalFileInput {
+  return {
+    fileName: name,
+    mimeType: "application/octet-stream",
+    sizeBytes: 1024,
+    driveFileId: `drive-${name}`,
+    driveUrl: `https://drive.google.com/file/d/drive-${name}/view`,
+    driveFolderId: "folder-v1",
+  };
+}
 
 async function cleanup() {
   if (assetId) {
@@ -46,9 +58,9 @@ async function testFinalFilesUploaderRobloxFlow() {
   assetId = asset.id;
 
   try {
-    // 1. submitFinalDeliverables must reject an asset that isn't Approved yet.
+    // 1. submitFinalFiles must reject an asset that isn't Approved yet.
     try {
-      await submitFinalDeliverables(TEST_SKU, ["https://drive.google.com/file/1"], artist.id);
+      await submitFinalFiles(TEST_SKU, 1, [fakeFile("rig.fbx")], artist.id);
       assert.fail("Should reject submission when asset is not Approved");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -59,41 +71,40 @@ async function testFinalFilesUploaderRobloxFlow() {
       .from(auditLog)
       .where(and(eq(auditLog.entityId, assetId), eq(auditLog.action, "submitFinalDeliverables_rejected")));
     assert.ok(rejectionAudit, "Wrong-status rejection must be audit-logged");
-    console.log("Confirmed submitFinalDeliverables rejects a non-Approved asset and audit-logs it");
+    console.log("Confirmed submitFinalFiles rejects a non-Approved asset and audit-logs it");
 
     // Move the asset to Approved so the real submission can proceed.
     await db.update(assets).set({ currentStatus: "approved" }).where(eq(assets.id, assetId));
 
-    // 2. submitFinalDeliverables must reject an empty file list.
+    // 2. submitFinalFiles must reject an empty file list.
     try {
-      await submitFinalDeliverables(TEST_SKU, ["   ", ""], artist.id);
-      assert.fail("Should reject submission with no real file URLs");
+      await submitFinalFiles(TEST_SKU, 1, [], artist.id);
+      assert.fail("Should reject submission with no files");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       assert.ok(message.includes("at least one final file is required"), `Unexpected rejection message: ${message}`);
     }
-    console.log("Confirmed submitFinalDeliverables rejects an empty file list");
+    console.log("Confirmed submitFinalFiles rejects an empty file list");
 
-    // 3. A real, valid submission must succeed and transition the asset.
-    const submitResult = await submitFinalDeliverables(
-      TEST_SKU,
-      ["https://drive.google.com/file/final-1", "https://drive.google.com/file/final-2"],
-      artist.id,
-      "Final rig + textures"
-    );
-    assert.strictEqual(submitResult.currentStatus, "final_files_received");
+    // 3. A valid submission records the files and puts the asset straight in the uploader's queue.
+    assert.strictEqual(await nextFinalFilesVersion(assetId), 1, "The first submission is version 1");
+    const submitResult = await submitFinalFiles(TEST_SKU, 1, [fakeFile("rig.fbx"), fakeFile("textures.zip")], artist.id, "Final rig + textures");
+    assert.strictEqual(submitResult.currentStatus, "ready_for_upload");
 
     const [assetAfterSubmit] = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
-    assert.strictEqual(assetAfterSubmit.currentStatus, "final_files_received");
-    const refs = assetAfterSubmit.referenceImages as any[];
-    assert.ok(refs.some((r) => r.externalId === "https://drive.google.com/file/final-1"), "Final file URL must be appended to referenceImages");
+    assert.strictEqual(assetAfterSubmit.currentStatus, "ready_for_upload", "Handing in final files marks the asset Ready for Upload");
+    assert.deepStrictEqual(assetAfterSubmit.referenceImages, [], "Final files no longer get mixed into the reference images");
 
-    const [submitHistory] = await db
-      .select()
-      .from(statusHistory)
-      .where(and(eq(statusHistory.assetId, assetId), eq(statusHistory.toStatus, "final_files_received")));
-    assert.ok(submitHistory, "Approved -> Final Files Received transition must be logged in status history");
-    console.log("Confirmed a valid final-files submission transitions the asset and appends the files");
+    const submissions = await getFinalFilesForAsset(assetId);
+    assert.strictEqual(submissions.length, 1);
+    assert.strictEqual(submissions[0].version, 1);
+    assert.deepStrictEqual(submissions[0].files.map((f) => f.fileName), ["rig.fbx", "textures.zip"]);
+    assert.strictEqual(await nextFinalFilesVersion(assetId), 2, "The next submission would be version 2");
+
+    const history = await db.select().from(statusHistory).where(eq(statusHistory.assetId, assetId));
+    assert.ok(history.some((h) => h.toStatus === "final_files_received"), "Approved -> Final Files Received must be in status history");
+    assert.ok(history.some((h) => h.toStatus === "ready_for_upload"), "Final Files Received -> Ready for Upload must be in status history");
+    console.log("Confirmed a valid submission records the files and moves the asset to Ready for Upload");
 
     // 4. notifyUploader must reject an asset still short of Final Files Received.
     await db.update(assets).set({ currentStatus: "in_review" }).where(eq(assets.id, assetId));

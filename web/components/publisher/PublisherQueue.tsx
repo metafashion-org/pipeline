@@ -19,6 +19,7 @@ interface QueueItem {
   artistName: string | null;
   brandGroupName: string | null;
   brandGroupUrl: string | null;
+  finalFilesFolderUrl: string | null;
   updatedAt: string;
 }
 
@@ -106,6 +107,16 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
           <p className="text-xs text-muted-foreground">
             {item.category || "Uncategorised"} · Artist: {item.artistName || "-"} · Deadline: {formatDate(item.deadline, "Not set")}
           </p>
+          {item.finalFilesFolderUrl && (
+            <a
+              href={item.finalFilesFolderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              Open final files
+            </a>
+          )}
         </div>
         {item.brandGroupName ? (
           item.brandGroupUrl ? (

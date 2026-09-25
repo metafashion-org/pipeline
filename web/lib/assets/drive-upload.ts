@@ -109,10 +109,15 @@ async function shareWithAnyoneReader(fileId: string): Promise<void> {
   }
 }
 
-async function findFolder(name: string, driveId: string): Promise<string | null> {
-  const escaped = name.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+// Drive's query language quotes names in single quotes.
+function escapeDriveQuery(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+// `parentId` is the Shared Drive's own id for a top-level folder, or a folder id for a nested one.
+async function findFolder(name: string, parentId: string, driveId: string): Promise<string | null> {
   const q = encodeURIComponent(
-    `name='${escaped}' and '${driveId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    `name='${escapeDriveQuery(name)}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
   );
   const result = await authedFetch(
     `${DRIVE_API}/files?q=${q}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${encodeURIComponent(driveId)}&fields=files(id)`
@@ -120,26 +125,37 @@ async function findFolder(name: string, driveId: string): Promise<string | null>
   return result.files?.[0]?.id || null;
 }
 
-async function createFolder(name: string, driveId: string): Promise<string> {
+async function createFolder(name: string, parentId: string): Promise<string> {
   const folder = await authedFetch(`${DRIVE_API}/files?supportsAllDrives=true`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [driveId] }),
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
   });
   await shareWithDomain(folder.id);
   return folder.id;
+}
+
+function requireSharedDriveId(): string {
+  const driveId = sharedDriveId();
+  if (!driveId) throw new Error("GOOGLE_SHARED_DRIVE_ID not set");
+  return driveId;
+}
+
+// Finds (or creates) a named folder inside `parentId`, which defaults to the Shared Drive's root.
+async function getOrCreateFolderIn(name: string, parentId?: string): Promise<string> {
+  const driveId = requireSharedDriveId();
+  const parent = parentId ?? driveId;
+  const truncated = name.slice(0, 200);
+  const existing = await findFolder(truncated, parent, driveId);
+  if (existing) return existing;
+  return createFolder(truncated, parent);
 }
 
 // Finds (or creates) a named Drive folder directly under the shared drive root. Naming mirrors
 // catalog-intel's "Catalog Intel — <Focus Group Name>" convention — every folder this app creates
 // is "Meta Fashion Pipeline — <what it's for>", just with a different suffix per caller.
 async function getOrCreateFolder(name: string): Promise<string> {
-  const driveId = sharedDriveId();
-  if (!driveId) throw new Error("GOOGLE_SHARED_DRIVE_ID not set");
-  const truncated = name.slice(0, 200);
-  const existing = await findFolder(truncated, driveId);
-  if (existing) return existing;
-  return createFolder(truncated, driveId);
+  return getOrCreateFolderIn(name);
 }
 
 async function getOrCreateAssetFolder(sku: string): Promise<string> {
@@ -233,4 +249,102 @@ export async function uploadPaymentSummaryFile(
   }
   const folderId = await getOrCreatePaymentFolder(artistName);
   return uploadFileToFolder(folderId, fileName, mimeType, bytes);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Final files
+//
+// Final 3D files are often hundreds of megabytes, far past what a request to this app can carry
+// (Vercel caps a function's request body at 4.5 MB). So the browser uploads them straight to
+// Drive: this app only opens a resumable upload session for each file, in the right folder, and
+// hands the browser its upload URL. Once the browser is done, the app lists the folder to record
+// what arrived.
+// ---------------------------------------------------------------------------------------------
+
+export function driveFolderUrl(folderId: string): string {
+  return `https://drive.google.com/drive/folders/${folderId}`;
+}
+
+function driveFileUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/**
+ * The folder one final-files submission goes in: "Meta Fashion Pipeline — <SKU>/Final Files/v<N>".
+ * Created on first use; the same call returns the same folder afterwards.
+ *
+ * Input: the asset's SKU and the submission's version number. Output: the v<N> folder's id.
+ */
+export async function getOrCreateFinalFilesFolder(sku: string, version: number): Promise<string> {
+  const assetFolderId = await getOrCreateAssetFolder(sku);
+  const finalFilesFolderId = await getOrCreateFolderIn("Final Files", assetFolderId);
+  return getOrCreateFolderIn(`v${version}`, finalFilesFolderId);
+}
+
+/**
+ * Opens a resumable upload session for one file in `folderId`, for the browser to send the bytes to.
+ *
+ * Input: the folder, the file's name, type and size, and the browser's origin. Output: the session's
+ * upload URL. `origin` has to be the page's own origin: Drive only answers the browser's upload
+ * with CORS headers for the origin the session was opened for.
+ */
+export async function startResumableUpload(
+  folderId: string,
+  fileName: string,
+  mimeType: string,
+  sizeBytes: number,
+  origin: string
+): Promise<string> {
+  const auth = getAuth();
+  await auth.authorize();
+  const token = (await auth.getAccessToken()).token;
+  const res = await fetch(`${DRIVE_UPLOAD_API}?uploadType=resumable&supportsAllDrives=true&fields=id,name`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": mimeType,
+      "X-Upload-Content-Length": String(sizeBytes),
+      Origin: origin,
+    },
+    body: JSON.stringify({ name: fileName, parents: [folderId] }),
+  });
+  const uploadUrl = res.headers.get("location");
+  if (!res.ok || !uploadUrl) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message || `Drive refused the upload session (${res.status})`);
+  }
+  return uploadUrl;
+}
+
+export interface DriveFolderFile {
+  id: string;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  createdTime: string;
+  url: string;
+}
+
+/** Every file in a folder, newest first. Only files this service account created are visible to it (drive.file scope). */
+export async function listFilesInFolder(folderId: string): Promise<DriveFolderFile[]> {
+  const driveId = requireSharedDriveId();
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`);
+  const result = await authedFetch(
+    `${DRIVE_API}/files?q=${q}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=drive&driveId=${encodeURIComponent(driveId)}&orderBy=createdTime desc&pageSize=1000&fields=files(id,name,mimeType,size,createdTime)`
+  );
+  return (result.files || []).map((f: { id: string; name: string; mimeType?: string; size?: string; createdTime: string }) => ({
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType ?? null,
+    sizeBytes: f.size ? Number(f.size) : null,
+    createdTime: f.createdTime,
+    url: driveFileUrl(f.id),
+  }));
+}
+
+/** Gives a submitted final file the same access as references: the domain can edit, anyone with the link can view. */
+export async function shareFinalFile(fileId: string): Promise<void> {
+  await shareWithDomain(fileId);
+  await shareWithAnyoneReader(fileId);
 }
