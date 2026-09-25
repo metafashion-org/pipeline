@@ -29,6 +29,7 @@ export * from "./onboarding_requests";
 export * from "./brand_groups";
 export * from "./categories";
 export * from "./asset_offers";
+export * from "./asset_deliverables";
 export * from "./payment_batches";
 export * from "./curation_idea_versions";
 export * from "./style_systems";

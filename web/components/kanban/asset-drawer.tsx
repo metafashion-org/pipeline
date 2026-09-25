@@ -11,12 +11,23 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
-import { SubmitFinalFilesDialog, NotifyUploaderButton } from "./FinalFilesActions";
+import { SubmitFinalFilesDialog, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
 import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { AssetOfferStatus } from "@/components/offers/AssetOfferStatus";
+
+// From Approved onward an asset either waits on its final files or has them, so the Final Files
+// section shows: the hand-in button while Approved, the handed-in versions after.
+const FINAL_FILES_SECTION_STATUSES = [
+  "approved",
+  "final_files_received",
+  "ready_for_upload",
+  "uploaded_to_roblox",
+  "marked_for_payment",
+  "payment_done",
+];
 
 export interface AssetDrawerProps {
   asset: KanbanAssetCard | null;
@@ -197,28 +208,29 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
         )}
 
         {/* 6. Final Files & Delivery */}
-        {(canSubmitFinalFiles || canNotifyUploader) &&
-          (asset.currentStatus === "approved" || asset.currentStatus === "final_files_received") && (
-            <section className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <UploadCloud className="h-3.5 w-3.5" /> 6. Final Files & Delivery
-              </h4>
-              <div className="bg-muted/30 p-3 rounded-md text-sm flex items-center justify-between gap-2 flex-wrap">
-                {canSubmitFinalFiles && asset.currentStatus === "approved" && (
-                  <>
-                    <p className="text-xs text-muted-foreground">Approved. Waiting on the artist&apos;s final files.</p>
-                    <SubmitFinalFilesDialog sku={asset.sku} />
-                  </>
-                )}
-                {canNotifyUploader && asset.currentStatus === "final_files_received" && (
-                  <>
-                    <p className="text-xs text-muted-foreground">Final files received. Notify the uploader when ready.</p>
-                    <NotifyUploaderButton sku={asset.sku} />
-                  </>
-                )}
-              </div>
-            </section>
-          )}
+        {FINAL_FILES_SECTION_STATUSES.includes(asset.currentStatus) && (
+          <section className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <UploadCloud className="h-3.5 w-3.5" /> 6. Final Files & Delivery
+            </h4>
+            <div className="bg-muted/30 p-3 rounded-md text-sm space-y-3">
+              {canSubmitFinalFiles && asset.currentStatus === "approved" && (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground">Approved. Waiting on the artist&apos;s final files.</p>
+                  <SubmitFinalFilesDialog sku={asset.sku} />
+                </div>
+              )}
+              {/* Assets handed in before files went straight to Ready for Upload can still be sitting here. */}
+              {canNotifyUploader && asset.currentStatus === "final_files_received" && (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground">Final files received. Notify the uploader when ready.</p>
+                  <NotifyUploaderButton sku={asset.sku} />
+                </div>
+              )}
+              <FinalFilesList sku={asset.sku} enabled={open} />
+            </div>
+          </section>
+        )}
 
         {/* 8. Gmail Thread & Communications */}
         {asset.gmailThreadId && (
