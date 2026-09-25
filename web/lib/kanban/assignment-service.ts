@@ -5,9 +5,7 @@ import { assignmentCcs } from "@/lib/db/schema/assignment_ccs";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, desc } from "drizzle-orm";
-import { getBriefFieldsForAsset } from "@/lib/curation/curation-service";
-import { formatAssignmentEmailSubject, renderAssignmentEmailHtml } from "@/lib/email/templates/assignment-email";
-import { enqueueEmail } from "@/lib/email/queue-worker";
+import { createOfferAndNotifyArtist } from "@/lib/offers/offer-service";
 
 export interface AssignArtistOptions {
   assetId: string;
@@ -19,6 +17,18 @@ export interface AssignArtistOptions {
   reason?: string;
 }
 
+/**
+ * Assigns an artist to an asset and sends them the offer for it.
+ *
+ * Input: the asset, the artist, and optionally a fee and deadline for this assignment (each falls
+ * back to the asset's own), CC emails, who is assigning, and a reason for replacing an earlier
+ * artist. Output: the new assignment's id, the previous artist, and the offer that was sent.
+ *
+ * The artist gets the offer by email and in their Discord channel, and accepts it, asks for a
+ * later deadline, or declines it (see lib/offers/offer-service.ts). The full brief is emailed once
+ * they accept (lib/kanban/assignment-brief.ts), not here. An offer needs a deadline, so this
+ * refuses an asset with none when no deadline is given.
+ */
 export async function assignArtistToAsset(options: AssignArtistOptions) {
   const { assetId, artistId, feeAmount, deadline, ccEmails = [], actorId, reason } = options;
 
@@ -28,6 +38,10 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
 
   const artistRecord = await db.select().from(personnel).where(eq(personnel.id, artistId)).limit(1);
   if (artistRecord.length === 0) throw new Error("Artist personnel not found");
+
+  const offeredDeadline = deadline ? new Date(deadline) : assetRecord[0].deadline;
+  if (!offeredDeadline) throw new Error("Set a deadline before assigning: the artist is offered the asset with it.");
+  const offeredFee = feeAmount || assetRecord[0].feeAmount;
 
   const previousArtistId = assetRecord[0].currentArtistId;
 
@@ -47,7 +61,9 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
     .values({
       assetId,
       artistId,
-      feeAmount: feeAmount || assetRecord[0].feeAmount,
+      assignedBy: actorId || null,
+      deadline: offeredDeadline,
+      feeAmount: offeredFee,
       isActive: true,
       assignedAt: new Date(),
     })
@@ -68,48 +84,36 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
       })
   );
 
-  // 5. Update asset record — feeAmount/deadline were previously only used
-  // transiently for the assignment record and the email render, never
-  // written back to the asset itself. Real bug: the Kanban card reads
-  // assets.feeAmount directly, so a fee set here wouldn't have shown up on
-  // the card at all until someone separately edited the asset.
+  // 5. The asset's own fee and deadline follow the assignment, since the board, the calendar and
+  // the uploader queue all read them from the asset.
   await db
     .update(assets)
     .set({
       currentArtistId: artistId,
       ...(feeAmount ? { feeAmount } : {}),
-      ...(deadline ? { deadline: new Date(deadline) } : {}),
+      deadline: offeredDeadline,
       updatedAt: new Date(),
     })
     .where(eq(assets.id, assetId));
 
-  // 6. Queue the assignment email - admin-configured brief fields (P3-T9),
-  // real template (P2-T18), real queue (P2-T17). Without this step the
-  // three pieces exist but are never actually called together (P2-T16b).
-  const briefFields = await getBriefFieldsForAsset(assetId);
-  const emailHtml = renderAssignmentEmailHtml({
-    sku: assetRecord[0].sku,
-    itemName: assetRecord[0].itemName,
-    category: assetRecord[0].category,
-    artistName: artistRecord[0].name,
-    feeAmount: feeAmount || assetRecord[0].feeAmount,
-    briefFields,
-  });
-  const queuedEmail = await enqueueEmail({
-    assetId,
-    toEmail: artistRecord[0].email,
-    ccEmails,
-    subject: formatAssignmentEmailSubject({ sku: assetRecord[0].sku, itemName: assetRecord[0].itemName }),
-    bodyHtml: emailHtml,
-  });
-
-  // 7. Log audit event
+  // 6. Log audit event
   await db.insert(auditLog).values({
     action: "assignArtist",
     entityType: "asset",
     entityId: assetId,
     actorId: actorId || null,
-    payload: { previousArtistId, newArtistId: artistId, ccEmails, queuedEmailId: queuedEmail.id },
+    payload: { previousArtistId, newArtistId: artistId, ccEmails },
+  });
+
+  // 7. Offer it to the artist, by email and Discord.
+  const offer = await createOfferAndNotifyArtist({
+    assetId,
+    assignmentId: newAssignment.id,
+    artistId,
+    deadline: offeredDeadline,
+    feeAmount: offeredFee,
+    currency: assetRecord[0].currency,
+    createdBy: actorId,
   });
 
   return {
@@ -117,7 +121,7 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
     assetId,
     artistId,
     previousArtistId,
-    queuedEmailId: queuedEmail.id,
+    offerId: offer.id,
   };
 }
 

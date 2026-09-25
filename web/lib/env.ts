@@ -27,6 +27,12 @@ const serverEnvSchema = z.object({
     CRON_SECRET: z.string().optional(),
     // Shared secret the Discord temp-access cron sends in the x-cron-secret header. When unset, that endpoint refuses every call.
     DISCORD_CRON_SECRET: z.string().optional(),
+    // Outgoing email through Resend. Read with process.env in lib/email/resend-sender.ts, because
+    // tests import the email queue; listed here so the deployment's variables are documented in one
+    // place. Unset means emails stay queued, not lost. EMAIL_FROM's domain must be verified in Resend.
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(),
+    EMAIL_REPLY_TO: z.string().optional(),
 });
 
 const isServer = typeof window === "undefined";

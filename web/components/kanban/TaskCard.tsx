@@ -246,6 +246,16 @@ export function TaskCard({ task, role }: TaskCardProps) {
                             {currentStatus.replace(/_/g, " ")}
                         </span>
                     </div>
+                    {task.offerStatus === "pending" && (
+                        <span className="self-start text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                            Offer waiting on artist
+                        </span>
+                    )}
+                    {task.offerStatus === "extension_requested" && (
+                        <span className="self-start text-[11px] px-1.5 py-0.5 rounded-full bg-orange-500/15 text-orange-700 dark:text-orange-400">
+                            Artist asked for a later deadline
+                        </span>
+                    )}
                     {artistName && (
                         <div className="flex items-center gap-1 text-xs">
                             <span className="text-muted-foreground shrink-0">Artist:</span>

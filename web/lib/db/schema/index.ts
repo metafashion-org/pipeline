@@ -28,6 +28,7 @@ export * from "./artifact_type_config";
 export * from "./onboarding_requests";
 export * from "./brand_groups";
 export * from "./categories";
+export * from "./asset_offers";
 export * from "./payment_batches";
 export * from "./curation_idea_versions";
 export * from "./style_systems";

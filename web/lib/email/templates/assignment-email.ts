@@ -1,3 +1,5 @@
+import { formatFee } from "@/lib/format-money";
+
 export interface AssignmentEmailBriefField {
   key: string;
   displayName: string;
@@ -10,6 +12,7 @@ export interface AssignmentEmailData {
   category?: string | null;
   artistName: string;
   feeAmount?: string | null;
+  currency?: string | null;
   mannequinRig?: string | null;
   technicalSpecs?: string | null;
   recolours?: string | null;
@@ -71,7 +74,7 @@ export function renderAssignmentEmailHtml(data: AssignmentEmailData): string {
       </tr>
       <tr>
         <td style="padding: 8px; font-weight: bold;">Production Fee</td>
-        <td style="padding: 8px;">${data.feeAmount ? `$${data.feeAmount}` : "As agreed"}</td>
+        <td style="padding: 8px;">${formatFee(data.feeAmount, data.currency, "As agreed")}</td>
       </tr>
       ${briefFieldRowsHtml}
     </table>
