@@ -10,7 +10,7 @@ const RejectSchema = z.object({ reviewNotes: z.string().trim().min(1).optional()
 export async function POST(request: NextRequest, { params }: { params: Promise<{ requestId: string }> }) {
   const [user, { requestId }] = await Promise.all([getAuthedUser(), params]);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.caps.canManageSystemConfig) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user.caps.canManagePersonnel) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json().catch(() => ({}));
   const parsed = RejectSchema.safeParse(body);

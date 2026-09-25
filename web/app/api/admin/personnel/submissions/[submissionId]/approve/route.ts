@@ -11,7 +11,7 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { setPersonnelStatus } from "@/lib/forms/onboarding";
 import { isSelfLockoutAttempt } from "@/lib/auth/self-lockout";
+import { ADMIN_ONLY_MESSAGE, isAdminAccessChangeByNonAdmin } from "@/lib/auth/admin-guard";
+import { db } from "@/lib/db/client";
+import { personnel } from "@/lib/db/schema/personnel";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 const StatusSchema = z.object({
@@ -18,7 +22,7 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canManageSystemConfig) {
+  if (!user.caps.canManagePersonnel) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -30,6 +34,14 @@ export async function POST(
 
   if (isSelfLockoutAttempt(user.personnelId, personnelId, parseResult.data.status)) {
     return NextResponse.json({ error: "You can't revoke your own access" }, { status: 400 });
+  }
+
+  const [target] = await db.select({ roles: personnel.roles }).from(personnel).where(eq(personnel.id, personnelId)).limit(1);
+  if (!target) {
+    return NextResponse.json({ error: "Personnel not found" }, { status: 404 });
+  }
+  if (isAdminAccessChangeByNonAdmin(user.caps, target.roles)) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
   }
 
   try {
