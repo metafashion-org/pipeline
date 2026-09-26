@@ -6,6 +6,8 @@ import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
 import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord/discord-service";
 import { formatFee } from "@/lib/format-money";
 import { formatDate } from "@/lib/format-date";
+import { MAX_DEADLINE_EXTENSION_DAYS } from "./offer-rules";
+import { renderEmailLayout, EMAIL_TONE, type EmailLayoutInput } from "@/lib/email/templates/email-layout";
 
 /** Everything a notification about one offer shows, loaded once by offer-service.ts. */
 export interface OfferSummary {
@@ -47,16 +49,6 @@ function boardAssetUrl(sku: string): string {
   return appUrl(`/admin/board?asset=${encodeURIComponent(sku)}`);
 }
 
-// Item names, reasons and artist names are typed by people and end up inside HTML.
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /**
  * The emails of everyone who manages assignments: every Active person whose effective
  * capabilities (roles plus overrides) include canAssignArtists. They are told about deadline
@@ -72,61 +64,24 @@ async function getTeamEmails(): Promise<string[]> {
     .map((p) => p.email);
 }
 
-interface EmailRow {
-  label: string;
-  value: string;
-}
-
-// One layout for every offer email: a heading, a sentence, the asset's picture and facts, a button.
-function renderEmail({
-  heading,
-  intro,
-  summary,
-  extraRows = [],
-  button,
-}: {
-  heading: string;
-  intro: string;
-  summary: OfferSummary;
-  extraRows?: EmailRow[];
-  button: { label: string; url: string };
-}): string {
-  const rows: EmailRow[] = [
-    { label: "Asset", value: summary.itemName },
-    { label: "SKU", value: summary.sku },
-    { label: "Accessory type", value: summary.category || "Not set" },
-    { label: "Fee", value: formatFee(summary.feeAmount, summary.currency, "Not set") },
-    { label: "Deadline", value: formatDate(summary.offeredDeadline) },
-    ...extraRows,
-  ];
-  const rowsHtml = rows
-    .map(
-      (row, i) => `<tr style="${i % 2 === 0 ? "background:#f4f4f5;" : ""}">
-        <td style="padding:8px;font-weight:bold;width:40%;">${escapeHtml(row.label)}</td>
-        <td style="padding:8px;">${escapeHtml(row.value)}</td>
-      </tr>`
-    )
-    .join("");
-  const imageHtml = summary.imageUrl
-    ? `<img src="${summary.imageUrl}" alt="${escapeHtml(summary.itemName)}" style="width:100%;max-width:552px;border-radius:6px;margin:12px 0;" />`
-    : "";
-
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>${escapeHtml(heading)}</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f4f5;color:#18181b;padding:20px;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;padding:24px;border-radius:8px;border:1px solid #e4e4e7;">
-    <h2 style="margin-top:0;">${escapeHtml(heading)}</h2>
-    <p>${escapeHtml(intro)}</p>
-    ${imageHtml}
-    <table style="width:100%;border-collapse:collapse;margin:12px 0;">${rowsHtml}</table>
-    <p style="margin:20px 0;">
-      <a href="${button.url}" style="background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:bold;">${escapeHtml(button.label)}</a>
-    </p>
-    <p style="margin-top:24px;font-size:12px;color:#71717a;border-top:1px solid #e4e4e7;padding-top:12px;">
-      Meta Fashion Pipeline
-    </p>
-  </div>
-</body></html>`;
+// Every offer email shows the asset the same way: picture, name, SKU and type, fee and deadline.
+function renderOfferEmail(
+  summary: OfferSummary,
+  parts: Pick<EmailLayoutInput, "preheader" | "eyebrow" | "tone" | "intro" | "quote" | "details" | "note" | "button"> & {
+    deadline?: Date | null;
+  }
+): string {
+  const { deadline, ...rest } = parts;
+  return renderEmailLayout({
+    ...rest,
+    title: summary.itemName,
+    meta: [summary.sku, summary.category || ""],
+    imageUrl: summary.imageUrl,
+    stats: [
+      { label: "Fee", value: formatFee(summary.feeAmount, summary.currency, "Not set") },
+      { label: "Deadline", value: formatDate(deadline ?? summary.offeredDeadline) },
+    ],
+  });
 }
 
 // Queues each email, then tries to send straight away. A failed send stays queued and the daily
@@ -190,11 +145,12 @@ export async function notifyArtistOfOffer(summary: OfferSummary): Promise<void> 
     queueAndSend(
       summary.assetId,
       [summary.artistEmail],
-      `New asset offer | ${summary.sku} | ${summary.itemName}`,
-      renderEmail({
-        heading: "You have a new asset offer",
-        intro: `Hi ${summary.artistName}, we'd like you to make this asset. Accept it, ask for a later deadline, or decline it on your My Tasks page.`,
-        summary,
+      `New offer: ${summary.itemName} (${summary.sku})`,
+      renderOfferEmail(summary, {
+        preheader: `${formatFee(summary.feeAmount, summary.currency, "Fee not set")}, due ${formatDate(summary.offeredDeadline)}. Accept, ask for more time, or decline.`,
+        eyebrow: "New offer",
+        tone: EMAIL_TONE.neutral,
+        intro: `Hi ${summary.artistName}, we'd like you to make this one. Accept it, ask for up to ${MAX_DEADLINE_EXTENSION_DAYS} more days, or decline it. The full brief arrives once you accept.`,
         button: { label: "Answer the offer", url: artistOffersUrl() },
       })
     ),
@@ -219,17 +175,14 @@ export async function notifyTeamOfExtensionRequest(
   await queueAndSend(
     summary.assetId,
     teamEmails,
-    `Deadline request | ${summary.sku} | ${summary.artistName}`,
-    renderEmail({
-      heading: `${summary.artistName} asked for a later deadline`,
-      intro: "Approve or reject it on the asset's card. The artist is told either way.",
-      summary,
-      extraRows: [
-        { label: "Artist", value: summary.artistName },
-        { label: "Requested deadline", value: formatDate(requestedDeadline) },
-        { label: "Reason", value: reason || "None given" },
-      ],
-      button: { label: "Open the asset", url: boardAssetUrl(summary.sku) },
+    `Deadline request: ${summary.itemName} (${summary.sku}) from ${summary.artistName}`,
+    renderOfferEmail(summary, {
+      preheader: `${summary.artistName} wants ${formatDate(requestedDeadline)} instead of ${formatDate(summary.offeredDeadline)}.`,
+      eyebrow: "Deadline request",
+      tone: EMAIL_TONE.neutral,
+      intro: `${summary.artistName} asked to move the deadline from ${formatDate(summary.offeredDeadline)} to ${formatDate(requestedDeadline)}. Approve or reject it on the asset's card. They are told either way.`,
+      quote: reason ? { label: `${summary.artistName}'s reason`, text: reason } : undefined,
+      button: { label: "Review the request", url: boardAssetUrl(summary.sku) },
     })
   );
 }
@@ -240,16 +193,22 @@ export async function notifyArtistOfExtensionDecision(
   approved: boolean,
   agreedDeadline: Date | null
 ): Promise<void> {
-  const heading = approved ? "Your new deadline was approved" : "Your deadline request wasn't approved";
   const intro = approved
-    ? `Hi ${summary.artistName}, your new deadline of ${formatDate(agreedDeadline)} is confirmed and the asset is yours.`
+    ? `Hi ${summary.artistName}, your new deadline of ${formatDate(agreedDeadline)} is confirmed and the asset is yours. The full brief follows in a separate email.`
     : `Hi ${summary.artistName}, the original deadline of ${formatDate(summary.offeredDeadline)} stands. Accept the offer at that deadline, or decline it.`;
   await Promise.all([
     queueAndSend(
       summary.assetId,
       [summary.artistEmail],
-      `${heading} | ${summary.sku}`,
-      renderEmail({ heading, intro, summary, button: { label: "Open My Tasks", url: artistOffersUrl() } })
+      `${approved ? "New deadline approved" : "Deadline request not approved"}: ${summary.itemName} (${summary.sku})`,
+      renderOfferEmail(summary, {
+        preheader: approved ? `Your deadline is now ${formatDate(agreedDeadline)}.` : `The deadline stays ${formatDate(summary.offeredDeadline)}.`,
+        eyebrow: approved ? "Deadline approved" : "Deadline not approved",
+        tone: approved ? EMAIL_TONE.good : EMAIL_TONE.bad,
+        intro,
+        deadline: approved ? agreedDeadline : summary.offeredDeadline,
+        button: { label: approved ? "Open My Tasks" : "Answer the offer", url: artistOffersUrl() },
+      })
     ),
     postToArtistChannel({
       content: approved ? "your deadline request was approved." : "your deadline request wasn't approved.",
@@ -268,16 +227,14 @@ export async function notifyTeamOfDecline(summary: OfferSummary, reason: string 
   await queueAndSend(
     summary.assetId,
     teamEmails,
-    `Offer declined | ${summary.sku} | ${summary.artistName}`,
-    renderEmail({
-      heading: `${summary.artistName} declined ${summary.itemName}`,
-      intro: "The asset is back in Unassigned, ready to offer to someone else.",
-      summary,
-      extraRows: [
-        { label: "Artist", value: summary.artistName },
-        { label: "Reason", value: reason || "None given" },
-      ],
-      button: { label: "Open the asset", url: boardAssetUrl(summary.sku) },
+    `Offer declined: ${summary.itemName} (${summary.sku}) by ${summary.artistName}`,
+    renderOfferEmail(summary, {
+      preheader: reason ? `Reason: ${reason}` : `${summary.artistName} gave no reason.`,
+      eyebrow: "Offer declined",
+      tone: EMAIL_TONE.bad,
+      intro: `${summary.artistName} declined this asset. It is back in Unassigned, ready to offer to someone else.`,
+      quote: { label: `${summary.artistName}'s reason`, text: reason || "No reason given." },
+      button: { label: "Reassign the asset", url: boardAssetUrl(summary.sku) },
     })
   );
 }

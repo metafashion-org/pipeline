@@ -19,13 +19,12 @@ function testEmailTemplatesAndQueue() {
     category: "Headwear",
     artistName: "Bob Smith",
     feeAmount: "200",
-    refImageUrls: ["https://example.com/ref1.jpg"],
   });
 
   assert.ok(html.includes("MF-101"), "HTML body must contain SKU");
   assert.ok(html.includes("Cyber Helmet"), "HTML body must contain Item Name");
   assert.ok(html.includes("Bob Smith"), "HTML body must contain Artist Name");
-  assert.ok(html.includes("IMPORTANT WARNING"), "HTML body must contain warning against early upload");
+  assert.ok(html.includes("upload this to Roblox yourself"), "HTML body must contain warning against early upload");
 
   console.log("✓ All P2-T17/P2-T18 email template & subject formatting assertions passed cleanly!");
 }
