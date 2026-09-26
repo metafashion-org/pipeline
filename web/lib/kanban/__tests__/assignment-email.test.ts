@@ -38,7 +38,7 @@ async function testAssignmentSendsOffer() {
       .where(and(eq(emailQueue.assetId, asset.id), eq(emailQueue.toEmail, TEST_ARTIST_EMAIL)))
       .limit(1);
     assert.ok(queued, "An offer email must be queued to the artist");
-    assert.ok(queued.subject.startsWith("New asset offer"), "The queued email must be the offer, not the full brief");
+    assert.ok(queued.subject.startsWith("New offer:"), "The queued email must be the offer, not the full brief");
     assert.ok(queued.subject.includes(TEST_SKU), "The subject names the SKU");
     assert.ok(queued.bodyHtml.includes("Test Item"), "The body names the asset");
 
