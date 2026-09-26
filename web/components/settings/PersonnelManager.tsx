@@ -55,6 +55,7 @@ interface PersonnelRow {
   roles: string[];
   status: "Active" | "Blacklisted" | "Inactive";
   dateOnboarded: string | null;
+  discordChannelId: string | null;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
@@ -88,6 +89,33 @@ export function PersonnelManager({
   const [editRolesFor, setEditRolesFor] = useState<string | null>(null);
   const [editRoles, setEditRoles] = useState<string[]>([]);
   const editRolesSet = useMemo(() => new Set(editRoles), [editRoles]);
+  const [linkingDiscord, setLinkingDiscord] = useState(false);
+  const [discordMissing, setDiscordMissing] = useState<{ name: string; reason: string }[]>([]);
+
+  // Finds each artist's Discord channel and saves it, so offers and deadline pings reach them there.
+  async function linkDiscordChannels() {
+    setLinkingDiscord(true);
+    try {
+      const { ok, data } = await apiCall<{ linked: { name: string; channelId: string }[]; missing: { name: string; reason: string }[] }>(
+        "/api/admin/personnel/discord-links",
+        { method: "POST" }
+      );
+      if (!ok) {
+        toast.error(data.error || "Failed to link Discord channels");
+        return;
+      }
+      const channelByName = new Map(data.linked.map((l) => [l.name, l.channelId]));
+      setPeople((prev) => prev.map((p) => (channelByName.has(p.name) ? { ...p, discordChannelId: channelByName.get(p.name) ?? null } : p)));
+      setDiscordMissing(data.missing);
+      toast.success(
+        data.linked.length > 0
+          ? `Linked ${data.linked.map((l) => l.name).join(", ")}`
+          : "No new Discord channels found"
+      );
+    } finally {
+      setLinkingDiscord(false);
+    }
+  }
 
   function toggleAddRole(role: string) {
     setAddForm((prev) => ({
@@ -107,7 +135,7 @@ export function PersonnelManager({
       return;
     }
     setPeople((prev) => [
-      { id: data.personnel.id, name: data.personnel.name, email: data.personnel.email, roles: data.personnel.roles, status: data.personnel.status, dateOnboarded: data.personnel.dateOnboarded },
+      { id: data.personnel.id, name: data.personnel.name, email: data.personnel.email, roles: data.personnel.roles, status: data.personnel.status, dateOnboarded: data.personnel.dateOnboarded, discordChannelId: null },
       ...prev,
     ]);
     setAddForm({ name: "", email: "", roles: [] });
@@ -346,6 +374,10 @@ export function PersonnelManager({
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Personnel</CardTitle>
+            <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={linkDiscordChannels} disabled={linkingDiscord}>
+              {linkingDiscord ? "Linking…" : "Link Discord channels"}
+            </Button>
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">Add personnel</Button>
@@ -384,9 +416,22 @@ export function PersonnelManager({
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
+          {discordMissing.length > 0 && (
+            <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+              <p className="font-medium">Still without a Discord channel</p>
+              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                {discordMissing.map((m) => (
+                  <li key={m.name}>
+                    <span className="text-foreground">{m.name}</span>: {m.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>
@@ -409,7 +454,16 @@ export function PersonnelManager({
               ) : (
                 people.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {p.name}
+                        {p.status === "Active" && p.roles.some((r) => r.toLowerCase() === "artist") && !p.discordChannelId && (
+                          <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
+                            No Discord channel
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm">{p.email}</TableCell>
                     <TableCell>
                       <button

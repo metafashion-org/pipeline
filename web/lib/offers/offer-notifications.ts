@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
 import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord/discord-service";
+import { resolveArtistChannelId } from "@/lib/discord/artist-channel";
 import { formatFee } from "@/lib/format-money";
 import { formatDate } from "@/lib/format-date";
 import { MAX_DEADLINE_EXTENSION_DAYS } from "./offer-rules";
@@ -21,6 +22,7 @@ export interface OfferSummary {
   feeAmount: string | null;
   currency: string | null;
   offeredDeadline: Date;
+  artistId: string;
   artistName: string;
   artistEmail: string;
   artistDiscordUserId: string | null;
@@ -32,10 +34,12 @@ const EMBED_COLOR_OFFER = 0x2563eb;
 const EMBED_COLOR_APPROVED = 0x16a34a;
 const EMBED_COLOR_REJECTED = 0xdc2626;
 
-// The site's own address, for links inside emails and Discord messages. Read from process.env
+// The site's own address, for links inside emails and Discord messages. NEXTAUTH_URL comes first
+// because Google sign-in only works when it is the live domain, so it is always kept correct;
+// NEXT_PUBLIC_APP_URL was once left pointing at a single old deployment. Read from process.env
 // because this module is imported by tests, where lib/env.ts would throw.
 function appUrl(path: string): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
+  const base = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
   return `${base}${path}`;
 }
 
@@ -106,14 +110,37 @@ interface ArtistDiscordMessage {
   withImage: boolean;
 }
 
-// Posts in the artist's own channel, mentioning them so Discord notifies them. Best-effort: an
-// artist with no linked channel, or Discord being unset or down, only means no Discord message.
+// Where an artist's Discord messages go: their own channel, found and saved on the spot when the
+// record has none yet, or else a direct message from the bot. Null when they have no Discord
+// account linked at all.
+async function artistDiscordTarget(summary: OfferSummary): Promise<string | null> {
+  const channelId = await resolveArtistChannelId({
+    id: summary.artistId,
+    discordUserId: summary.artistDiscordUserId,
+    discordChannelId: summary.artistDiscordChannelId,
+  });
+  if (channelId) return channelId;
+  if (!summary.artistDiscordUserId) return null;
+  const dm = await discordFetch<{ id: string }>("/users/@me/channels", {
+    method: "POST",
+    body: JSON.stringify({ recipient_id: summary.artistDiscordUserId }),
+  });
+  return dm.id;
+}
+
+// Posts to the artist on Discord, mentioning them so Discord notifies them. Best-effort: no
+// Discord account, Discord being unset or down, or DMs turned off only means no Discord message.
 async function postToArtistChannel(message: ArtistDiscordMessage): Promise<void> {
   const { summary } = message;
-  if (!summary.artistDiscordChannelId || !isDiscordConfigured()) return;
+  if (!isDiscordConfigured()) return;
   const mention = summary.artistDiscordUserId ? `<@${summary.artistDiscordUserId}> ` : "";
   try {
-    await discordFetch(`/channels/${summary.artistDiscordChannelId}/messages`, {
+    const target = await artistDiscordTarget(summary);
+    if (!target) {
+      console.warn(`[offers] ${summary.artistName} has no Discord account linked; sent email only.`);
+      return;
+    }
+    await discordFetch(`/channels/${target}/messages`, {
       method: "POST",
       body: JSON.stringify({
         content: `${mention}${message.content}`,
