@@ -87,6 +87,7 @@ async function loadOfferSummary(offer: typeof assetOffers.$inferSelect): Promise
     currency: offer.currency,
     offeredDeadline: offer.offeredDeadline,
     artistId: offer.artistId,
+    offeredById: offer.createdBy,
     artistName: row.artistName,
     artistEmail: row.artistEmail,
     artistDiscordUserId: row.artistDiscordUserId,
