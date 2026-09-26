@@ -150,6 +150,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                   currentArtistName={asset.artistName}
                   currentDeadline={asset.deadline}
                   currentFeeAmount={asset.feeAmount}
+                  currentCurrency={asset.currency}
                 />
               )}
             </div>

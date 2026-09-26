@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import Link from "next/link";
 import { MAX_DEADLINE_EXTENSION_DAYS } from "@/lib/offers/offer-rules";
+import { formatFee } from "@/lib/format-money";
 
 interface Artist {
     id: string;
@@ -38,9 +39,11 @@ interface AssignTaskDialogProps {
     sku: string;
     currentArtistId?: string | null;
     currentArtistName?: string | null;
-    /** The asset's own deadline/fee, already set when it was created or edited — pre-fills the fields below so assigning doesn't ask for the same values twice. Either can still be changed for this assignment specifically. */
+    /** The asset's own deadline, pre-filled below and still editable for this assignment. */
     currentDeadline?: Date | string | null;
+    /** The asset's fee and currency, shown read-only: the offer uses the fee set on the asset, which is changed with Edit. */
     currentFeeAmount?: string | null;
+    currentCurrency?: string | null;
 }
 
 // The date input needs exactly YYYY-MM-DD regardless of locale, same conversion EditAssetDialog
@@ -50,16 +53,11 @@ function toDateInputValue(deadline: Date | string | null | undefined): string {
 }
 
 /**
- * Assign or reassign the artist on one asset — plus deadline, fee, and CC
- * emails, all set at assignment time per the brief's §8 ("The assignment UI
- * supports artist selection from Personnel, deadline, fee, brief field
- * selector, and optional CC emails"). Those three fields already had full
- * backend support (assignArtistToAsset, the assign route's Zod schema) —
- * this dialog was the only piece that never collected them. Brief field
- * inclusion itself stays admin-configured globally (Curation → Brief
- * Fields) rather than re-selectable per assignment — shown here read-only
- * so whoever's assigning can see exactly what's about to go out, without
- * a second, competing place to configure the same thing.
+ * Assigns or reassigns the artist on one asset, which sends them the offer. Only the artist and
+ * the deadline are asked for. The fee is the one already set on the asset and is shown read-only,
+ * since asking for it again here meant typing the same number twice; CC was never used. The brief
+ * fields that follow once the artist accepts stay configured in one place (Curation → Brief
+ * Fields) and are listed here so it's clear what goes out.
  */
 export function AssignTaskDialog({
     sku,
@@ -67,17 +65,13 @@ export function AssignTaskDialog({
     currentArtistName,
     currentDeadline,
     currentFeeAmount,
+    currentCurrency,
 }: AssignTaskDialogProps) {
     const [open, setOpen] = useState(false);
     // Starts empty rather than pre-selecting the current artist. The list only contains Active artists, so seeding it with the current id showed a wrong name whenever that artist is Inactive or Blacklisted - the Select cannot render a value it has no option for and fell through to another name. An empty start also matches what the dialog is for: choosing someone new.
     const [artistId, setArtistId] = useState<string>("");
-    // Deadline and fee, unlike the artist, are pre-filled from the asset's own values — they were
-    // already set when the asset was created or edited, and this dialog used to ask for them a
-    // second time with no indication that leaving them blank keeps the existing ones. Still
-    // editable, for the rare assignment that genuinely needs a different deadline or fee.
+    // Pre-filled from the asset's own deadline, and still editable for this assignment.
     const [deadline, setDeadline] = useState<string>(() => toDateInputValue(currentDeadline));
-    const [feeAmount, setFeeAmount] = useState<string>(() => currentFeeAmount || "");
-    const [ccEmails, setCcEmails] = useState<string>("");
     const [submitting, setSubmitting] = useState(false);
     const { mutate } = useSWRConfig();
 
@@ -104,8 +98,6 @@ export function AssignTaskDialog({
                 body: {
                     artistId,
                     deadline: deadline || undefined,
-                    feeAmount: feeAmount.trim() || undefined,
-                    ccEmails: ccEmails.split(",").map((e) => e.trim()).filter(Boolean),
                     reason: isReassign ? `Reassigned from ${currentArtistName || "previous artist"}` : undefined,
                 },
             });
@@ -135,8 +127,8 @@ export function AssignTaskDialog({
                     <DialogTitle>{isReassign ? "Reassign" : "Assign"} {sku}</DialogTitle>
                     <DialogDescription>
                         {isReassign
-                            ? `Currently with ${currentArtistName || "an artist"}. Reassigning ends their assignment and queues a fresh brief email to the new artist.`
-                            : "Picks the artist and queues their brief email."}
+                            ? `Currently with ${currentArtistName || "an artist"}. Reassigning ends their assignment and sends the new artist an offer.`
+                            : "Pick the artist. They're sent an offer to accept."}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -170,15 +162,11 @@ export function AssignTaskDialog({
                             <Input id="assign-deadline" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="assign-fee">Fee</Label>
-                            <Input id="assign-fee" type="number" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} placeholder="0" />
+                            <span className="text-sm font-medium">Fee</span>
+                            <p className="h-9 flex items-center text-sm">{formatFee(currentFeeAmount, currentCurrency, "Not set")}</p>
                         </div>
                     </div>
-
-                    <div className="grid gap-2">
-                        <Label htmlFor="assign-cc">CC (comma-separated, optional)</Label>
-                        <Input id="assign-cc" value={ccEmails} onChange={(e) => setCcEmails(e.target.value)} placeholder="reference-support@example.com" />
-                    </div>
+                    <p className="text-xs text-muted-foreground -mt-1">The fee comes from the asset. Change it with Edit.</p>
 
                     <p className="text-xs text-muted-foreground">
                         The artist is sent an offer by email and Discord: the asset&apos;s picture, name, SKU, accessory
