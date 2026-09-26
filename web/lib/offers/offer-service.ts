@@ -9,6 +9,7 @@ import { parseDriveRefs, driveThumbnailUrl } from "@/lib/assets/drive-links";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { sendAssignmentBrief } from "@/lib/kanban/assignment-brief";
 import { MAX_DEADLINE_EXTENSION_DAYS } from "./offer-rules";
+import { EMAIL_IMAGE_WIDTH_PX } from "@/lib/email/templates/email-layout";
 import {
   notifyArtistOfExtensionDecision,
   notifyArtistOfOffer,
@@ -18,9 +19,6 @@ import {
 } from "./offer-notifications";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// Width of the asset picture in emails and Discord, in pixels.
-const OFFER_IMAGE_WIDTH_PX = 600;
 
 // Statuses where the asset is still waiting to be made, so a decline sends it back to Unassigned.
 // Past these, a declined reassignment only clears the artist and leaves the status alone.
@@ -84,7 +82,7 @@ async function loadOfferSummary(offer: typeof assetOffers.$inferSelect): Promise
     sku: row.sku,
     itemName: row.itemName,
     category: row.category,
-    imageUrl: firstImage?.fileId ? driveThumbnailUrl(firstImage.fileId, OFFER_IMAGE_WIDTH_PX) : null,
+    imageUrl: firstImage?.fileId ? driveThumbnailUrl(firstImage.fileId, EMAIL_IMAGE_WIDTH_PX) : null,
     feeAmount: offer.feeAmount,
     currency: offer.currency,
     offeredDeadline: offer.offeredDeadline,
