@@ -17,7 +17,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <SWRProvider>
-      <ViewerProvider capabilities={getEffectiveCapabilities(roles, capabilityOverrides)}>
+      <ViewerProvider
+        capabilities={getEffectiveCapabilities(roles, capabilityOverrides)}
+        roles={roles}
+        personnelId={session?.user?.personnelId ?? null}
+      >
         {/* h-dvh, not h-screen: on iOS Safari the browser chrome overlays a vh-sized element, which
             put the bottom of every page under the address bar. w-full rather than w-screen for the
             same reason a scrollbar used to push the layout sideways. */}

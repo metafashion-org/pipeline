@@ -29,6 +29,7 @@ function testAssetDrawerRoleGating() {
     referenceImages: [{ provider: "drive", externalId: "https://drive.google.com/open?id=1uxOojyuNuRWkewqbO4xSMg5tZdimpMxh" }],
     recolorReferenceImages: [],
     offerStatus: "accepted",
+    hasPaymentReceipt: false,
   };
 
   assert.strictEqual(sampleAsset.sku, "MF-001");

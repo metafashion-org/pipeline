@@ -40,10 +40,11 @@ export async function GET() {
     // board filtered to their own email, which is empty.
     const artistFilterEmail = user.caps.canViewAllAssets ? undefined : user.email;
 
-    const { columns } = await getKanbanBoardData(artistFilterEmail);
+    const { columns, rules } = await getKanbanBoardData(artistFilterEmail);
 
     return NextResponse.json({
       data: columns,
+      rules,
       roles: user.roles,
     });
   } catch (error: unknown) {

@@ -16,6 +16,8 @@ export type TransitionErrorCode =
   | "PAYMENT_ORDER"
   | "MOVE_SWITCHED_OFF"
   | "ROLE_NOT_ALLOWED"
+  | "ARTIST_REQUIRED"
+  | "OFFER_NOT_ACCEPTED"
   | "RECEIPT_REQUIRED";
 
 export interface TransitionErrorDetails {
@@ -88,12 +90,12 @@ const ROLE_WORDS: Record<string, string> = {
   marketing: "the marketing team",
 };
 
-function roleWords(role: string): string {
+export function roleWords(role: string): string {
   return ROLE_WORDS[role.toLowerCase()] ?? `the ${role} role`;
 }
 
 // "A", "A or B", "A, B or C", with repeats dropped.
-function orList(items: string[]): string {
+export function orList(items: string[]): string {
   const unique = Array.from(new Set(items));
   if (unique.length <= 1) return unique[0] ?? "";
   return `${unique.slice(0, -1).join(", ")} or ${unique[unique.length - 1]}`;
@@ -212,6 +214,28 @@ export function roleNotAllowed(ctx: MoveContext, refusal: RoleRefusal): Transiti
         ? `That move is made by ${roleWords(refusal.role)}.`
         : `Only ${orList(refusal.roles.map(roleWords))} can move cards into ${ctx.to.label}.`,
     hint: nextMovesHint(ctx),
+  };
+}
+
+/** Assigned is reached by picking an artist, which also sends them the offer. */
+export function artistRequired(ctx: MoveContext): TransitionErrorDetails {
+  return {
+    code: "ARTIST_REQUIRED",
+    httpStatus: 403,
+    title: `Pick an artist before moving this card to ${ctx.to.label}.`,
+    reason: "Picking the artist is what sends them the offer, so a card can't be moved there without one.",
+    hint: "Open the asset and use Assign artist, or drop the card on the column to choose the artist.",
+  };
+}
+
+/** The artist hasn't answered the offer, so the asset isn't theirs to start yet. */
+export function offerNotAccepted(ctx: MoveContext): TransitionErrorDetails {
+  return {
+    code: "OFFER_NOT_ACCEPTED",
+    httpStatus: 403,
+    title: `This card can't leave ${ctx.from.label} until the artist accepts the offer.`,
+    reason: "The offer is still waiting on the artist, or on the team's answer to a deadline request.",
+    hint: "The artist answers on My Tasks. The team answers a deadline request on the asset's card.",
   };
 }
 

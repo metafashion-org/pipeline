@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getKanbanBoardData, KanbanColumnData } from "@/lib/kanban/kanban-service";
+import type { MoveRule } from "@/lib/kanban/move-rules";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { Board } from "@/components/kanban/Board";
 import { NewAssetDialog } from "@/components/kanban/NewAssetDialog";
@@ -24,9 +25,11 @@ export default async function AdminBoardPage() {
     }
 
     let initialColumns: KanbanColumnData[] = [];
+    let initialRules: MoveRule[] = [];
     try {
         const boardData = await getKanbanBoardData();
         initialColumns = boardData.columns;
+        initialRules = boardData.rules;
     } catch (error) {
         console.error("Error fetching tasks for admin:", error);
     }
@@ -42,6 +45,7 @@ export default async function AdminBoardPage() {
             <main className="flex-1 overflow-hidden p-4 sm:p-6">
                 <Board
                     initialColumns={initialColumns}
+                    initialRules={initialRules}
                     role={session.user.role || "artist"}
                 />
             </main>
