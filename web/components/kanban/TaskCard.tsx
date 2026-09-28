@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, Maximize2 } from "lucide-react";
+import { Copy, Maximize2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { AssetDrawer } from "./asset-drawer";
@@ -190,6 +190,8 @@ export function TaskCard({ task, role }: TaskCardProps) {
 
     // First reference that is an actual Drive file becomes the card's cover art; the colour gradient underneath stays visible when there is no such reference or no source can fetch it.
     const coverRef = parseDriveRefs(formattedAsset.referenceImages).find((r) => r.fileId);
+    // Shown on the card so an artist knows there are recolours to make before opening it.
+    const recolourCount = parseDriveRefs(formattedAsset.recolorReferenceImages).length;
 
     return (
         <>
@@ -297,6 +299,12 @@ export function TaskCard({ task, role }: TaskCardProps) {
                                 </>
                             )}
                         </div>
+                    )}
+                    {recolourCount > 0 && (
+                        <p className="flex items-center gap-1 text-[11px] text-muted-foreground" data-testid="recolour-count">
+                            <Palette className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            {recolourCount} recolour{recolourCount === 1 ? "" : "s"}
+                        </p>
                     )}
                     <NextStepLine task={task} />
                 </div>
