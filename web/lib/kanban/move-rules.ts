@@ -246,6 +246,13 @@ function isYourStep(actor: TransitionActor | undefined, card: MoveCard, target: 
   return (target.whoCanMoveIn || []).some((r) => r.toLowerCase() !== "admin" && roles.has(r.toLowerCase()));
 }
 
+// Back to Unassigned is a way out of a column, not its next step, except from Curated, where moving
+// to Unassigned is the approval. Judged by key, not board order: Revisions Requested moves back to
+// In Production, an earlier column, and that is its next step.
+function isWayOut(fromKey: string, toKey: string): boolean {
+  return toKey === "unassigned" && fromKey !== CURATED_STATUS;
+}
+
 function exitsFrom(statusKey: string, rules: MoveRule[], statusByKey: ReadonlyMap<string, MoveStatus>): MoveRule[] {
   return rules
     .filter((r) => r.fromStatus === statusKey && r.isAllowed && statusByKey.has(r.toStatus))
@@ -271,9 +278,7 @@ export function describeNextStep(
 ): NextStepSummary {
   const statusByKey = new Map(statuses.map((s) => [s.key, s]));
   const label = (key: string) => statusByKey.get(key)?.label ?? key;
-  // A move to an earlier column (back to Unassigned, say) is a way out, not the next step.
-  const currentOrder = statusByKey.get(card.currentStatus)?.sortOrder ?? 0;
-  const exits = exitsFrom(card.currentStatus, rules, statusByKey).filter((r) => (statusByKey.get(r.toStatus)?.sortOrder ?? 0) > currentOrder);
+  const exits = exitsFrom(card.currentStatus, rules, statusByKey).filter((r) => !isWayOut(card.currentStatus, r.toStatus));
   const artist = artistName || "the artist";
 
   if (exits.length === 0) {
@@ -407,8 +412,7 @@ export function describeColumn(
     };
   });
 
-  const currentOrder = status?.sortOrder ?? 0;
-  const forward = exits.filter((e) => (statusByKey.get(e.toKey)?.sortOrder ?? 0) > currentOrder);
+  const forward = exits.filter((e) => !isWayOut(statusKey, e.toKey));
   let next: NextStepSummary;
   if (forward.length === 0) {
     next = lastStatusKey(statuses) === statusKey ? { tone: "done", text: "Last step" } : { tone: "blocked", text: "No way out is switched on" };
