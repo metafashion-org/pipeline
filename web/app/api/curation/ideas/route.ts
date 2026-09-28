@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { submitCurationItemIdea, getCurationFieldConfigs } from "@/lib/curation/curation-service";
+import { curationReviewAppliesTo, getCurationReviewMode } from "@/lib/settings/app-settings";
 
 function canCurate(roles: string[], overrides: Record<string, boolean>): boolean {
   const caps = getEffectiveCapabilities(roles, overrides);
@@ -32,6 +33,8 @@ export async function POST(req: Request) {
   if (!body.ideaTitle?.trim()) return NextResponse.json({ error: "ideaTitle is required" }, { status: 400 });
 
   try {
+    // While curation review is on for this person, the idea waits in Curated for the team.
+    const reviewFirst = curationReviewAppliesTo(await getCurationReviewMode(), session.user.roles || []);
     const result = await submitCurationItemIdea({
       ideaTitle: body.ideaTitle.trim(),
       category: body.category || undefined,
@@ -47,6 +50,7 @@ export async function POST(req: Request) {
       // Converts an existing draft (lib/curation/draft-service.ts) in place
       // instead of inserting a second row - see submitCurationItemIdea.
       draftId: body.draftId || undefined,
+      reviewFirst,
     });
     return NextResponse.json(result);
   } catch (e: unknown) {

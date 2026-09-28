@@ -72,11 +72,18 @@ export function DraftsList({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">Last saved {formatDateTime(d.updatedAt)}</p>
+            {d.reviewNote && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 line-clamp-2">
+                Sent back{d.assetSku ? ` (${d.assetSku})` : ""}: {d.reviewNote}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Button size="sm" variant="outline" onClick={() => onResume(d)}>
               <FileEdit className="h-3.5 w-3.5" /> Resume
             </Button>
+            {/* A sent-back idea still has its card in Curated, so it can be changed and sent again but not discarded. */}
+            {!d.assetSku && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive">
@@ -94,6 +101,7 @@ export function DraftsList({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            )}
           </div>
         </div>
       ))}

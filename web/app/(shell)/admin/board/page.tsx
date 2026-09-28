@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getKanbanBoardData, KanbanColumnData } from "@/lib/kanban/kanban-service";
 import type { MoveRule } from "@/lib/kanban/move-rules";
+import { curationReviewAppliesTo, getCurationReviewMode } from "@/lib/settings/app-settings";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { Board } from "@/components/kanban/Board";
 import { NewAssetDialog } from "@/components/kanban/NewAssetDialog";
@@ -27,7 +28,8 @@ export default async function AdminBoardPage() {
     let initialColumns: KanbanColumnData[] = [];
     let initialRules: MoveRule[] = [];
     try {
-        const boardData = await getKanbanBoardData();
+        const showCurated = curationReviewAppliesTo(await getCurationReviewMode(), session.user.roles || []);
+        const boardData = await getKanbanBoardData(undefined, { showCurated });
         initialColumns = boardData.columns;
         initialRules = boardData.rules;
     } catch (error) {

@@ -9,6 +9,7 @@ import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { assetOffers, type OfferStatus } from "@/lib/db/schema/asset_offers";
+import { curationItemIdeas } from "@/lib/db/schema/curation_item_ideas";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
 import {
   TransitionRefusedError,
@@ -25,7 +26,7 @@ import {
   type MoveContext,
   type TransitionErrorDetails,
 } from "./transition-errors";
-import { actorRoles, checkMove, type MoveRefusal, type MoveRule, type TransitionActor } from "./move-rules";
+import { CURATED_STATUS, actorRoles, checkMove, type MoveRefusal, type MoveRule, type TransitionActor } from "./move-rules";
 
 export type { TransitionActor } from "./move-rules";
 
@@ -82,6 +83,9 @@ export interface KanbanAssetCard {
   offerStatus: OfferStatus | null;
   // Whether a payment receipt is attached. Payment Done needs one, so the card says so while it's missing.
   hasPaymentReceipt: boolean;
+  // For a card in Curated: who curated it, and whether the team sent it back to them with a note.
+  curatorId: string | null;
+  curationSentBack: boolean;
 }
 
 /**
@@ -106,12 +110,19 @@ export type KanbanColumnDataClient = Omit<KanbanColumnData, "assets"> & { assets
  * Everything the board shows: one column per status with its cards, and every transition rule, so
  * the board can explain each column and check a move with the same checkMove the server uses.
  */
-export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[]; rules: MoveRule[] }> {
+export async function getKanbanBoardData(
+  artistEmail?: string,
+  options: { showCurated?: boolean } = {}
+): Promise<{ columns: KanbanColumnData[]; rules: MoveRule[] }> {
+  // The Curated column only exists for people curation review is switched on for (see
+  // lib/settings/app-settings.ts). For everyone else it and its cards are left out entirely: an
+  // admin's test idea must not fall through into someone else's Unassigned column.
+  const showCurated = options.showCurated ?? false;
   // The status config, the asset list, and the artist<->artifact link list are independent, so
   // they are fetched concurrently. Links are queried separately rather than joined onto the main
   // asset query because an asset can carry more than one link — a join would multiply its row
   // (and every other joined column, artist/brand group included) once per link.
-  const [allStatuses, fetchedAssets, allLinks, latestOffers, allRules] = await Promise.all([
+  const [allStatuses, fetchedAssets, allLinks, latestOffers, allRules, curatedIdeas] = await Promise.all([
     db.select().from(statuses).orderBy(asc(statuses.sortOrder)),
     db
     .select({
@@ -170,7 +181,17 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
         failureReason: statusTransitionRules.failureReason,
       })
       .from(statusTransitionRules),
+    // The idea behind each card in Curated: who curated it, and whether it was sent back to them.
+    showCurated
+      ? db
+          .select({ assetId: curationItemIdeas.assetId, submittedBy: curationItemIdeas.submittedBy, status: curationItemIdeas.status })
+          .from(curationItemIdeas)
+          .innerJoin(assets, eq(curationItemIdeas.assetId, assets.id))
+          .where(eq(assets.currentStatus, CURATED_STATUS))
+      : Promise.resolve([]),
   ]);
+
+  const ideaByAsset = new Map(curatedIdeas.map((idea) => [idea.assetId, idea]));
 
   const offerStatusByAsset = new Map(latestOffers.map((offer) => [offer.assetId, offer.status]));
 
@@ -188,6 +209,9 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   // built here so the client never needs the guild id as a public env var).
   const allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
     ...rest,
+    curatorId: ideaByAsset.get(rest.id)?.submittedBy ?? null,
+    // A sent-back idea is back in its curator's drafts while its card waits in Curated.
+    curationSentBack: ideaByAsset.get(rest.id)?.status === "draft",
     artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
     linkedArtifacts: linksByAsset.get(rest.id) ?? [],
     offerStatus: offerStatusByAsset.get(rest.id) ?? null,
@@ -196,6 +220,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   const columnsMap = new Map<string, KanbanColumnData>();
 
   for (const s of allStatuses) {
+    if (s.key === CURATED_STATUS && !showCurated) continue;
     columnsMap.set(s.key, {
       key: s.key,
       label: s.label,
@@ -209,6 +234,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
   }
 
   for (const a of allAssets) {
+    if (a.currentStatus === CURATED_STATUS && !showCurated) continue;
     const col = columnsMap.get(a.currentStatus);
     if (col) {
       col.assets.push(a);
@@ -363,6 +389,14 @@ export async function updateAssetStatusInKanban(
     actorId: actorPersonnelId,
     note: note || `Status updated via Kanban to ${targetStatusKey}`,
   });
+
+  // Leaving Curated is the team's approval of the idea behind the card.
+  if (fromStatus === CURATED_STATUS) {
+    await db
+      .update(curationItemIdeas)
+      .set({ status: "approved", reviewNote: null, updatedAt: new Date() })
+      .where(eq(curationItemIdeas.assetId, asset.id));
+  }
 
   // Log audit event
   await db.insert(auditLog).values({

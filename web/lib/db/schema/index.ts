@@ -36,3 +36,4 @@ export * from "./style_systems";
 export * from "./artifact_style_system_links";
 export * from "./artifact_assignment_links";
 export * from "./artifact_campaign_links";
+export * from "./app_settings";

@@ -13,6 +13,7 @@ import {
 
 // The pipeline as seeded in lib/db/seed-statuses.ts, reduced to what checkMove reads.
 const STATUSES: MoveStatus[] = [
+  { key: "curated", label: "Curated", sortOrder: 0, whoCanMoveIn: ["admin", "operator"] },
   { key: "unassigned", label: "Unassigned", sortOrder: 1, whoCanMoveIn: ["admin", "operator"] },
   { key: "assigned", label: "Assigned", sortOrder: 2, whoCanMoveIn: ["operator", "admin"] },
   { key: "in_progress", label: "In Production", sortOrder: 3, whoCanMoveIn: ["artist", "operator", "admin"] },
@@ -31,6 +32,7 @@ function rule(fromStatus: string, toStatus: string, role: string | null, isAutom
 }
 
 const RULES: MoveRule[] = [
+  rule("curated", "unassigned", "operator"),
   rule("unassigned", "assigned", null, true),
   rule("assigned", "in_progress", "artist"),
   rule("in_progress", "in_review", "artist"),
@@ -178,7 +180,33 @@ function testColumnsAndDropTargets() {
   console.log("✓ describeColumn and allowedTargets agree with the rules");
 }
 
+function testCuratedCards() {
+  const CURATOR: TransitionActor = { roles: ["curator"], personnelId: "curator-1", caps: { ...NO_CAPS, canViewAllAssets: true } };
+  const curated = card("curated", { artistId: null, offerStatus: null, curatorId: "curator-1", curationSentBack: false });
+  const sentBack = { ...curated, curationSentBack: true };
+  const step = (actor: TransitionActor, c: MoveCard) => describeNextStep(actor, c, STATUSES, RULES, null);
+
+  // The team, and an admin trying the trial alone, review it; the curator waits.
+  assert.deepStrictEqual(step(OPERATOR, curated), { tone: "you", text: "Approve it or send it back" });
+  assert.deepStrictEqual(step(ADMIN, curated), { tone: "you", text: "Approve it or send it back" });
+  assert.deepStrictEqual(step(CURATOR, curated), { tone: "other", text: "The team is reviewing your idea" });
+
+  // Sent back, it's the curator's move.
+  assert.deepStrictEqual(step(CURATOR, sentBack), { tone: "you", text: "Make the changes in My Drafts" });
+  assert.deepStrictEqual(step(OPERATOR, sentBack), { tone: "blocked", text: "Sent back to the curator" });
+
+  // Approving is a move forward, to Unassigned. A curator can't approve their own idea.
+  assert.deepStrictEqual(describeColumn(OPERATOR, "curated", STATUSES, RULES).next, { tone: "you", text: "Next: you" });
+  assert.ok(allowedTargets(OPERATOR, curated, STATUSES, RULES).has("unassigned"));
+  assert.ok(!allowedTargets(CURATOR, curated, STATUSES, RULES).has("unassigned"));
+  // Assigning is for approved ideas: a curated card can't be dropped on Assigned.
+  assert.ok(!allowedTargets(OPERATOR, curated, STATUSES, RULES).has("assigned"));
+
+  console.log("✓ Curated cards say who reviews them and whose move a sent-back idea is");
+}
+
 testCheckMove();
 testNextStep();
 testColumnsAndDropTargets();
+testCuratedCards();
 console.log("✓ All move-rules assertions passed cleanly!");

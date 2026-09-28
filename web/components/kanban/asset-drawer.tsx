@@ -17,6 +17,8 @@ import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
 import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { AssetOfferStatus } from "@/components/offers/AssetOfferStatus";
+import { CurationReviewSection } from "@/components/curation/CurationReviewSection";
+import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
 // section shows: the hand-in button while Approved, the handed-in versions after.
@@ -132,6 +134,11 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
+        {/* A card in Curated is a curator's idea waiting for the team: what they wrote, and approve or send back. */}
+        {asset.currentStatus === CURATED_STATUS && (
+          <CurationReviewSection sku={asset.sku} enabled={open} canReview={viewerCapabilities.canAssignArtists} />
+        )}
+
         {/* 2. Artist Assignment */}
         <section className="space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -143,7 +150,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                 <p><span className="text-xs text-muted-foreground">Assigned Artist:</span> {asset.artistName || "Unassigned"}</p>
                 {asset.artistEmail && <p className="truncate"><span className="text-xs text-muted-foreground">Email:</span> {asset.artistEmail}</p>}
               </div>
-              {canAssignArtists && (
+              {canAssignArtists && asset.currentStatus !== CURATED_STATUS && (
                 <AssignTaskDialog
                   sku={asset.sku}
                   currentArtistId={asset.artistId}
