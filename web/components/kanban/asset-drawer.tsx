@@ -58,7 +58,6 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   if (!asset) return null;
 
   const isAdminOrOperator = userRoles.includes("admin") || userRoles.includes("operator");
-  const isCurator = userRoles.includes("curator") || isAdminOrOperator;
   const isPaymentAdmin = userRoles.includes("payment_admin") || isAdminOrOperator;
   // Client-side gates only, to decide what to show. Every endpoint these
   // buttons call re-checks the real permission server-side — for Submit
@@ -181,9 +180,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             {hasReferences ? (
               <>
                 <ReferenceGallery label="Reference images" refs={references} />
-                {isCurator && (
-                  <ReferenceGallery label="Recolour references" refs={recolorReferences} />
-                )}
+                {/* Everyone who can open the card sees the recolours, the artist included: they make
+                    them. Showing them to curators, operators and admins only left artists without them. */}
+                <ReferenceGallery label="Recolour references" refs={recolorReferences} />
               </>
             ) : (
               <p className="text-xs text-muted-foreground italic">No reference links on this asset yet.</p>
