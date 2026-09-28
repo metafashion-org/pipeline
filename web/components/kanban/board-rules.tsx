@@ -55,5 +55,7 @@ export function toMoveCard(task: KanbanAssetCardClient): MoveCard {
     artistId: task.artistId,
     offerStatus: task.offerStatus,
     hasPaymentReceipt: task.hasPaymentReceipt,
+    curatorId: task.curatorId,
+    curationSentBack: task.curationSentBack,
   };
 }

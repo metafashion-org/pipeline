@@ -24,11 +24,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import useSWR from "swr";
 import { apiCall } from "@/lib/api-client";
+import { jsonFetcher } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/format-date";
+import { parseDriveRefs } from "@/lib/assets/drive-links";
+import { ReferenceDropzone } from "@/components/kanban/reference-dropzone";
+import { ReferenceUploadButton } from "@/components/kanban/reference-upload-button";
+import { DriveThumbnail } from "@/components/kanban/drive-thumbnail";
 import type { FieldOption } from "@/lib/forms/field-options";
 import { toast } from "sonner";
-import { Sparkles, History, Trash2, Loader2, Check } from "lucide-react";
+import { Sparkles, History, Trash2, Loader2, Check, MessageSquareWarning } from "lucide-react";
 
 interface FieldConfig {
   fieldKey: string;
@@ -47,6 +53,10 @@ export interface DraftRecord {
   moodboardUrls: string[];
   fieldValues: Record<string, unknown>;
   version: number;
+  /** The team's note when they sent this idea back, which the form shows above it. */
+  reviewNote?: string | null;
+  /** The SKU of the card a sent-back idea already has in Curated. */
+  assetSku?: string | null;
 }
 
 interface DraftVersion {
@@ -57,6 +67,20 @@ interface DraftVersion {
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 2000;
+
+// The curation field for the Pinterest board link (PINTEREST_FIELD_KEY in lib/curation/curation-service.ts).
+const PINTEREST_FIELD_KEY = "pinterestBoard";
+// Where the review form uploads pictures: curators can't use the board's upload route.
+const CURATION_UPLOAD_URL = "/api/curation/uploads";
+// Stands in for "no category" in the category list, which can't hold an empty value.
+const NO_CATEGORY = "__none__";
+// Picture links are kept as one text value, separated by commas, spaces or new lines.
+const LINK_SEPARATOR = /[\s,]+/;
+
+interface CategoryOption {
+  id: string;
+  name: string;
+}
 
 function errMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -75,10 +99,17 @@ export function CurationIdeaForm({
   fields,
   initialDraft,
   onDraftChanged,
+  reviewMode = false,
 }: {
   fields: FieldConfig[];
   initialDraft?: DraftRecord | null;
   onDraftChanged?: () => void;
+  /**
+   * Curation review is on for this person (lib/settings/app-settings.ts): the idea goes to the
+   * Curated column, fee and deadline are left to the team, and the form adds picture upload, the
+   * category list and a Pinterest board field.
+   */
+  reviewMode?: boolean;
 }) {
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const [ideaTitle, setIdeaTitle] = useState(initialDraft?.ideaTitle ?? "");
@@ -97,7 +128,10 @@ export function CurationIdeaForm({
     (initialDraft?.fieldValues as Record<string, string>) ?? {}
   );
   const [submitting, setSubmitting] = useState(false);
-  const [lastCreated, setLastCreated] = useState<{ sku: string; ideaTitle: string } | null>(null);
+  const [lastCreated, setLastCreated] = useState<{ sku: string; ideaTitle: string; inReview: boolean } | null>(null);
+  const [showPasteLinks, setShowPasteLinks] = useState(false);
+  const { data: categoriesData } = useSWR<{ categories?: CategoryOption[] }>(reviewMode ? "/api/admin/categories" : null, jsonFetcher);
+  const categoryOptions = categoriesData?.categories ?? [];
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(initialDraft ? "saved" : "idle");
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -129,11 +163,16 @@ export function CurationIdeaForm({
   };
 
   function currentPayload() {
-    return {
+    const shared = {
       ideaTitle: ideaTitle.trim() || "Untitled idea",
       category: category.trim() || null,
       sourceLinks: sourceLinks.split(",").map((s) => s.trim()).filter(Boolean),
-      moodboardUrls: moodboardUrls.split(",").map((s) => s.trim()).filter(Boolean),
+      moodboardUrls: moodboardUrls.split(reviewMode ? LINK_SEPARATOR : ",").map((s) => s.trim()).filter(Boolean),
+    };
+    // The review form doesn't ask for fee or deadline: the team sets them when they assign it.
+    if (reviewMode) return { ...shared, fieldValues };
+    return {
+      ...shared,
       budget: budget.trim(),
       deadline: deadline.trim(),
       // Also folded into fieldValues so the draft row round-trips them: a draft is scratch
@@ -248,6 +287,18 @@ export function CurationIdeaForm({
     }
   }
 
+  function addPictureLinks(urls: string[]) {
+    setMoodboardUrls((prev) => [...prev.split(LINK_SEPARATOR).filter(Boolean), ...urls].join(", "));
+    scheduleSave();
+  }
+
+  function removePictureLink(url: string) {
+    setMoodboardUrls((prev) => prev.split(LINK_SEPARATOR).filter((u) => u && u !== url).join(", "));
+    scheduleSave();
+  }
+
+  const pictureRefs = parseDriveRefs([moodboardUrls]);
+
   const handleSubmit = async () => {
     if (!ideaTitle.trim()) {
       toast.error("Item name / curation title is required");
@@ -256,11 +307,12 @@ export function CurationIdeaForm({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSubmitting(true);
     try {
-      const { ok, data } = await apiCall<{ sku: string; idea: { ideaTitle: string } }>("/api/curation/ideas", { method: "POST", body: { ...currentPayload(), draftId: draftId || undefined } });
+      const { ok, data } = await apiCall<{ sku: string; idea: { ideaTitle: string }; currentStatus: string }>("/api/curation/ideas", { method: "POST", body: { ...currentPayload(), draftId: draftId || undefined } });
       if (!ok) throw new Error(data.error || "Failed to submit idea");
 
-      setLastCreated({ sku: data.sku, ideaTitle: data.idea.ideaTitle });
-      toast.success(`Created ${data.sku} — now on the board, Unassigned`);
+      const inReview = data.currentStatus === "curated";
+      setLastCreated({ sku: data.sku, ideaTitle: data.idea.ideaTitle, inReview });
+      toast.success(inReview ? `${data.sku} sent to the team for review` : `Created ${data.sku} — now on the board, Unassigned`);
       onDraftChanged?.();
       resetForm();
     } catch (e) {
@@ -275,10 +327,35 @@ export function CurationIdeaForm({
       {lastCreated && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          <span>
-            <strong className="font-mono">{lastCreated.sku}</strong> — &ldquo;{lastCreated.ideaTitle}&rdquo; created. It&apos;s on the Kanban board now, Unassigned.
-          </span>
+          {lastCreated.inReview ? (
+            <span>
+              <strong className="font-mono">{lastCreated.sku}</strong> — &ldquo;{lastCreated.ideaTitle}&rdquo; is in the Curated column. The team
+              approves it for production or sends it back to you with a note, which shows up in My Drafts.
+            </span>
+          ) : (
+            <span>
+              <strong className="font-mono">{lastCreated.sku}</strong> — &ldquo;{lastCreated.ideaTitle}&rdquo; created. It&apos;s on the Kanban board now, Unassigned.
+            </span>
+          )}
         </div>
+      )}
+
+      {initialDraft?.reviewNote && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm flex gap-2">
+          <MessageSquareWarning className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">The team sent this back{initialDraft.assetSku ? ` (${initialDraft.assetSku})` : ""}</p>
+            <p className="text-muted-foreground whitespace-pre-line">{initialDraft.reviewNote}</p>
+            <p className="text-xs text-muted-foreground mt-1">Make the changes and send it again. It keeps the same SKU.</p>
+          </div>
+        </div>
+      )}
+
+      {reviewMode && !initialDraft?.reviewNote && (
+        <p className="text-sm text-muted-foreground">
+          Your idea goes to the Curated column on the board for the team to review. They set the fee and deadline when
+          they assign it.
+        </p>
       )}
 
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground min-h-[20px]">
@@ -338,17 +415,56 @@ export function CurationIdeaForm({
 
         <div>
           <label htmlFor="curation-category" className="text-xs text-muted-foreground mb-1 block">Category</label>
-          <Input
-            id="curation-category"
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              scheduleSave();
-            }}
-            placeholder="e.g. Hair"
-          />
+          {reviewMode ? (
+            <Select
+              value={category || NO_CATEGORY}
+              onValueChange={(v) => {
+                setCategory(v === NO_CATEGORY ? "" : v);
+                scheduleSave();
+              }}
+            >
+              <SelectTrigger id="curation-category" className="w-full">
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CATEGORY}>Not set</SelectItem>
+                {/* A draft started before the list existed can hold free text; keep it choosable. */}
+                {category && !categoryOptions.some((c) => c.name === category) && <SelectItem value={category}>{category}</SelectItem>}
+                {categoryOptions.map((c) => (
+                  <SelectItem key={c.id} value={c.name}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              id="curation-category"
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                scheduleSave();
+              }}
+              placeholder="e.g. Hair"
+            />
+          )}
         </div>
 
+        {reviewMode && (
+          <div>
+            <label htmlFor="curation-pinterest" className="text-xs text-muted-foreground mb-1 block">Pinterest board</label>
+            <Input
+              id="curation-pinterest"
+              type="url"
+              value={fieldValues[PINTEREST_FIELD_KEY] || ""}
+              onChange={(e) => setField(PINTEREST_FIELD_KEY, e.target.value)}
+              placeholder="https://pinterest.com/..."
+            />
+          </div>
+        )}
+
+        {!reviewMode && (
+        <>
         <div>
           <label htmlFor="curation-budget" className="text-xs text-muted-foreground mb-1 block">Budget / Fee</label>
           <Input
@@ -379,6 +495,8 @@ export function CurationIdeaForm({
             }}
           />
         </div>
+        </>
+        )}
 
         {visibleFields.map((f) => {
           const value = fieldValues[f.fieldKey] || "";
@@ -425,23 +543,70 @@ export function CurationIdeaForm({
             placeholder="https://..."
           />
         </div>
-        <div>
-          <label htmlFor="curation-moodboard-urls" className="text-xs text-muted-foreground mb-1 block">Moodboard URLs (comma-separated)</label>
-          <Input
-            id="curation-moodboard-urls"
-            value={moodboardUrls}
-            onChange={(e) => {
-              setMoodboardUrls(e.target.value);
-              scheduleSave();
-            }}
-            placeholder="https://..."
-          />
-        </div>
+        {reviewMode ? (
+          <div className="md:col-span-2">
+            <ReferenceDropzone uploadUrl={CURATION_UPLOAD_URL} onUploaded={addPictureLinks}>
+              {({ uploading, uploadFiles }) => (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Pictures</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">or drop files here</span>
+                      <ReferenceUploadButton uploading={uploading} onFiles={uploadFiles} />
+                    </div>
+                  </div>
+                  {pictureRefs.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {pictureRefs.map((ref) => (
+                        <DriveThumbnail key={ref.url} driveRef={ref} size={72} onRemove={() => removePictureLink(ref.url)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">The first picture becomes the card&apos;s cover on the board.</p>
+                  )}
+                  {showPasteLinks ? (
+                    <Input
+                      id="curation-moodboard-urls"
+                      autoFocus
+                      value={moodboardUrls}
+                      onChange={(e) => {
+                        setMoodboardUrls(e.target.value);
+                        scheduleSave();
+                      }}
+                      placeholder="Paste Drive links, separated by commas"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowPasteLinks(true)}
+                      className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                    >
+                      Have a link instead of a file?
+                    </button>
+                  )}
+                </>
+              )}
+            </ReferenceDropzone>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="curation-moodboard-urls" className="text-xs text-muted-foreground mb-1 block">Moodboard URLs (comma-separated)</label>
+            <Input
+              id="curation-moodboard-urls"
+              value={moodboardUrls}
+              onChange={(e) => {
+                setMoodboardUrls(e.target.value);
+                scheduleSave();
+              }}
+              placeholder="https://..."
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end pt-2">
         <Button onClick={handleSubmit} disabled={submitting}>
-          {submitting ? "Creating..." : "Submit Idea"}
+          {reviewMode ? (submitting ? "Sending..." : "Send for review") : submitting ? "Creating..." : "Submit Idea"}
         </Button>
       </div>
 

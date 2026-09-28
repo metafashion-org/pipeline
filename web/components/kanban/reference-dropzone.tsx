@@ -20,16 +20,19 @@ import { useReferenceUpload } from "./use-reference-upload";
  */
 export function ReferenceDropzone({
   sku,
+  uploadUrl,
   disabled,
   onUploaded,
   children,
 }: {
-  sku: string;
+  sku?: string;
+  /** Where to upload instead of the board's reference route, e.g. the Curation form's. */
+  uploadUrl?: string;
   disabled?: boolean;
   onUploaded: (urls: string[]) => void;
   children: (state: { uploading: boolean; uploadFiles: (files: File[]) => void }) => ReactNode;
 }) {
-  const { uploading, uploadFiles } = useReferenceUpload({ sku, onUploaded });
+  const { uploading, uploadFiles } = useReferenceUpload({ sku, uploadUrl, onUploaded });
   const [isDraggedOver, setIsDraggedOver] = useState(false);
   const dragDepth = useRef(0);
 

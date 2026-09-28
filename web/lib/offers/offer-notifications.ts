@@ -6,6 +6,7 @@ import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord
 import { resolveArtistChannelId } from "@/lib/discord/artist-channel";
 import { formatFee } from "@/lib/format-money";
 import { formatDate } from "@/lib/format-date";
+import { appUrl } from "@/lib/app-url";
 import { MAX_DEADLINE_EXTENSION_DAYS } from "./offer-rules";
 import { renderEmailLayout, EMAIL_TONE, type EmailLayoutInput } from "@/lib/email/templates/email-layout";
 
@@ -34,15 +35,6 @@ export interface OfferSummary {
 const EMBED_COLOR_OFFER = 0x2563eb;
 const EMBED_COLOR_APPROVED = 0x16a34a;
 const EMBED_COLOR_REJECTED = 0xdc2626;
-
-// The site's own address, for links inside emails and Discord messages. NEXTAUTH_URL comes first
-// because Google sign-in only works when it is the live domain, so it is always kept correct;
-// NEXT_PUBLIC_APP_URL was once left pointing at a single old deployment. Read from process.env
-// because this module is imported by tests, where lib/env.ts would throw.
-function appUrl(path: string): string {
-  const base = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-  return `${base}${path}`;
-}
 
 /** Where an artist answers their offers: their own My Tasks page. */
 export function artistOffersUrl(): string {

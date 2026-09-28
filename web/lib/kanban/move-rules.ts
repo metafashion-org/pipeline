@@ -15,6 +15,10 @@ import { orList, roleWords, type RoleRefusal } from "./transition-errors";
 // the admin override for a missing rule never reaches them.
 export const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
 
+// The Curated column, where curators' ideas wait for the team's review while curation review is
+// switched on (lib/settings/app-settings.ts). Added by drizzle/0035_curation_review.sql.
+export const CURATED_STATUS = "curated";
+
 // Copied from OPEN_OFFER_STATUSES in lib/db/schema/asset_offers.ts. Importing that module here
 // would pull the Drizzle table definitions into the board's browser bundle.
 const WAITING_OFFER_STATUSES: OfferStatus[] = ["pending", "extension_requested"];
@@ -52,6 +56,10 @@ export interface MoveCard {
   artistId: string | null;
   offerStatus: OfferStatus | null;
   hasPaymentReceipt: boolean;
+  /** For a card in Curated: who curated it. */
+  curatorId?: string | null;
+  /** For a card in Curated: true while the team has sent it back to its curator. */
+  curationSentBack?: boolean;
 }
 
 /** Which check refused a move. transition-errors.ts turns each kind into the words people see. */
@@ -263,14 +271,33 @@ export function describeNextStep(
 ): NextStepSummary {
   const statusByKey = new Map(statuses.map((s) => [s.key, s]));
   const label = (key: string) => statusByKey.get(key)?.label ?? key;
-  // Back to Unassigned is a way out, not the next step, so it isn't offered as one.
-  const exits = exitsFrom(card.currentStatus, rules, statusByKey).filter((r) => r.toStatus !== "unassigned");
+  // A move to an earlier column (back to Unassigned, say) is a way out, not the next step.
+  const currentOrder = statusByKey.get(card.currentStatus)?.sortOrder ?? 0;
+  const exits = exitsFrom(card.currentStatus, rules, statusByKey).filter((r) => (statusByKey.get(r.toStatus)?.sortOrder ?? 0) > currentOrder);
   const artist = artistName || "the artist";
 
   if (exits.length === 0) {
     return lastStatusKey(statuses) === card.currentStatus
       ? { tone: "done", text: "Finished" }
       : { tone: "blocked", text: "No move out of this column is switched on" };
+  }
+
+  // A curated idea: the team approves it or sends it back, and a sent-back one waits on its curator.
+  if (card.currentStatus === CURATED_STATUS) {
+    const isCurator = Boolean(card.curatorId) && actor !== undefined && !actor.system && actor.personnelId === card.curatorId;
+    if (card.curationSentBack) {
+      return isCurator
+        ? { tone: "you", text: "Make the changes in My Drafts" }
+        : { tone: "blocked", text: "Sent back to the curator" };
+    }
+    const approve = exits.find((r) => r.toStatus === "unassigned");
+    const target = approve ? statusByKey.get(approve.toStatus) : undefined;
+    // Anyone allowed to approve is the reviewer here, admins included: with the trial set to
+    // "Admins only", the admin trying it out is the only one who sees the card.
+    if (approve && target && checkMove(actor, card, target, approve) === null) {
+      return { tone: "you", text: "Approve it or send it back" };
+    }
+    return { tone: "other", text: isCurator ? "The team is reviewing your idea" : "The team reviews it" };
   }
 
   // An unanswered offer holds the card for everyone. Say whose move it is.
@@ -380,7 +407,8 @@ export function describeColumn(
     };
   });
 
-  const forward = exits.filter((e) => e.toKey !== "unassigned");
+  const currentOrder = status?.sortOrder ?? 0;
+  const forward = exits.filter((e) => (statusByKey.get(e.toKey)?.sortOrder ?? 0) > currentOrder);
   let next: NextStepSummary;
   if (forward.length === 0) {
     next = lastStatusKey(statuses) === statusKey ? { tone: "done", text: "Last step" } : { tone: "blocked", text: "No way out is switched on" };

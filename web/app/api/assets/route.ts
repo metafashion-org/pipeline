@@ -2,6 +2,7 @@ import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
+import { curationReviewAppliesTo, getCurationReviewMode } from "@/lib/settings/app-settings";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
@@ -40,7 +41,9 @@ export async function GET() {
     // board filtered to their own email, which is empty.
     const artistFilterEmail = user.caps.canViewAllAssets ? undefined : user.email;
 
-    const { columns, rules } = await getKanbanBoardData(artistFilterEmail);
+    // An artist's own board never has a Curated column: curated ideas have no artist yet.
+    const showCurated = !artistFilterEmail && curationReviewAppliesTo(await getCurationReviewMode(), user.roles);
+    const { columns, rules } = await getKanbanBoardData(artistFilterEmail, { showCurated });
 
     return NextResponse.json({
       data: columns,

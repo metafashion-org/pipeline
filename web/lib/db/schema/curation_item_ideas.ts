@@ -28,8 +28,13 @@ export const curationItemIdeas = pgTable("curation_item_ideas", {
   // submitCurationItemIdea always inserted straight to 'approved'. The
   // parallel-drafts/version-history system reuses this exact column/state
   // rather than adding a second, competing table - see lib/curation/draft-service.ts.
-  // 'draft' | 'approved' | 'rejected' | 'converted_to_asset'
+  // 'draft' | 'in_review' | 'approved' | 'rejected' | 'converted_to_asset'. 'in_review' is an idea
+  // waiting in the board's Curated column while curation review is switched on (see
+  // lib/settings/app-settings.ts); the team's approval moves it to 'approved'.
   status: text("status").notNull().default("draft"),
+  // The team's note when they send an idea back to its curator. The idea returns to the curator's
+  // drafts with this note, and its asset stays in Curated until they send it again.
+  reviewNote: text("review_note"),
   // Bumped on each meaningful save while status is 'draft' (see
   // draft-service.ts's throttling - not every keystroke). Snapshots of each
   // version live in curation_idea_versions.

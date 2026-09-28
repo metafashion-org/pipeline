@@ -23,7 +23,16 @@ interface FieldConfig {
 // progress. Resuming one switches tabs AND hands that exact draft's data
 // to the same form component, so there's one form, not two code paths for
 // "new" vs "editing."
-export function CurationWorkspace({ fields, initialDrafts = [] }: { fields: FieldConfig[]; initialDrafts?: DraftListItem[] }) {
+export function CurationWorkspace({
+  fields,
+  initialDrafts = [],
+  reviewMode = false,
+}: {
+  fields: FieldConfig[];
+  initialDrafts?: DraftListItem[];
+  /** Curation review is on for this person: see CurationIdeaForm. */
+  reviewMode?: boolean;
+}) {
   const [tab, setTab] = useState<"new" | "drafts">("new");
   const [drafts, setDrafts] = useState<DraftListItem[]>(initialDrafts);
   const [resumeDraft, setResumeDraft] = useState<DraftRecord | null>(null);
@@ -79,7 +88,7 @@ export function CurationWorkspace({ fields, initialDrafts = [] }: { fields: Fiel
       </TabsList>
 
       <TabsContent value="new">
-        <CurationIdeaForm key={formKey} fields={fields} initialDraft={resumeDraft} onDraftChanged={onDraftChanged} />
+        <CurationIdeaForm key={formKey} fields={fields} initialDraft={resumeDraft} onDraftChanged={onDraftChanged} reviewMode={reviewMode} />
       </TabsContent>
 
       <TabsContent value="drafts">

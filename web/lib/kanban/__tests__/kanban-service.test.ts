@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
 import { statuses } from "@/lib/db/schema/statuses";
+import { CURATED_STATUS } from "../move-rules";
 import { asc, eq, inArray } from "drizzle-orm";
 
 const SKU_A = "TEST-KANBAN-BOARD-A"; // seeded artist's own asset, in_progress
@@ -42,9 +43,17 @@ async function testColumnsBuiltFromStatusesTableAndArtistFilter() {
   await db.insert(assets).values({ sku: SKU_B, itemName: "Test Kanban Asset B", currentStatus: "assigned", currentArtistId: other.id });
 
   try {
-    // Columns must be built live from the statuses table, not a hardcoded list.
-    const realStatuses = await db.select().from(statuses).orderBy(asc(statuses.sortOrder));
+    // Columns must be built live from the statuses table, not a hardcoded list. The Curated
+    // column (curation review) is left out unless the caller asks for it, so it's compared apart.
+    const allStatuses = await db.select().from(statuses).orderBy(asc(statuses.sortOrder));
+    const realStatuses = allStatuses.filter((s) => s.key !== CURATED_STATUS);
     const { columns } = await getKanbanBoardData();
+    const { columns: withCurated } = await getKanbanBoardData(undefined, { showCurated: true });
+    assert.deepStrictEqual(
+      withCurated.map((c) => c.key),
+      allStatuses.map((s) => s.key),
+      "Asking for the Curated column must give every statuses row"
+    );
     assert.deepStrictEqual(
       columns.map((c) => c.key),
       realStatuses.map((s) => s.key),

@@ -9,6 +9,7 @@
 import { db } from "@/lib/db/client";
 import { curationItemIdeas } from "@/lib/db/schema/curation_item_ideas";
 import { curationIdeaVersions } from "@/lib/db/schema/curation_idea_versions";
+import { assets } from "@/lib/db/schema/assets";
 import { eq, and, desc } from "drizzle-orm";
 
 export interface DraftFields {
@@ -46,12 +47,18 @@ function fieldsEqual(a: DraftFields, b: DraftFields): boolean {
   );
 }
 
+/**
+ * A curator's drafts, newest first. A draft the team sent back carries their note and the SKU of
+ * its card, which stays in Curated until the curator sends it again.
+ */
 export async function listActiveDrafts(ownerId: string) {
-  return db
-    .select()
+  const rows = await db
+    .select({ idea: curationItemIdeas, assetSku: assets.sku })
     .from(curationItemIdeas)
+    .leftJoin(assets, eq(curationItemIdeas.assetId, assets.id))
     .where(and(eq(curationItemIdeas.submittedBy, ownerId), eq(curationItemIdeas.status, "draft")))
     .orderBy(desc(curationItemIdeas.updatedAt));
+  return rows.map(({ idea, assetSku }) => ({ ...idea, assetSku }));
 }
 
 // Only creates a draft row when there's something worth saving - an
@@ -172,7 +179,12 @@ export async function saveDraft(draftId: string, ownerId: string, updates: Parti
 }
 
 export async function discardDraft(draftId: string, ownerId: string) {
-  await getOwnedDraft(draftId, ownerId);
+  const draft = await getOwnedDraft(draftId, ownerId);
+  // A sent-back idea still has its card in Curated. Deleting the idea would leave that card with no
+  // curator and no curation details behind it.
+  if (draft.assetId) {
+    throw new Error("This idea is still on the board in Curated. Send it again with your changes, or ask the team to take it off the board.");
+  }
   // Cascades to curation_idea_versions (onDelete: cascade) - nothing worth
   // keeping from a draft nobody ever submitted.
   await db.delete(curationItemIdeas).where(eq(curationItemIdeas.id, draftId));

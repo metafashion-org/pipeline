@@ -8,6 +8,7 @@ import { assignArtistToAsset } from "@/lib/kanban/assignment-service";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { eq } from "drizzle-orm";
+import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { z } from "zod";
 
 const AssignSchema = z.object({
@@ -52,6 +53,11 @@ export async function POST(
 
     if (assetRecord.length === 0) {
       return NextResponse.json({ error: `Asset with SKU '${skuId}' not found` }, { status: 404 });
+    }
+    // A curated idea is approved into Unassigned before anyone is offered it; assigning it straight
+    // from Curated would skip the review.
+    if (assetRecord[0].currentStatus === CURATED_STATUS) {
+      return NextResponse.json({ error: "Approve this idea for production first. It's still waiting in Curated." }, { status: 409 });
     }
 
     const result = await assignArtistToAsset({

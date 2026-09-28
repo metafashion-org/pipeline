@@ -1,4 +1,5 @@
 import { db } from "@/lib/db/client";
+import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { curationFieldConfig } from "@/lib/db/schema/curation_field_config";
 import { curationItemIdeas } from "@/lib/db/schema/curation_item_ideas";
 import { assets } from "@/lib/db/schema/assets";
@@ -119,6 +120,11 @@ const ASSET_FIELD_ACCESSORS: Record<string, (asset: typeof assets.$inferSelect) 
  */
 export const ASSET_BACKED_FIELD_KEYS: ReadonlySet<string> = new Set(Object.keys(ASSET_FIELD_ACCESSORS));
 
+// The curation field for a Pinterest board link, created when curation review is first switched on
+// (ensureCurationReviewConfig in lib/settings/app-settings.ts). The review form asks for it by name,
+// so it is left out of the generic field list, which also keeps the form without review unchanged.
+export const PINTEREST_FIELD_KEY = "pinterestBoard";
+
 /**
  * The dynamic fields the curation form should render.
  *
@@ -126,7 +132,7 @@ export const ASSET_BACKED_FIELD_KEYS: ReadonlySet<string> = new Set(Object.keys(
  */
 export async function getCurationFormFields(category?: string | null) {
   const rows = await getCurationFieldConfigs(false, category);
-  return rows.filter((r) => !ASSET_BACKED_FIELD_KEYS.has(r.fieldKey));
+  return rows.filter((r) => !ASSET_BACKED_FIELD_KEYS.has(r.fieldKey) && r.fieldKey !== PINTEREST_FIELD_KEY);
 }
 
 export interface BriefField {
@@ -272,10 +278,16 @@ export interface SubmitItemIdeaOptions {
   // than inserted as a second, separate row - a draft and its final
   // submission are the same idea, not two records that both need cleaning up.
   draftId?: string;
+  // Curation review (lib/settings/app-settings.ts): when true the idea waits in the board's
+  // Curated column for the team's approval instead of going straight to Unassigned.
+  reviewFirst?: boolean;
 }
 
 export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
-  const { ideaTitle, category, trendReasoning, sourceLinks = [], moodboardUrls = [], fieldValues = {}, budget, deadline, submitterId, draftId } = options;
+  const { ideaTitle, category, trendReasoning, sourceLinks = [], moodboardUrls = [], fieldValues = {}, budget, deadline, submitterId, draftId, reviewFirst = false } = options;
+  // In review, the idea is 'in_review' and its card sits in Curated until the team approves it.
+  const ideaStatus = reviewFirst ? "in_review" : "approved";
+  const referenceImages = moodboardUrls.map((url) => ({ provider: "filestore", externalId: url }));
 
   // First-class value wins; the fieldValues copy is the pre-graduation fallback.
   const rawBudget = budget ?? fieldValues.budget;
@@ -301,6 +313,12 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
     if (submitterId && existingDraft.submittedBy && existingDraft.submittedBy !== submitterId) {
       throw new Error("This draft belongs to someone else");
     }
+    // An idea the team sent back already has its card in Curated. Sending it again updates that
+    // card and puts it back in review, whatever the switch now says for this curator, rather than
+    // creating a second SKU.
+    if (existingDraft.assetId) {
+      return resubmitSentBackIdea(existingDraft, { ideaTitle, category, trendReasoning, sourceLinks, moodboardUrls, fieldValues, submitterId, referenceImages });
+    }
     const [converted] = await db
       .update(curationItemIdeas)
       .set({
@@ -311,7 +329,7 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
         moodboardUrls,
         fieldValues,
         submittedBy: submitterId || existingDraft.submittedBy,
-        status: "approved",
+        status: ideaStatus,
         updatedAt: new Date(),
       })
       .where(eq(curationItemIdeas.id, draftId))
@@ -328,7 +346,7 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
         moodboardUrls,
         fieldValues,
         submittedBy: submitterId || null,
-        status: "approved",
+        status: ideaStatus,
       })
       .returning();
     idea = inserted;
@@ -340,16 +358,17 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
   // that matched neither the live SKUs nor the admin-created ones, which is
   // exactly the bug lib/assets/sku.ts was written to fix for the admin path
   // and which curation was silently left behind on.
+  const currentStatus = reviewFirst ? CURATED_STATUS : "unassigned";
   const asset = await insertAssetWithNextSku({
     itemName: ideaTitle,
     category: category || null,
-    currentStatus: "unassigned",
+    currentStatus,
     // The brief's §6 lists Budget and Deadline as curation fields, and the
     // Kanban card reads them off the asset — carry them across at creation
     // so a curated idea arrives on the board already showing them.
     feeAmount,
     deadline: deadlineDate,
-    referenceImages: moodboardUrls.map((url) => ({ provider: "filestore", externalId: url })),
+    referenceImages,
   });
 
   // 2b. Link the idea back to the asset it created — this is what lets
@@ -363,10 +382,65 @@ export async function submitCurationItemIdea(options: SubmitItemIdeaOptions) {
     entityType: "asset",
     entityId: asset.id,
     actorId: submitterId || null,
-    payload: { ideaId: idea.id, sku: asset.sku, ideaTitle },
+    payload: { ideaId: idea.id, sku: asset.sku, ideaTitle, currentStatus },
   });
 
-  return { idea, asset, sku: asset.sku, currentStatus: "unassigned" };
+  return { idea, asset, sku: asset.sku, currentStatus };
+}
+
+/**
+ * Sends a sent-back idea again: updates its card with the curator's changes and puts the idea back
+ * in review. The card keeps its SKU and stays in Curated.
+ */
+async function resubmitSentBackIdea(
+  draft: typeof curationItemIdeas.$inferSelect,
+  values: {
+    ideaTitle: string;
+    category?: string;
+    trendReasoning?: string;
+    sourceLinks: string[];
+    moodboardUrls: string[];
+    fieldValues: Record<string, unknown>;
+    submitterId?: string;
+    referenceImages: { provider: string; externalId: string }[];
+  }
+) {
+  const [idea] = await db
+    .update(curationItemIdeas)
+    .set({
+      ideaTitle: values.ideaTitle,
+      category: values.category || null,
+      trendReasoning: values.trendReasoning || null,
+      sourceLinks: values.sourceLinks,
+      moodboardUrls: values.moodboardUrls,
+      fieldValues: values.fieldValues,
+      status: "in_review",
+      reviewNote: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(curationItemIdeas.id, draft.id))
+    .returning();
+
+  const [asset] = await db
+    .update(assets)
+    .set({
+      itemName: values.ideaTitle,
+      category: values.category || null,
+      referenceImages: values.referenceImages,
+      updatedAt: new Date(),
+    })
+    .where(eq(assets.id, draft.assetId as string))
+    .returning();
+
+  await db.insert(auditLog).values({
+    action: "resubmitCurationItemIdea",
+    entityType: "asset",
+    entityId: asset.id,
+    actorId: values.submitterId || null,
+    payload: { ideaId: idea.id, sku: asset.sku, ideaTitle: values.ideaTitle },
+  });
+
+  return { idea, asset, sku: asset.sku, currentStatus: asset.currentStatus };
 }
 
 export async function updateRecolorReferenceImages(

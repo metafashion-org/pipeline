@@ -13,14 +13,18 @@ import { toast } from "sonner";
  * (drag-and-drop) so both end up going through the same upload, the same toasts and the same
  * "uploading" state, whichever one the person used.
  *
- * Input: the SKU to file the upload under, and a callback for the links once uploaded.
+ * Input: the SKU to file the upload under, and a callback for the links once uploaded. The
+ * Curation form passes `uploadUrl` instead (app/api/curation/uploads/route.ts): an idea has no SKU
+ * yet, and curators can't use the board's upload route.
  * Output: whether an upload is in flight, and the function that starts one from a list of files.
  */
 export function useReferenceUpload({
   sku,
+  uploadUrl = "/api/assets/reference-upload",
   onUploaded,
 }: {
-  sku: string;
+  sku?: string;
+  uploadUrl?: string;
   onUploaded: (urls: string[]) => void;
 }) {
   const [uploading, setUploading] = useState(false);
@@ -32,10 +36,10 @@ export function useReferenceUpload({
     try {
       for (const file of files) {
         const body = new FormData();
-        body.append("sku", sku);
+        if (sku) body.append("sku", sku);
         body.append("file", file);
         try {
-          const res = await fetch("/api/assets/reference-upload", { method: "POST", body });
+          const res = await fetch(uploadUrl, { method: "POST", body });
           const data = await res.json();
           if (!res.ok) {
             toast.error(data.error || `Failed to upload ${file.name}`);

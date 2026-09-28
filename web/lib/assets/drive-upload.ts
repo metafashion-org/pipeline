@@ -233,6 +233,22 @@ export async function uploadReferenceFile(
   return uploadFileToFolder(folderId, fileName, mimeType, bytes);
 }
 
+// One folder for every picture curators upload from the Curation form. The idea has no SKU until
+// it's sent, so its pictures can't go in a per-SKU folder like the board's reference uploads.
+const CURATION_FOLDER_NAME = "Meta Fashion Pipeline — Curation";
+
+/**
+ * Uploads a picture a curator adds to an idea on the Curation form. Same upload as
+ * uploadReferenceFile, into the shared curation folder.
+ */
+export async function uploadCurationFile(fileName: string, mimeType: string, bytes: Buffer): Promise<UploadedReference> {
+  if (!isConfigured()) {
+    throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
+  }
+  const folderId = await getOrCreateFolder(CURATION_FOLDER_NAME);
+  return uploadFileToFolder(folderId, fileName, mimeType, bytes);
+}
+
 /**
  * Uploads a payment summary (the bank's payout confirmation) into that artist's payments folder.
  * Same underlying upload as uploadReferenceFile — only which folder it lands in differs, because

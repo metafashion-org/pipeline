@@ -7,6 +7,8 @@ import { getCurationFieldConfigs, seedDefaultCurationFieldConfig } from "@/lib/c
 import { SettingsManager } from "@/components/settings/SettingsManager";
 import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
 import { CategoriesManager } from "@/components/settings/CategoriesManager";
+import { CurationReviewSwitch } from "@/components/settings/CurationReviewSwitch";
+import { getCurationReviewMode } from "@/lib/settings/app-settings";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -27,10 +29,11 @@ export default async function SettingsPage() {
   }
 
   await seedDefaultCurationFieldConfig();
-  const [statuses, rules, curationFields] = await Promise.all([
+  const [statuses, rules, curationFields, curationReviewMode] = await Promise.all([
     listStatuses(),
     listTransitionRules(),
     getCurationFieldConfigs(),
+    getCurationReviewMode(),
   ]);
 
   return (
@@ -41,6 +44,7 @@ export default async function SettingsPage() {
       />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
+        <CurationReviewSwitch initialMode={curationReviewMode} />
         <BrandGroupsManager />
         <CategoriesManager />
         <SettingsManager initialStatuses={statuses} initialRules={rules} initialCurationFields={curationFields} />

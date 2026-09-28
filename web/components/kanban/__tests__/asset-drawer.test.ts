@@ -30,6 +30,8 @@ function testAssetDrawerRoleGating() {
     recolorReferenceImages: [],
     offerStatus: "accepted",
     hasPaymentReceipt: false,
+    curatorId: null,
+    curationSentBack: false,
   };
 
   assert.strictEqual(sampleAsset.sku, "MF-001");
