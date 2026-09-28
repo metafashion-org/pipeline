@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ENV } from "@/lib/env";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { sendDueEmails } from "@/lib/email/queue-worker";
+import { linkMissingArtistChannels } from "@/lib/discord/artist-channel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,5 +22,11 @@ export async function GET(request: NextRequest) {
   }
 
   const results = await sendDueEmails();
-  return NextResponse.json({ processed: results.length, results });
+  // Same daily run: saves the Discord channel of any artist who got one outside onboardMember, so
+  // offers reach them in their channel. Kept here because the Vercel plan allows few cron jobs.
+  const discordLinks = await linkMissingArtistChannels().catch((error) => {
+    console.error("[cron] Discord channel linking failed:", error);
+    return null;
+  });
+  return NextResponse.json({ processed: results.length, results, discordLinks });
 }

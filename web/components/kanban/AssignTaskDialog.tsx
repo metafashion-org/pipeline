@@ -33,6 +33,7 @@ interface Artist {
     id: string;
     name: string;
     email: string;
+    hasDiscordChannel: boolean;
 }
 
 interface AssignTaskDialogProps {
@@ -146,6 +147,7 @@ export function AssignTaskDialog({
                                     {artists.map((artist) => (
                                         <SelectItem key={artist.id} value={artist.id}>
                                             {artist.name} - {artist.email}
+                                            {!artist.hasDiscordChannel && " (no Discord channel)"}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>

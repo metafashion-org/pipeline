@@ -100,7 +100,7 @@ async function testAssignAndReassignFlow() {
     const queuedAfterFirst = await db.select().from(emailQueue).where(eq(emailQueue.assetId, assetId));
     assert.strictEqual(queuedAfterFirst.length, 1, "Exactly one email must be queued: the offer");
     assert.strictEqual(queuedAfterFirst[0].toEmail, ARTIST_EMAIL, "Queued email must go to the newly assigned artist");
-    assert.strictEqual(queuedAfterFirst[0].subject, `New asset offer | ${TEST_SKU} | Test Assignment Asset`);
+    assert.strictEqual(queuedAfterFirst[0].subject, `New offer: Test Assignment Asset (${TEST_SKU})`);
     assert.strictEqual(queuedAfterFirst[0].status, "pending");
     assert.ok(result.offerId, "The assignment returns the offer it sent");
 

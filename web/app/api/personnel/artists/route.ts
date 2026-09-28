@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 /**
  * Lists the artists an assigner can pick from, for the assign/reassign dialog on the Kanban board.
  * Only Active personnel carrying the `artist` role are returned, because personnel.status is what actually gates login (see lib/auth/personnel-auth.ts) - assigning work to an Inactive or Blacklisted person would email someone who can no longer sign in.
- * Output: { artists: [{ id, name, email }] }, sorted by name.
+ * Output: { artists: [{ id, name, email, hasDiscordChannel }] }, sorted by name.
  */
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -25,7 +25,12 @@ export async function GET() {
   }
 
   const artists = await db
-    .select({ id: personnel.id, name: personnel.name, email: personnel.email })
+    .select({
+      id: personnel.id,
+      name: personnel.name,
+      email: personnel.email,
+      hasDiscordChannel: sql<boolean>`${personnel.discordChannelId} IS NOT NULL`,
+    })
     .from(personnel)
     // Lowercased in SQL rather than matched literally: personnel.roles holds capitalised values in
     // places, and `&& ARRAY['artist']` would silently return an empty artist list for those rows.

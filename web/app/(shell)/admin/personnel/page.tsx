@@ -53,6 +53,7 @@ export default async function PersonnelPage() {
             roles: p.roles,
             status: p.status,
             dateOnboarded: p.dateOnboarded ? p.dateOnboarded.toISOString() : null,
+            discordChannelId: p.discordChannelId,
           }))}
           initialRequests={requests}
           initialSyncWarning={syncResult.warning ?? null}

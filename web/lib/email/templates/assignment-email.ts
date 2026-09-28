@@ -1,4 +1,5 @@
 import { formatFee } from "@/lib/format-money";
+import { renderEmailLayout, EMAIL_TONE, type EmailDetailRow } from "./email-layout";
 
 export interface AssignmentEmailBriefField {
   key: string;
@@ -13,16 +14,20 @@ export interface AssignmentEmailData {
   artistName: string;
   feeAmount?: string | null;
   currency?: string | null;
-  mannequinRig?: string | null;
-  technicalSpecs?: string | null;
-  recolours?: string | null;
-  refImageUrls?: string[];
-  wipInstruction?: string;
+  /** A publicly loadable thumbnail of the asset's first reference image, or null when it has none. */
+  imageUrl?: string | null;
+  /** Where the artist hands in final files: their My Tasks page. */
+  tasksUrl?: string;
   // Admin-toggleable via curation_field_config.includeInArtistEmail (P3-T9) -
-  // rendered as extra rows in the spec table, with no code change required
+  // rendered as extra rows in the brief, with no code change required
   // to add/remove a field from future emails.
   briefFields?: AssignmentEmailBriefField[];
 }
+
+// Brief fields shown as the large figures at the top instead of as rows. Budget is left out of the
+// rows because the Fee figure already shows the same amount.
+const DEADLINE_FIELD_KEY = "deadline";
+const FIELD_KEYS_NOT_IN_ROWS: ReadonlySet<string> = new Set([DEADLINE_FIELD_KEY, "budget"]);
 
 export function formatAssignmentEmailSubject(data: { sku: string; itemName: string }): string {
   // Live sheet format: "Meta Fashion Assignment | {SKU} | {Item Name}"
@@ -30,75 +35,29 @@ export function formatAssignmentEmailSubject(data: { sku: string; itemName: stri
 }
 
 export function renderAssignmentEmailHtml(data: AssignmentEmailData): string {
-  const refLinksHtml = (data.refImageUrls || [])
-    .map((url) => `<li><a href="${url}" target="_blank" style="color: #2563eb;">${url}</a></li>`)
-    .join("");
+  const briefFields = data.briefFields || [];
+  // The deadline figure appears only when the Deadline brief field is switched on in Curation →
+  // Brief Fields, so that switch still controls whether artists see it.
+  const deadlineField = briefFields.find((field) => field.key === DEADLINE_FIELD_KEY);
+  const stats: EmailDetailRow[] = [
+    { label: "Fee", value: formatFee(data.feeAmount, data.currency, "As agreed") },
+    ...(deadlineField ? [{ label: deadlineField.displayName, value: deadlineField.value }] : []),
+  ];
+  const details = briefFields
+    .filter((field) => !FIELD_KEYS_NOT_IN_ROWS.has(field.key))
+    .map((field) => ({ label: field.displayName, value: field.value }));
 
-  const briefFieldRowsHtml = (data.briefFields || [])
-    .map(
-      (field, i) => `
-      <tr style="${i % 2 === 0 ? "background: #f4f4f5;" : ""}">
-        <td style="padding: 8px; font-weight: bold; width: 35%;">${field.displayName}</td>
-        <td style="padding: 8px;">${field.value}</td>
-      </tr>`
-    )
-    .join("");
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${formatAssignmentEmailSubject(data)}</title>
-</head>
-<body style="font-family: Arial, sans-serif; background-color: #f4f4f5; color: #18181b; padding: 20px;">
-  <div style="max-width: 600px; margin: 0 auto; background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e4e4e7;">
-    <h2 style="color: #09090b; border-b: 2px solid #2563eb; padding-bottom: 8px; margin-top: 0;">
-      Meta Fashion Assignment
-    </h2>
-    <p>Hi <strong>${data.artistName}</strong>,</p>
-    <p>You have been assigned a new 3D Digital Asset item for production.</p>
-    
-    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <tr style="background: #f4f4f5;">
-        <td style="padding: 8px; font-weight: bold; width: 35%;">SKU ID</td>
-        <td style="padding: 8px; font-family: monospace;">${data.sku}</td>
-      </tr>
-      <tr>
-        <td style="padding: 8px; font-weight: bold;">Item Name</td>
-        <td style="padding: 8px;">${data.itemName}</td>
-      </tr>
-      <tr style="background: #f4f4f5;">
-        <td style="padding: 8px; font-weight: bold;">Category</td>
-        <td style="padding: 8px;">${data.category || "N/A"}</td>
-      </tr>
-      <tr>
-        <td style="padding: 8px; font-weight: bold;">Production Fee</td>
-        <td style="padding: 8px;">${formatFee(data.feeAmount, data.currency, "As agreed")}</td>
-      </tr>
-      ${briefFieldRowsHtml}
-    </table>
-
-    ${refLinksHtml ? `
-    <h4 style="margin-bottom: 6px;">Reference & Moodboard Links:</h4>
-    <ul style="padding-left: 20px; margin-top: 0;">
-      ${refLinksHtml}
-    </ul>
-    ` : ""}
-
-    <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px; margin: 16px 0; font-size: 13px; color: #991b1b;">
-      <strong>IMPORTANT WARNING:</strong> Do NOT upload the final asset directly to Roblox yourself. All assets must be submitted through the Meta Fashion Pipeline for Roblox Publisher review and upload.
-    </div>
-
-    <p style="font-size: 13px; color: #52525b;">
-      Please reply directly to this email thread with WIP updates, questions, or revision requests.
-    </p>
-
-    <p style="margin-top: 24px; font-size: 12px; color: #71717a; border-top: 1px solid #e4e4e7; padding-top: 12px;">
-      Meta Fashion Digital Assets Pipeline &bull; Automated System
-    </p>
-  </div>
-</body>
-</html>
-  `.trim();
+  return renderEmailLayout({
+    preheader: `The full brief for ${data.itemName}. Reply to this email with questions or WIP.`,
+    eyebrow: "Your brief",
+    tone: EMAIL_TONE.good,
+    title: data.itemName,
+    meta: [data.sku, data.category || ""],
+    imageUrl: data.imageUrl ?? null,
+    stats,
+    intro: `Hi ${data.artistName}, this one is yours. Everything you need is below. Reply to this email with questions or work-in-progress updates.`,
+    details,
+    note: "Please don't upload this to Roblox yourself. Hand in your final files on My Tasks and the team uploads it.",
+    button: { label: "Open My Tasks", url: data.tasksUrl || "/artist" },
+  });
 }

@@ -7,6 +7,9 @@ import { eq } from "drizzle-orm";
 import { getBriefFieldsForAsset } from "@/lib/curation/curation-service";
 import { formatAssignmentEmailSubject, renderAssignmentEmailHtml } from "@/lib/email/templates/assignment-email";
 import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
+import { EMAIL_IMAGE_WIDTH_PX } from "@/lib/email/templates/email-layout";
+import { parseDriveRefs, driveThumbnailUrl } from "@/lib/assets/drive-links";
+import { artistOffersUrl } from "@/lib/offers/offer-notifications";
 
 /**
  * Emails the artist the full brief for an asset they've agreed to make: the admin-configured
@@ -31,6 +34,7 @@ export async function sendAssignmentBrief(assetId: string, artistId: string, ass
   const ccEmails = ccRows.map((row) => row.email);
 
   const briefFields = await getBriefFieldsForAsset(assetId);
+  const firstImage = parseDriveRefs(asset.referenceImages).find((ref) => ref.fileId);
   const queuedEmail = await enqueueEmail({
     assetId,
     toEmail: artist.email,
@@ -43,6 +47,8 @@ export async function sendAssignmentBrief(assetId: string, artistId: string, ass
       artistName: artist.name,
       feeAmount: asset.feeAmount,
       currency: asset.currency,
+      imageUrl: firstImage?.fileId ? driveThumbnailUrl(firstImage.fileId, EMAIL_IMAGE_WIDTH_PX) : null,
+      tasksUrl: artistOffersUrl(),
       briefFields,
     }),
   });

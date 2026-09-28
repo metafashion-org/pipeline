@@ -273,9 +273,17 @@ export function TaskCard({ task, role }: TaskCardProps) {
                                     <span className="truncate">{artistName}</span>
                                 </a>
                             ) : (
-                                <span className="text-muted-foreground truncate" title={artistName}>
-                                    {artistName}
-                                </span>
+                                <>
+                                    <span className="text-muted-foreground truncate" title={artistName}>
+                                        {artistName}
+                                    </span>
+                                    <span
+                                        className="shrink-0 text-[10px] px-1 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                        title="This artist has no Discord channel linked, so Discord messages go to their DMs, or nowhere if they have no Discord account. Fix it on Personnel → Link Discord channels."
+                                    >
+                                        No Discord
+                                    </span>
+                                </>
                             )}
                         </div>
                     )}

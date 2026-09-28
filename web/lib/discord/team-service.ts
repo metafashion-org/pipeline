@@ -14,6 +14,7 @@
 import { db } from "@/lib/db/client";
 import { discordTempAccess } from "@/lib/db/schema/discord_temp_access";
 import { eq, lte } from "drizzle-orm";
+import { linkChannelToDiscordUser } from "./artist-channel";
 import {
   discordFetch,
   isConfigured,
@@ -257,6 +258,9 @@ export async function onboardMember(options: OnboardOptions) {
   const channelSlug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const channelName = `${rules.emoji}│${channelSlug}`;
   const newChannel = await createChannel(channelName, category.id, overwrites);
+  // Offers, the board's Discord link and deadline pings all read the channel off the personnel
+  // record, so it has to be saved there, not only created in Discord.
+  await linkChannelToDiscordUser(match.user.id, newChannel.id);
 
   // Shared-channel access: Animations grants an existing role (that role
   // already has view access baked into animation-concepts' own

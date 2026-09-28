@@ -9,6 +9,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { ARTIST_ACCESS_FORM_KEY, approveArtistAccessSubmission } from "@/lib/forms/onboarding";
 import { isConfigured as isDiscordConfigured } from "@/lib/discord/discord-service";
 import { getDiscordOverview, type OverviewMember } from "@/lib/discord/team-service";
+import { resolveArtistChannelId } from "@/lib/discord/artist-channel";
 import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
 
 // Brings onboarding requests from both routes into one list, and writes each decision back to the
@@ -404,6 +405,9 @@ export async function approveOnboardingRequest(
       updatedAt: new Date(),
     })
     .where(eq(onboardingRequests.id, requestId));
+
+  // The member may already have a channel from the Discord Team Manager; save it if so.
+  await resolveArtistChannelId({ id: personnelId, discordUserId: request.discordUserId, discordChannelId: existing?.discordChannelId ?? null });
 
   await db.insert(auditLog).values({
     action: "approveOnboardingRequest",
