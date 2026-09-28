@@ -1,13 +1,21 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { CapabilitySet } from "@/lib/auth/rbac";
+import type { TransitionActor } from "@/lib/kanban/move-rules";
 
-const ViewerCapabilitiesContext = createContext<CapabilitySet | null>(null);
+interface Viewer {
+  capabilities: CapabilitySet;
+  roles: string[];
+  personnelId: string | null;
+}
+
+const ViewerContext = createContext<Viewer | null>(null);
 
 /**
  * Hands the signed-in person's real effective capabilities (their roles plus their per-person
- * overrides, resolved once on the server in the shell layout) to any component under it.
+ * overrides, resolved once on the server in the shell layout), their roles and their personnel id
+ * to any component under it.
  *
  * Exists because the board passes each card a single collapsed role string ("admin", "operator" or
  * "artist"), which cannot express a curator, or anyone whose access comes from a capability
@@ -15,8 +23,25 @@ const ViewerCapabilitiesContext = createContext<CapabilitySet | null>(null);
  * which check real capabilities. Reading the capabilities here means a control shows for exactly
  * the people the server will let use it.
  */
-export function ViewerProvider({ capabilities, children }: { capabilities: CapabilitySet; children: ReactNode }) {
-  return <ViewerCapabilitiesContext.Provider value={capabilities}>{children}</ViewerCapabilitiesContext.Provider>;
+export function ViewerProvider({
+  capabilities,
+  roles,
+  personnelId,
+  children,
+}: {
+  capabilities: CapabilitySet;
+  roles: string[];
+  personnelId: string | null;
+  children: ReactNode;
+}) {
+  const value = useMemo(() => ({ capabilities, roles, personnelId }), [capabilities, roles, personnelId]);
+  return <ViewerContext.Provider value={value}>{children}</ViewerContext.Provider>;
+}
+
+function useViewer(): Viewer {
+  const viewer = useContext(ViewerContext);
+  if (!viewer) throw new Error("useViewer must be used inside a ViewerProvider");
+  return viewer;
 }
 
 /**
@@ -25,7 +50,14 @@ export function ViewerProvider({ capabilities, children }: { capabilities: Capab
  * immediately and not a state to render around.
  */
 export function useViewerCapabilities(): CapabilitySet {
-  const capabilities = useContext(ViewerCapabilitiesContext);
-  if (!capabilities) throw new Error("useViewerCapabilities must be used inside a ViewerProvider");
-  return capabilities;
+  return useViewer().capabilities;
+}
+
+/** The signed-in person as a card mover, in the shape checkMove (lib/kanban/move-rules.ts) takes. */
+export function useViewerAsActor(): TransitionActor {
+  const { capabilities, roles, personnelId } = useViewer();
+  return useMemo(
+    () => ({ roles, personnelId: personnelId ?? undefined, caps: capabilities }),
+    [capabilities, roles, personnelId]
+  );
 }

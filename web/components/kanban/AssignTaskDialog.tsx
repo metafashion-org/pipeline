@@ -45,6 +45,11 @@ interface AssignTaskDialogProps {
     /** The asset's fee and currency, shown read-only: the offer uses the fee set on the asset, which is changed with Edit. */
     currentFeeAmount?: string | null;
     currentCurrency?: string | null;
+    /** Set with onOpenChange to open the dialog from outside, as the board does when a card is dropped on Assigned. */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    /** Hides the "Assign artist" button, for a dialog opened from outside. */
+    hideTrigger?: boolean;
 }
 
 // The date input needs exactly YYYY-MM-DD regardless of locale, same conversion EditAssetDialog
@@ -67,8 +72,13 @@ export function AssignTaskDialog({
     currentDeadline,
     currentFeeAmount,
     currentCurrency,
+    open: controlledOpen,
+    onOpenChange,
+    hideTrigger = false,
 }: AssignTaskDialogProps) {
-    const [open, setOpen] = useState(false);
+    const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+    const open = controlledOpen ?? uncontrolledOpen;
+    const setOpen = onOpenChange ?? setUncontrolledOpen;
     // Starts empty rather than pre-selecting the current artist. The list only contains Active artists, so seeding it with the current id showed a wrong name whenever that artist is Inactive or Blacklisted - the Select cannot render a value it has no option for and fell through to another name. An empty start also matches what the dialog is for: choosing someone new.
     const [artistId, setArtistId] = useState<string>("");
     // Pre-filled from the asset's own deadline, and still editable for this assignment.
@@ -117,12 +127,14 @@ export function AssignTaskDialog({
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-                <Button size="sm" variant="outline" data-testid="assign-open">
-                    <UserPlus className="h-3.5 w-3.5" />
-                    {isReassign ? "Reassign" : "Assign artist"}
-                </Button>
-            </DialogTrigger>
+            {!hideTrigger && (
+                <DialogTrigger asChild>
+                    <Button size="sm" variant="outline" data-testid="assign-open">
+                        <UserPlus className="h-3.5 w-3.5" />
+                        {isReassign ? "Reassign" : "Assign artist"}
+                    </Button>
+                </DialogTrigger>
+            )}
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                     <DialogTitle>{isReassign ? "Reassign" : "Assign"} {sku}</DialogTitle>

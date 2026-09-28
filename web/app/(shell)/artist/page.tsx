@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { getKanbanBoardData, KanbanColumnData } from "@/lib/kanban/kanban-service";
+import type { MoveRule } from "@/lib/kanban/move-rules";
 import { Board } from "@/components/kanban/Board";
 import { OffersPanel } from "@/components/offers/OffersPanel";
 import { redirect } from "next/navigation";
@@ -17,9 +18,11 @@ export default async function ArtistPage() {
     }
 
     let initialColumns: KanbanColumnData[] = [];
+    let initialRules: MoveRule[] = [];
     try {
         const boardData = await getKanbanBoardData(session.user.email || undefined);
         initialColumns = boardData.columns;
+        initialRules = boardData.rules;
     } catch (error) {
         console.error("Error fetching tasks for artist:", error);
     }
@@ -36,7 +39,7 @@ export default async function ArtistPage() {
             </div>
 
             <main className="flex-1 overflow-hidden p-4 sm:p-6">
-                <Board initialColumns={initialColumns} role="artist" />
+                <Board initialColumns={initialColumns} initialRules={initialRules} role="artist" />
             </main>
         </div>
     );

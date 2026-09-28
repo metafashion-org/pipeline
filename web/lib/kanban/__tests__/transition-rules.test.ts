@@ -3,10 +3,14 @@ import { updateAssetStatusInKanban } from "../kanban-service";
 import { TransitionRefusedError, type TransitionErrorCode } from "../transition-errors";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
+import { personnel } from "@/lib/db/schema/personnel";
+import { assetOffers } from "@/lib/db/schema/asset_offers";
+import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq } from "drizzle-orm";
 import type { CapabilitySet } from "@/lib/auth/rbac";
 
 const TEST_SKU = "TEST-TRANSITION-GATE-SKU";
+const GATE_ARTIST_EMAIL = "test-transition-gate-artist@example.com";
 
 const ADMIN = { roles: ["admin"] };
 const ARTIST = { roles: ["artist"] };
@@ -208,6 +212,52 @@ async function testTransitionRulesEnforcement() {
     console.log("Confirmed payment_done succeeds once a payment receipt is attached");
   } finally {
     await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+  }
+
+  // A card reaches Assigned only with an artist on it: the Assign dialog picks the artist, sends the
+  // offer, then moves the card as the system. Once there, it waits until the artist accepts.
+  await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+  const [staleArtist] = await db.select({ id: personnel.id }).from(personnel).where(eq(personnel.email, GATE_ARTIST_EMAIL));
+  if (staleArtist) {
+    await db.delete(auditLog).where(eq(auditLog.actorId, staleArtist.id));
+    await db.delete(personnel).where(eq(personnel.id, staleArtist.id));
+  }
+  const [gateArtist] = await db
+    .insert(personnel)
+    .values({ name: "Gate Artist", email: GATE_ARTIST_EMAIL, roles: ["artist"] })
+    .returning();
+  const [gateAsset] = await db
+    .insert(assets)
+    .values({ sku: TEST_SKU, itemName: "Offer Gate Test Asset", currentStatus: "unassigned" })
+    .returning();
+  try {
+    try {
+      await updateAssetStatusInKanban(TEST_SKU, "assigned", { roles: ["operator"], caps: NO_CAPS });
+      assert.fail("Dragging a card to Assigned without an artist should be refused");
+    } catch (err: unknown) {
+      assertRefusal(err, "ARTIST_REQUIRED");
+      console.log("Confirmed a card can't be moved to Assigned without an artist");
+    }
+
+    await db.update(assets).set({ currentStatus: "assigned", currentArtistId: gateArtist.id }).where(eq(assets.id, gateAsset.id));
+    await db.insert(assetOffers).values({ assetId: gateAsset.id, artistId: gateArtist.id, offeredDeadline: new Date(), status: "pending" });
+    const artistActor = { roles: ["artist"], personnelId: gateArtist.id };
+    try {
+      await updateAssetStatusInKanban(TEST_SKU, "in_progress", artistActor);
+      assert.fail("The artist must not start work before accepting the offer");
+    } catch (err: unknown) {
+      assertRefusal(err, "OFFER_NOT_ACCEPTED");
+      console.log("Confirmed the card waits in Assigned while the offer is unanswered");
+    }
+
+    await db.update(assetOffers).set({ status: "accepted" }).where(eq(assetOffers.assetId, gateAsset.id));
+    const started = await updateAssetStatusInKanban(TEST_SKU, "in_progress", artistActor);
+    assert.strictEqual(started.toStatus, "in_progress");
+    console.log("Confirmed the artist can start work once the offer is accepted");
+  } finally {
+    await db.delete(assets).where(eq(assets.sku, TEST_SKU));
+    await db.delete(auditLog).where(eq(auditLog.actorId, gateArtist.id));
+    await db.delete(personnel).where(eq(personnel.id, gateArtist.id));
   }
 
   console.log("✓ All P2-T12/P2-T13/P2-T23 transition enforcement assertions passed cleanly against a live DB!");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     DndContext,
     DragOverlay,
@@ -15,8 +15,12 @@ import {
 import useSWR from "swr";
 import { Loader2, X, ChevronDown, Filter } from "lucide-react";
 
-import { Column } from "./Column";
+import { Column, type DropState } from "./Column";
 import { TaskCard } from "./TaskCard";
+import { AssignTaskDialog } from "./AssignTaskDialog";
+import { BoardRulesProvider, ToneLegend, toMoveCard } from "./board-rules";
+import { useViewerAsActor, useViewerCapabilities } from "@/components/providers/ViewerProvider";
+import { allowedTargets, describeColumn, type MoveRule, type MoveStatus } from "@/lib/kanban/move-rules";
 import { toast } from "sonner";
 // The client types, not the server ones: the two date fields are Dates when this came from the
 // server render and ISO strings when SWR refetched it.
@@ -36,6 +40,8 @@ import {
 
 interface BoardProps {
     initialColumns?: KanbanColumnDataClient[];
+    /** Every status_transition_rules row, for explaining columns and checking moves before they're sent. */
+    initialRules?: MoveRule[];
     role: string;
 }
 
@@ -153,9 +159,9 @@ function MultiFilterDropdown({
     );
 }
 
-export function Board({ initialColumns = [], role }: BoardProps) {
-    const { data: swrResponse, mutate, isValidating } = useSWR<{ data: KanbanColumnDataClient[] }>("/api/assets", jsonFetcher, {
-        fallbackData: { data: initialColumns },
+export function Board({ initialColumns = [], initialRules = [], role }: BoardProps) {
+    const { data: swrResponse, mutate, isValidating } = useSWR<{ data: KanbanColumnDataClient[]; rules?: MoveRule[] }>("/api/assets", jsonFetcher, {
+        fallbackData: { data: initialColumns, rules: initialRules },
         // The server component already rendered this board from a fresh query, so revalidating on mount refetched the whole thing immediately and made every visit pay for the same data twice.
         // Focus revalidation and the polling interval still keep it current after that.
         revalidateOnMount: false,
@@ -163,8 +169,34 @@ export function Board({ initialColumns = [], role }: BoardProps) {
         refreshInterval: 20000,
     });
 
-    const allColumns: KanbanColumnDataClient[] = swrResponse?.data || initialColumns || [];
+    // Memoised so the rule summaries below are only rebuilt when the board data actually changes.
+    const swrColumns = swrResponse?.data;
+    const allColumns: KanbanColumnDataClient[] = useMemo(() => swrColumns || initialColumns || [], [swrColumns, initialColumns]);
+    const rules: MoveRule[] = swrResponse?.rules ?? initialRules;
     const [activeTask, setActiveTask] = useState<KanbanAssetCardClient | null>(null);
+    // The card dropped on Assigned, whose artist is being picked in the Assign dialog.
+    const [assignTask, setAssignTask] = useState<KanbanAssetCardClient | null>(null);
+
+    const actor = useViewerAsActor();
+    const viewerCapabilities = useViewerCapabilities();
+    const statuses: MoveStatus[] = useMemo(
+        () => allColumns.map((c) => ({ key: c.key, label: c.label, sortOrder: c.sortOrder, whoCanMoveIn: c.whoCanMoveIn })),
+        [allColumns]
+    );
+    const boardRules = useMemo(() => ({ actor, statuses, rules }), [actor, statuses, rules]);
+    const guides = useMemo(
+        () => new Map(statuses.map((s) => [s.key, describeColumn(actor, s.key, statuses, rules)])),
+        [actor, statuses, rules]
+    );
+    // Where the dragged card can go, so those columns light up and the rest fade while it's held.
+    const dropTargets = useMemo(
+        () => (activeTask ? allowedTargets(actor, toMoveCard(activeTask), statuses, rules) : null),
+        [actor, activeTask, statuses, rules]
+    );
+    const dropStateFor = (columnKey: string): DropState => {
+        if (!activeTask || !dropTargets || columnKey === activeTask.currentStatus) return null;
+        return dropTargets.has(columnKey) ? "allowed" : "blocked";
+    };
     const [mounted, setMounted] = useState(false);
 
     // Filters — artist, deadline range, deadline month, and registry-artifact links. Purely
@@ -355,6 +387,13 @@ export function Board({ initialColumns = [], role }: BoardProps) {
             return;
         }
 
+        // A card reaches Assigned by picking its artist, which sends them the offer, so dropping an
+        // unassigned card there opens the Assign dialog instead of moving it.
+        if (newStatus === "assigned" && draggedTask.currentStatus === "unassigned" && viewerCapabilities.canAssignArtists) {
+            setAssignTask(draggedTask);
+            return;
+        }
+
         // Rollback snapshot must be the *unfiltered* data — the SWR cache always
         // holds the true full board, and filtering is display-only. Using the
         // filtered `columns` here would, on a failed update, overwrite the cache
@@ -374,6 +413,7 @@ export function Board({ initialColumns = [], role }: BoardProps) {
 
     return (
         <>
+            <BoardRulesProvider value={boardRules}>
             <div
                 className={`flex flex-wrap items-center gap-2 mb-3 rounded-md ${
                     hasActiveFilters ? "border border-primary/40 bg-primary/5 p-2" : ""
@@ -440,6 +480,10 @@ export function Board({ initialColumns = [], role }: BoardProps) {
                         <X className="h-3 w-3 mr-1" /> Clear filters
                     </Button>
                 )}
+
+                <div className="ml-auto">
+                    <ToneLegend />
+                </div>
             </div>
 
             <DndContext
@@ -454,6 +498,11 @@ export function Board({ initialColumns = [], role }: BoardProps) {
                             <Column
                                 id={col.key}
                                 title={col.label}
+                                description={col.description}
+                                nextActionHint={col.nextActionHint}
+                                automationNote={col.automationNote}
+                                guide={guides.get(col.key) ?? describeColumn(actor, col.key, statuses, rules)}
+                                dropState={dropStateFor(col.key)}
                                 tasks={col.assets}
                                 role={role}
                             />
@@ -465,6 +514,24 @@ export function Board({ initialColumns = [], role }: BoardProps) {
                     {activeTask ? <TaskCard task={activeTask} role={role} /> : null}
                 </DragOverlay>
             </DndContext>
+            </BoardRulesProvider>
+
+            {assignTask && (
+                <AssignTaskDialog
+                    key={assignTask.sku}
+                    sku={assignTask.sku}
+                    currentArtistId={assignTask.artistId}
+                    currentArtistName={assignTask.artistName}
+                    currentDeadline={assignTask.deadline}
+                    currentFeeAmount={assignTask.feeAmount}
+                    currentCurrency={assignTask.currency}
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setAssignTask(null);
+                    }}
+                    hideTrigger
+                />
+            )}
 
             {isValidating && (
                 <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border px-3 py-1.5 rounded-full shadow-lg animate-in fade-in slide-in-from-bottom-2 z-50">

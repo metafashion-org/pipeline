@@ -10,27 +10,31 @@ import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { assetOffers, type OfferStatus } from "@/lib/db/schema/asset_offers";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
-import type { CapabilitySet } from "@/lib/auth/rbac";
 import {
   TransitionRefusedError,
+  artistRequired,
   assetNotFound,
   moveSwitchedOff,
   noSuchStep,
   notYourAsset,
+  offerNotAccepted,
   paymentOrder,
   receiptRequired,
   roleNotAllowed,
   statusNotFound,
   type MoveContext,
-  type RoleRefusal,
+  type TransitionErrorDetails,
 } from "./transition-errors";
+import { actorRoles, checkMove, type MoveRefusal, type MoveRule, type TransitionActor } from "./move-rules";
+
+export type { TransitionActor } from "./move-rules";
 
 export interface KanbanColumnData {
   key: string;
   label: string;
   sortOrder: number;
   description: string | null;
-  whoCanMoveIn: string | string[] | null;
+  whoCanMoveIn: string[] | null;
   nextActionHint: string | null;
   automationNote: string | null;
   assets: KanbanAssetCard[];
@@ -76,6 +80,8 @@ export interface KanbanAssetCard {
   // Status of the asset's latest offer to an artist (see lib/offers/offer-service.ts), or null when
   // it has never been offered. The card shows a badge while it's waiting on someone.
   offerStatus: OfferStatus | null;
+  // Whether a payment receipt is attached. Payment Done needs one, so the card says so while it's missing.
+  hasPaymentReceipt: boolean;
 }
 
 /**
@@ -96,12 +102,16 @@ export type KanbanAssetCardClient = Omit<KanbanAssetCard, "deadline" | "plannedU
 /** A KanbanColumnData holding client-shaped cards. */
 export type KanbanColumnDataClient = Omit<KanbanColumnData, "assets"> & { assets: KanbanAssetCardClient[] };
 
-export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[] }> {
+/**
+ * Everything the board shows: one column per status with its cards, and every transition rule, so
+ * the board can explain each column and check a move with the same checkMove the server uses.
+ */
+export async function getKanbanBoardData(artistEmail?: string): Promise<{ columns: KanbanColumnData[]; rules: MoveRule[] }> {
   // The status config, the asset list, and the artist<->artifact link list are independent, so
   // they are fetched concurrently. Links are queried separately rather than joined onto the main
   // asset query because an asset can carry more than one link — a join would multiply its row
   // (and every other joined column, artist/brand group included) once per link.
-  const [allStatuses, fetchedAssets, allLinks, latestOffers] = await Promise.all([
+  const [allStatuses, fetchedAssets, allLinks, latestOffers, allRules] = await Promise.all([
     db.select().from(statuses).orderBy(asc(statuses.sortOrder)),
     db
     .select({
@@ -126,6 +136,7 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       updatedAt: assets.updatedAt,
       referenceImages: assets.referenceImages,
       recolorReferenceImages: assets.recolorReferenceImages,
+      hasPaymentReceipt: sql<boolean>`${assets.paymentReceiptUrl} IS NOT NULL`,
     })
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
@@ -148,6 +159,17 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
       .selectDistinctOn([assetOffers.assetId], { assetId: assetOffers.assetId, status: assetOffers.status })
       .from(assetOffers)
       .orderBy(assetOffers.assetId, desc(assetOffers.createdAt)),
+    db
+      .select({
+        fromStatus: statusTransitionRules.fromStatus,
+        toStatus: statusTransitionRules.toStatus,
+        role: statusTransitionRules.role,
+        isAllowed: statusTransitionRules.isAllowed,
+        isAutomatic: statusTransitionRules.isAutomatic,
+        triggerNote: statusTransitionRules.triggerNote,
+        failureReason: statusTransitionRules.failureReason,
+      })
+      .from(statusTransitionRules),
   ]);
 
   const offerStatusByAsset = new Map(latestOffers.map((offer) => [offer.assetId, offer.status]));
@@ -201,33 +223,8 @@ export async function getKanbanBoardData(artistEmail?: string): Promise<{ column
 
   return {
     columns: Array.from(columnsMap.values()).sort((a, b) => a.sortOrder - b.sortOrder),
+    rules: allRules,
   };
-}
-
-// Payment gate is structural per PLAN.md §4/§9: the admin override below is deliberately
-// scoped to exclude these two statuses, so admin flexibility covers normal workflow
-// movement but never skipping the financial gate.
-//
-// The gate was previously described as "encoded as an absence of rows in
-// status_transition_rules, so it can't be bypassed via direct API calls." That was not
-// true of the shipped data: lib/db/seed-statuses.ts seeds rows for both
-// uploaded_to_roblox -> marked_for_payment and marked_for_payment -> payment_done. Because
-// the rows exist with isAllowed true, the transition passed for every caller and the
-// override exclusion never came into play. What actually gates them now is the role check
-// below, which reads the `role` those seeded rows already carry.
-const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
-
-// Who is asking for the transition. `system` is for transitions the pipeline performs on
-// its own behalf in response to a real event (an assignment email going out, a valid final
-// file arriving) rather than someone dragging a card — those have no human role to check,
-// and the event that triggered them is authorised at its own entry point.
-export type TransitionActor =
-  | { system: true }
-  | { system?: false; roles: string[]; personnelId?: string; caps?: CapabilitySet };
-
-function actorRoles(actor: TransitionActor | undefined): Set<string> {
-  if (!actor || actor.system) return new Set();
-  return new Set(actor.roles.map((r) => r.toLowerCase()));
 }
 
 // Loads what a refusal needs to explain itself in plain words: the display label of every status,
@@ -260,44 +257,27 @@ async function buildMoveContext(
   };
 }
 
-/**
- * Decides whether this actor may move a card into this status.
- *
- * Input: the actor, the matching status_transition_rules row (or undefined when none exists), and the target status row. Output: null when the move is permitted, or which check refused it: the rule's own role, or the target column's who_can_move_in list.
- *
- * Two independent columns constrain a transition and both are honoured where set:
- * status_transition_rules.role names the single role a manual transition belongs to, and
- * statuses.who_can_move_in lists every role allowed to put a card in that column. Both were
- * seeded with real data and neither was read before — who_can_move_in was only ever rendered
- * into a tooltip. Admin satisfies both.
- */
-function refuseTransition(
-  actor: TransitionActor | undefined,
-  rule: typeof statusTransitionRules.$inferSelect | undefined,
-  targetStatus: typeof statuses.$inferSelect
-): RoleRefusal | null {
-  if (actor?.system) return null;
-
-  const roles = actorRoles(actor);
-  if (roles.has("admin")) return null;
-
-  // canMarkForPayment is a narrower grant than the payment_admin role: someone can flag an
-  // asset as ready to be paid without also being able to release the payment. Scoped to this
-  // one target status only, so it never touches the marked_for_payment -> payment_done rule
-  // below, which stays reserved for the literal payment_admin/admin role either way.
-  const caps = actor && !actor.system ? actor.caps : undefined;
-  if (targetStatus.key === "marked_for_payment" && caps?.canMarkForPayment) return null;
-
-  if (rule?.role && !roles.has(rule.role.toLowerCase())) {
-    return { kind: "rule-role", role: rule.role };
+// The words for each refusal kind. Built only once a move is refused, so a move that succeeds
+// never pays for the queries behind the context.
+function refusalDetails(refusal: MoveRefusal, ctx: MoveContext): TransitionErrorDetails {
+  switch (refusal.kind) {
+    case "not-your-asset":
+      return notYourAsset();
+    case "no-such-step":
+      return noSuchStep(ctx);
+    case "payment-order":
+      return paymentOrder(ctx);
+    case "switched-off":
+      return moveSwitchedOff(ctx, refusal.failureReason);
+    case "role":
+      return roleNotAllowed(ctx, refusal.refusal);
+    case "artist-required":
+      return artistRequired(ctx);
+    case "offer-open":
+      return offerNotAccepted(ctx);
+    case "receipt-required":
+      return receiptRequired(ctx);
   }
-
-  const allowedIn = (targetStatus.whoCanMoveIn || []).map((r) => r.toLowerCase());
-  if (allowedIn.length > 0 && !allowedIn.some((r) => roles.has(r))) {
-    return { kind: "column", roles: allowedIn };
-  }
-
-  return null;
 }
 
 export async function updateAssetStatusInKanban(
@@ -324,19 +304,6 @@ export async function updateAssetStatusInKanban(
     throw new TransitionRefusedError(statusNotFound(targetStatusKey));
   }
 
-  // Ownership: an artist may only move their own work. The board already filters cards by
-  // artist email for display, but this function takes a SKU, so without this check an artist
-  // could move any other artist's asset just by knowing its SKU. Anyone who can see the whole
-  // board (operator, admin, and anyone granted canViewAllAssets) is exempt.
-  const roles = actorRoles(actor);
-  const isArtistOnly =
-    !actor?.system && roles.has("artist") && !roles.has("admin") && !roles.has("operator");
-  if (isArtistOnly && asset.currentArtistId !== (actor && !actor.system ? actor.personnelId : undefined)) {
-    throw new TransitionRefusedError(notYourAsset());
-  }
-
-  // Check status transition rules: deny by default, per PLAN.md §4 - a transition is only
-  // permitted if a matching row exists in status_transition_rules with isAllowed !== false.
   const rule = await db
     .select()
     .from(statusTransitionRules)
@@ -348,42 +315,36 @@ export async function updateAssetStatusInKanban(
     )
     .limit(1);
 
-  if (rule.length === 0) {
-    // Admin override, per PLAN.md §4/§5 ("admin: Everything... Override/repair records") -
-    // but never for the two payment-gated statuses, which stay structurally deny-by-default
-    // for every role including admin. See PAYMENT_GATED_STATUSES comment above.
-    const adminOverride =
-      (actor?.system || roles.has("admin")) && !PAYMENT_GATED_STATUSES.includes(targetStatusKey);
-    if (!adminOverride) {
-      const ctx = await buildMoveContext(fromStatus, targetStatus[0], actor);
-      throw new TransitionRefusedError(PAYMENT_GATED_STATUSES.includes(targetStatusKey) ? paymentOrder(ctx) : noSuchStep(ctx));
-    }
-  } else if (!rule[0].isAllowed) {
-    // An explicit forbid always applies, admin included - only the "no rule exists" gap
-    // above gets the admin override, never an explicit isAllowed: false row.
-    const ctx = await buildMoveContext(fromStatus, targetStatus[0], actor);
-    throw new TransitionRefusedError(moveSwitchedOff(ctx, rule[0].failureReason));
-  }
+  // Only a card leaving Assigned needs its offer: an unanswered offer holds it there.
+  const [latestOffer] =
+    fromStatus === "assigned"
+      ? await db
+          .select({ status: assetOffers.status })
+          .from(assetOffers)
+          .where(eq(assetOffers.assetId, asset.id))
+          .orderBy(desc(assetOffers.createdAt))
+          .limit(1)
+      : [];
 
-  // A rule saying the transition is possible is not the same as this caller being allowed to
-  // make it. Both status_transition_rules.role and statuses.who_can_move_in carry that answer
-  // and neither was consulted before, which left every seeded transition open to any
-  // authenticated user - including uploaded_to_roblox -> marked_for_payment.
-  const refusal = refuseTransition(actor, rule[0], targetStatus[0]);
+  // Every check lives in checkMove (lib/kanban/move-rules.ts), which the board also runs to show
+  // who can move each card, so what the board shows and what this enforces can't drift apart.
+  const refusal = checkMove(
+    actor,
+    {
+      currentStatus: fromStatus,
+      artistId: asset.currentArtistId,
+      offerStatus: latestOffer?.status ?? null,
+      hasPaymentReceipt: Boolean(asset.paymentReceiptUrl),
+    },
+    targetStatus[0],
+    rule[0]
+  );
   if (refusal) {
     const ctx = await buildMoveContext(fromStatus, targetStatus[0], actor);
-    throw new TransitionRefusedError(roleNotAllowed(ctx, refusal));
+    throw new TransitionRefusedError(refusalDetails(refusal, ctx));
   }
 
   const actorPersonnelId = actor && !actor.system ? actor.personnelId ?? null : null;
-
-  // Receipt gate, structural like PAYMENT_GATED_STATUSES above: a client requirement
-  // (admin must attach a payment receipt before marking a task paid) enforced here so
-  // it holds for every role including admin, not just checked in the UI.
-  if (targetStatusKey === "payment_done" && !asset.paymentReceiptUrl) {
-    const ctx = await buildMoveContext(fromStatus, targetStatus[0], actor);
-    throw new TransitionRefusedError(receiptRequired(ctx));
-  }
 
   // Update asset status
   await db
