@@ -145,6 +145,11 @@ function testNextStep() {
   });
   assert.deepStrictEqual(step(OPERATOR, card("final_files_received")), { tone: "auto", text: "Moves to Ready for Upload on its own" });
 
+  // Revisions Requested moves back to an earlier column, In Production, and that is its next step.
+  assert.deepStrictEqual(step(ARTIST, card("revisions_requested")), { tone: "you", text: "You can move it to In Production" });
+  assert.deepStrictEqual(describeColumn(ARTIST, "revisions_requested", STATUSES, RULES).next, { tone: "you", text: "Next: you" });
+  assert.deepStrictEqual(describeColumn(OPERATOR, "revisions_requested", STATUSES, RULES).next, { tone: "other", text: "Next: the artist" });
+
   // A missing receipt holds a card in Marked for Payment.
   assert.deepStrictEqual(step(OPERATOR, card("marked_for_payment")), { tone: "blocked", text: "Needs the payment receipt" });
   assert.deepStrictEqual(step(OPERATOR, card("payment_done")), { tone: "done", text: "Finished" });
