@@ -96,7 +96,11 @@ export function PersonnelManager({
   async function linkDiscordChannels() {
     setLinkingDiscord(true);
     try {
-      const { ok, data } = await apiCall<{ linked: { name: string; channelId: string }[]; missing: { name: string; reason: string }[] }>(
+      const { ok, data } = await apiCall<{
+        linked: { name: string; channelId: string }[];
+        accountsLinked: { name: string; discordUserId: string }[];
+        missing: { name: string; reason: string }[];
+      }>(
         "/api/admin/personnel/discord-links",
         { method: "POST" }
       );
@@ -107,11 +111,8 @@ export function PersonnelManager({
       const channelByName = new Map(data.linked.map((l) => [l.name, l.channelId]));
       setPeople((prev) => prev.map((p) => (channelByName.has(p.name) ? { ...p, discordChannelId: channelByName.get(p.name) ?? null } : p)));
       setDiscordMissing(data.missing);
-      toast.success(
-        data.linked.length > 0
-          ? `Linked ${data.linked.map((l) => l.name).join(", ")}`
-          : "No new Discord channels found"
-      );
+      const names = [...data.linked.map((l) => l.name), ...data.accountsLinked.map((l) => l.name)];
+      toast.success(names.length > 0 ? `Linked ${Array.from(new Set(names)).join(", ")}` : "Nothing new to link");
     } finally {
       setLinkingDiscord(false);
     }

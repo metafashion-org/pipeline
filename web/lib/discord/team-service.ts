@@ -14,7 +14,7 @@
 import { db } from "@/lib/db/client";
 import { discordTempAccess } from "@/lib/db/schema/discord_temp_access";
 import { eq, lte } from "drizzle-orm";
-import { linkChannelToDiscordUser } from "./artist-channel";
+import { linkOnboardedMember } from "./artist-channel";
 import {
   discordFetch,
   isConfigured,
@@ -192,6 +192,8 @@ export interface OnboardOptions {
   department: string;
   alsoAddShared?: boolean;
   managerVisible?: boolean;
+  /** The pipeline person this Discord member is. Their Discord account and new channel are saved on it. */
+  personnelId?: string;
 }
 
 // Discord's member-search does prefix matching, so it can return several
@@ -258,9 +260,14 @@ export async function onboardMember(options: OnboardOptions) {
   const channelSlug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const channelName = `${rules.emoji}│${channelSlug}`;
   const newChannel = await createChannel(channelName, category.id, overwrites);
-  // Offers, the board's Discord link and deadline pings all read the channel off the personnel
-  // record, so it has to be saved there, not only created in Discord.
-  await linkChannelToDiscordUser(match.user.id, newChannel.id);
+  // Offers, the board's Discord link and deadline pings all read the Discord account and channel off
+  // the personnel record, so both are saved there, not only created in Discord.
+  const linkedPersonnel = await linkOnboardedMember({
+    personnelId: options.personnelId,
+    name,
+    discordUserId: match.user.id,
+    channelId: newChannel.id,
+  });
 
   // Shared-channel access: Animations grants an existing role (that role
   // already has view access baked into animation-concepts' own
@@ -284,6 +291,7 @@ export async function onboardMember(options: OnboardOptions) {
   await pinMessage(newChannel.id, msg.id).catch((e: Error) => console.error("[discord] pin failed (channel still created fine):", e.message));
 
   return {
+    linkedPersonnel,
     channel: { id: newChannel.id, name: newChannel.name, url: `https://discord.com/channels/${guildId}/${newChannel.id}` },
     role: { id: artistRole.id, name: artistRole.name },
   };

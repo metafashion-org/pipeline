@@ -6,6 +6,9 @@ import { isConfigured } from "@/lib/discord/discord-service";
 import { getDiscordOverview, getDepartments, listTempAccessGrants } from "@/lib/discord/team-service";
 import { isDiscordManagerTier, isDiscordAdminTier } from "@/lib/auth/rbac";
 import { DiscordTeamManager } from "@/components/discord/DiscordTeamManager";
+import { db } from "@/lib/db/client";
+import { personnel } from "@/lib/db/schema/personnel";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -30,6 +33,12 @@ export default async function DiscordTeamManagerPage() {
   }
 
   const configured = isConfigured();
+  // Active people with no Discord account linked: who a newly onboarded member can be linked to.
+  const unlinkedPeople = await db
+    .select({ id: personnel.id, name: personnel.name, email: personnel.email })
+    .from(personnel)
+    .where(and(eq(personnel.status, "Active"), isNull(personnel.discordUserId)))
+    .orderBy(asc(personnel.name));
   let overview: Awaited<ReturnType<typeof getDiscordOverview>> = { members: [], channels: [], archived: [], categories: [] };
   let fetchError: string | null = null;
   let tempGrants: Awaited<ReturnType<typeof listTempAccessGrants>> = [];
@@ -71,6 +80,7 @@ export default async function DiscordTeamManagerPage() {
             initialTempGrants={tempGrants}
             isManagerTier={isDiscordManagerTier(roles)}
             isAdminTier={isDiscordAdminTier(roles)}
+            unlinkedPeople={unlinkedPeople}
           />
         )}
       </main>
