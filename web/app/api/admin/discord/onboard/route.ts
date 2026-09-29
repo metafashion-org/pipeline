@@ -12,6 +12,8 @@ const OnboardSchema = z.object({
   department: z.string().trim().min(1),
   alsoAddShared: z.boolean().optional(),
   managerVisible: z.boolean().optional(),
+  // The pipeline person this member is, picked on the form, so their Discord account and channel are linked.
+  personnelId: z.string().uuid().optional(),
 });
 
 export async function POST(request: NextRequest) {

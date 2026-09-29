@@ -116,12 +116,15 @@ export function DiscordTeamManager({
   initialTempGrants,
   isManagerTier,
   isAdminTier,
+  unlinkedPeople,
 }: {
   initialOverview: Overview;
   departments: Department[];
   initialTempGrants: TempAccessGrant[];
   isManagerTier: boolean;
   isAdminTier: boolean;
+  /** Active pipeline people with no Discord account linked yet, for the Onboard form's picker. */
+  unlinkedPeople: PipelinePerson[];
 }) {
   const [overview, setOverview] = useState(initialOverview);
   const [tempGrants, setTempGrants] = useState(initialTempGrants);
@@ -192,7 +195,7 @@ export function DiscordTeamManager({
 
       {isManagerTier && (
         <TabsContent value="onboard">
-          <OnboardTab departments={departments} onOnboarded={refresh} prefill={onboardPrefill} />
+          <OnboardTab departments={departments} onOnboarded={refresh} prefill={onboardPrefill} unlinkedPeople={unlinkedPeople} />
         </TabsContent>
       )}
 
@@ -356,21 +359,41 @@ function StatCard({ label, value, warn }: { label: string; value: number; warn?:
 
 // ─── Onboard ────────────────────────────────────────────────────────────
 
+interface PipelinePerson {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// The picker's "no one" choice: a Select can't hold an empty value.
+const NO_PIPELINE_PERSON = "__none__";
+
 function OnboardTab({
   departments,
   onOnboarded,
   prefill,
+  unlinkedPeople,
 }: {
   departments: Department[];
   onOnboarded: () => void;
   prefill: { name: string; username: string } | null;
+  unlinkedPeople: PipelinePerson[];
 }) {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [department, setDepartment] = useState("");
   const [alsoAddShared, setAlsoAddShared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<{ channel: { url: string; name: string }; role: { name: string } } | null>(null);
+  const [result, setResult] = useState<{
+    channel: { url: string; name: string };
+    role: { name: string };
+    linkedPersonnel: { id: string; name: string } | null;
+  } | null>(null);
+  // The pipeline person this member is. Until someone picks, it follows the name typed above: the
+  // only unlinked person with exactly that name, if there is one.
+  const [pickedPersonId, setPickedPersonId] = useState<string | null>(null);
+  const nameMatches = unlinkedPeople.filter((p) => p.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const personId = pickedPersonId ?? (nameMatches.length === 1 ? nameMatches[0].id : NO_PIPELINE_PERSON);
 
   // Carries a name/username over from the Overview tab's "Onboard" quick
   // action on a pending member (see jumpToOnboard in the parent). Adjusted
@@ -401,16 +424,22 @@ function OnboardTab({
     setSubmitting(true);
     setResult(null);
     try {
-      const data = await postJson<{ channel: { url: string; name: string }; role: { name: string } }>("/api/admin/discord/onboard", {
+      const data = await postJson<{
+        channel: { url: string; name: string };
+        role: { name: string };
+        linkedPersonnel: { id: string; name: string } | null;
+      }>("/api/admin/discord/onboard", {
         name: name.trim(),
         username: username.trim(),
         department,
         alsoAddShared,
+        personnelId: personId === NO_PIPELINE_PERSON ? undefined : personId,
       });
       setResult(data);
       toast.success(`${name} onboarded — channel and role created`);
       setName("");
       setUsername("");
+      setPickedPersonId(null);
       onOnboarded();
     } catch (e) {
       toast.error(errMessage(e, "Failed to onboard member"));
@@ -424,6 +453,16 @@ function OnboardTab({
       {result && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm space-y-1">
           <p className="font-medium">Onboarded — role &ldquo;{result.role.name}&rdquo; created, channel ready.</p>
+          {result.linkedPersonnel ? (
+            <p className="text-muted-foreground">
+              Linked to {result.linkedPersonnel.name} in the pipeline, so offers and deadline updates reach this channel.
+            </p>
+          ) : (
+            <p className="text-amber-700 dark:text-amber-400">
+              Not linked to anyone in the pipeline, so offers won&apos;t reach this channel. Add them in Personnel, then onboard again or
+              ask for the link to be added.
+            </p>
+          )}
           <a href={result.channel.url} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4 inline-flex items-center gap-1">
             Open {result.channel.name} <ExternalLink className="h-3 w-3" />
           </a>
@@ -437,6 +476,26 @@ function OnboardTab({
         <Label htmlFor="onboard-username">Discord name (exact)</Label>
         <Input id="onboard-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their Discord display name or username" />
         <p className="text-xs text-muted-foreground">Their display name or @username. They must already be in the server, and the name has to match exactly.</p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="onboard-person">Pipeline account</Label>
+        <Select value={personId} onValueChange={setPickedPersonId}>
+          <SelectTrigger id="onboard-person" className="w-full">
+            <SelectValue placeholder="Who is this in the pipeline?" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_PIPELINE_PERSON}>Not in the pipeline yet</SelectItem>
+            {unlinkedPeople.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name} ({p.email})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Their Discord account and new channel are saved on this person, so offers and deadline updates reach them. It&apos;s picked
+          for you when the full name matches.
+        </p>
       </div>
       <div className="grid gap-2">
         <Label>Department</Label>
