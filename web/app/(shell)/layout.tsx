@@ -24,8 +24,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       >
         {/* h-dvh, not h-screen: on iOS Safari the browser chrome overlays a vh-sized element, which
             put the bottom of every page under the address bar. w-full rather than w-screen for the
-            same reason a scrollbar used to push the layout sideways. */}
-        <div className="flex h-dvh w-full overflow-hidden">
+            same reason a scrollbar used to push the layout sideways. relative so overflow-hidden also
+            clips absolutely positioned content: without a positioned ancestor it is placed against
+            the page and can widen it, which is how the board's column labels made the whole app
+            scroll sideways. */}
+        <div className="relative flex h-dvh w-full overflow-hidden">
           <AppSidebar viewer={{ email: session?.user?.email ?? null, roles, capabilityOverrides }} />
           <div className="flex-1 min-w-0 overflow-hidden">{children}</div>
         </div>

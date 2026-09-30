@@ -492,7 +492,11 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
             >
-                <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+                {/* relative makes this scroller the containing block for absolutely positioned
+                    content inside the columns, like the screen-reader label on each column's "i".
+                    Without it those labels were placed against the page, and the columns past the
+                    right edge made the whole page scroll sideways, sidebar and header included. */}
+                <div className="relative flex gap-4 overflow-x-auto pb-4 h-full">
                     {columns.map((col) => (
                         <div key={col.key} className="shrink-0 w-[220px]">
                             <Column
