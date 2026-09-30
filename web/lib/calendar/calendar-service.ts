@@ -4,6 +4,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { and, eq, gte, lt, min, inArray } from "drizzle-orm";
+import { shownOnBoard } from "@/lib/assets/board-visibility";
 
 // The three kinds of dates the calendar shows. "deadline": when the artist's work is due.
 // "planned_upload": when the team plans to put it on Roblox. "went_live": when it actually went on
@@ -64,13 +65,13 @@ export async function getCalendarEvents(from: Date, to: Date): Promise<CalendarE
       .from(assets)
       .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
       .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
-      .where(and(gte(assets.deadline, from), lt(assets.deadline, to))),
+      .where(and(gte(assets.deadline, from), lt(assets.deadline, to), shownOnBoard())),
     db
       .select(assetFields)
       .from(assets)
       .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
       .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
-      .where(and(gte(assets.plannedUploadDate, from), lt(assets.plannedUploadDate, to))),
+      .where(and(gte(assets.plannedUploadDate, from), lt(assets.plannedUploadDate, to), shownOnBoard())),
     db
       .select({ assetId: statusHistory.assetId, firstAt: min(statusHistory.createdAt) })
       .from(statusHistory)
@@ -85,7 +86,7 @@ export async function getCalendarEvents(from: Date, to: Date): Promise<CalendarE
         .from(assets)
         .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
         .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
-        .where(inArray(assets.id, liveInRange.map((u) => u.assetId)))
+        .where(and(inArray(assets.id, liveInRange.map((u) => u.assetId)), shownOnBoard()))
     : [];
   const liveAssetById = new Map(liveAssets.map((a) => [a.id, a]));
 

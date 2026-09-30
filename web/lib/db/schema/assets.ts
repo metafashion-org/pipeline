@@ -31,6 +31,10 @@ export const assets = pgTable("assets", {
   replyToMessageId: text("reply_to_message_id"),
   referenceImages: jsonb("reference_images").default([]), // Array of FileStore objects: { provider, externalId, sizeBytes, mimeType }
   recolorReferenceImages: jsonb("recolor_reference_images").default([]),
+  // Set when the team takes the card off the board without deleting the asset (see
+  // lib/assets/board-visibility.ts). Null while the card shows.
+  boardHiddenAt: timestamp("board_hidden_at", { withTimezone: true }),
+  boardHiddenBy: uuid("board_hidden_by").references(() => personnel.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

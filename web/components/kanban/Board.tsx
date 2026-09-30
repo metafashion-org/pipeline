@@ -19,6 +19,7 @@ import { Column, type DropState } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { BoardRulesProvider, ToneLegend, toMoveCard } from "./board-rules";
+import { HiddenCardsButton } from "./board-visibility-buttons";
 import { useViewerAsActor, useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { allowedTargets, describeColumn, type MoveRule, type MoveStatus } from "@/lib/kanban/move-rules";
 import { toast } from "sonner";
@@ -481,7 +482,8 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                     </Button>
                 )}
 
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                    {viewerCapabilities.canAssignArtists && <HiddenCardsButton />}
                     <ToneLegend />
                 </div>
             </div>
