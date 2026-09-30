@@ -40,10 +40,16 @@ export interface OfferSummary {
 const EMBED_COLOR_OFFER = 0x2563eb;
 const EMBED_COLOR_APPROVED = 0x16a34a;
 const EMBED_COLOR_REJECTED = 0xdc2626;
+const EMBED_COLOR_REVISIONS = 0xf59e0b;
 
 /** Where an artist answers their offers: their own My Tasks page. */
 export function artistOffersUrl(): string {
   return appUrl("/artist#offers");
+}
+
+// The artist's My Tasks board with this asset's card open (TaskCard opens on ?asset=<SKU>).
+function artistAssetUrl(sku: string): string {
+  return appUrl(`/artist?asset=${encodeURIComponent(sku)}`);
 }
 
 // Submit final files, opened with the asset already picked (see app/(shell)/artist/submit/page.tsx).
@@ -229,6 +235,42 @@ export async function notifyArtistOfApproval(summary: OfferSummary): Promise<voi
       summary,
       withImage: true,
       url: submitUrl,
+    }),
+  ]);
+}
+
+// What an artist does once the team asks for changes. Those are the moves the pipeline gives them
+// out of Revisions Requested (see the rules in lib/db/seed-statuses.ts).
+const AFTER_REVISIONS_STEPS =
+  "Move the card to In Production while you make the changes, then to In Review when they're done. The team checks it and approves it.";
+
+/**
+ * Tells the artist the team asked for changes, by email and in their Discord channel, and what to do
+ * once they've made them. The email's button opens the asset's card on My Tasks.
+ */
+export async function notifyArtistOfRevisions(summary: OfferSummary): Promise<void> {
+  const cardUrl = artistAssetUrl(summary.sku);
+  await Promise.all([
+    queueAndSend(
+      summary.assetId,
+      [summary.artistEmail],
+      `Changes requested: ${summary.itemName} (${summary.sku})`,
+      renderOfferEmail(summary, {
+        preheader: "The team asked for changes. Move it to In Review when they're done.",
+        eyebrow: "Revisions requested",
+        tone: EMAIL_TONE.neutral,
+        intro: `Hi ${summary.artistName}, the team asked for changes on ${summary.itemName}. ${AFTER_REVISIONS_STEPS}`,
+        button: { label: "Open My Tasks", url: cardUrl },
+      })
+    ),
+    postToArtistChannel({
+      content: "the team asked for changes on your asset.",
+      title: `${summary.itemName} (${summary.sku})`,
+      description: AFTER_REVISIONS_STEPS,
+      color: EMBED_COLOR_REVISIONS,
+      summary,
+      withImage: false,
+      url: cardUrl,
     }),
   ]);
 }
