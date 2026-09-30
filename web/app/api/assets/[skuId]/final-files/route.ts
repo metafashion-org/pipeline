@@ -11,6 +11,7 @@ import {
   type FinalFileInput,
 } from "@/lib/deliverables/deliverables-service";
 import { canSubmitFinalFiles, canViewFinalFiles, findAssetForFinalFiles } from "@/lib/deliverables/final-files-access";
+import { FINAL_FILE_KINDS, checkFinalFile, checkSubmission } from "@/lib/deliverables/final-file-kinds";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
   return NextResponse.json({ submissions: await getFinalFilesForAsset(asset.id) });
 }
 
+// Long enough for the form's "Your comments": issues faced, resubmission, improvements, logo changes.
+const MAX_COMMENT_CHARS = 2000;
+
 const SubmitSchema = z.object({
   version: z.number().int().positive(),
-  // The names of the files the browser uploaded. Only these are recorded, so a file left behind
-  // by an earlier upload that was abandoned halfway isn't handed in by mistake.
-  fileNames: z.array(z.string().trim().min(1)).min(1),
-  notes: z.string().trim().max(2000).optional(),
+  // The files the browser uploaded, each with the form slot it was uploaded in. Only these are
+  // recorded, so a file left behind by an earlier upload abandoned halfway isn't handed in by mistake.
+  files: z.array(z.object({ name: z.string().trim().min(1), kind: z.enum(FINAL_FILE_KINDS) })).min(1),
+  comments: z.string().trim().max(MAX_COMMENT_CHARS).optional(),
 });
 
 /**
@@ -53,7 +57,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const parsed = SubmitSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Nothing to hand in" }, { status: 400 });
-  const { version, fileNames, notes } = parsed.data;
+  const { version, files: requested, comments } = parsed.data;
+  const shapeProblem = checkSubmission(requested);
+  if (shapeProblem) return NextResponse.json({ error: shapeProblem }, { status: 400 });
 
   // The version has to be the one this submission was started under, or a second submission
   // racing this one could claim the same folder.
@@ -68,13 +74,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Newest first, so a file uploaded twice under one name records the later copy.
     const files: FinalFileInput[] = [];
     const missing: string[] = [];
-    for (const name of new Set(fileNames)) {
+    const kindByName = new Map(requested.map((f) => [f.name, f.kind]));
+    for (const [name, kind] of kindByName) {
       const match = inFolder.find((f) => f.name === name);
       if (!match) {
         missing.push(name);
         continue;
       }
+      // Checked again against what actually reached Drive, not only what the browser said.
+      const fileProblem = checkFinalFile(kind, match.name, match.sizeBytes ?? 0);
+      if (fileProblem) return NextResponse.json({ error: fileProblem }, { status: 400 });
       files.push({
+        kind,
         fileName: match.name,
         mimeType: match.mimeType,
         sizeBytes: match.sizeBytes,
@@ -88,7 +99,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await Promise.all(files.map((f) => shareFinalFile(f.driveFileId)));
-    const result = await submitFinalFiles(asset.sku, version, files, user.personnelId, notes);
+    const result = await submitFinalFiles(asset.sku, version, files, user.personnelId, comments);
     revalidateViews(CACHE_TAGS.publisherQueue);
     return NextResponse.json({ success: true, result });
   } catch (error) {

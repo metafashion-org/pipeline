@@ -1,6 +1,8 @@
 import { pgTable, uuid, text, integer, bigint, timestamp, index } from "drizzle-orm/pg-core";
 import { assets } from "./assets";
 import { personnel } from "./personnel";
+import { assetFinalSubmissions } from "./asset_final_submissions";
+import type { FinalFileKind } from "@/lib/deliverables/final-file-kinds";
 
 /**
  * One final file an artist handed in for an asset. The bytes live in the Shared Drive, in
@@ -14,6 +16,12 @@ export const assetDeliverables = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }).notNull(),
     version: integer("version").notNull(),
+    // The submission this file came in with. Null only for files recorded before submissions had a
+    // row of their own (drizzle/0037 links those it can).
+    submissionId: uuid("submission_id").references(() => assetFinalSubmissions.id, { onDelete: "cascade" }),
+    // Which slot of the submission form it was uploaded in: asset images, the 3D files .zip or a
+    // motion pack .zip (lib/deliverables/final-file-kinds.ts). Null for files from before the slots.
+    kind: text("kind").$type<FinalFileKind>(),
     fileName: text("file_name").notNull(),
     mimeType: text("mime_type"),
     // bigint in mode "number": final 3D files can pass 2 GB, which an integer column can't hold.
@@ -25,5 +33,8 @@ export const assetDeliverables = pgTable(
     uploadedBy: uuid("uploaded_by").references(() => personnel.id),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [index("asset_deliverables_asset_version_idx").on(table.assetId, table.version)]
+  (table) => [
+    index("asset_deliverables_asset_version_idx").on(table.assetId, table.version),
+    index("asset_deliverables_submission_idx").on(table.submissionId),
+  ]
 );

@@ -22,6 +22,8 @@ import {
   Menu,
   X,
   Eye,
+  ListTodo,
+  UploadCloud,
 } from "lucide-react";
 import { isRouteAllowedForRoles, getEffectiveCapabilities, ALL_ROLES, type SystemRole } from "@/lib/auth/rbac";
 import { ModeToggle } from "@/components/ui/mode-toggle";
@@ -36,7 +38,16 @@ import {
 // Every internal page shares this one sidebar. Before, admin/* had a sidebar and artist,
 // curator and publisher each stood alone, so moving between tools looked like the shell kept
 // disappearing.
-const NAV_ITEMS = [
+// An artist's own pages. My Tasks only renders for someone whose collapsed role is artist (see
+// app/(shell)/artist/page.tsx), so it is shown only to artists who don't also run production.
+function isArtistOnly(roles: string[]): boolean {
+  const normalized = roles.map((r) => r.toLowerCase());
+  return normalized.includes("artist") && !normalized.includes("admin") && !normalized.includes("operator");
+}
+
+const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; onlyFor?: (roles: string[]) => boolean }[] = [
+  { href: "/artist", icon: ListTodo, label: "My Tasks", onlyFor: isArtistOnly },
+  { href: "/artist/submit", icon: UploadCloud, label: "Submit final files" },
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
   { href: "/admin/calendar", icon: CalendarDays, label: "Calendar" },
@@ -173,7 +184,9 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
   // Only the destinations this person can actually open. Every user was shown all ten, so a
   // curator clicking Personnel, Settings or Forms landed on /unauthorized — the nav advertised
   // work they had no way to do. Same rule proxy.ts enforces, so the list and the gate agree.
-  const visibleItems = NAV_ITEMS.filter((item) => isRouteAllowedForRoles(item.href, navRoles, navOverrides));
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => isRouteAllowedForRoles(item.href, navRoles, navOverrides) && (!item.onlyFor || item.onlyFor(navRoles))
+  );
 
   const panel = (
     <>
@@ -207,7 +220,8 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
 
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {visibleItems.map(({ href, icon: Icon, label }) => {
-            const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+            // "/admin" and "/artist" are also the start of their section's other pages, so they match exactly.
+            const isActive = href === "/admin" || href === "/artist" ? pathname === href : pathname.startsWith(href);
             return (
               <Link
                 key={href}

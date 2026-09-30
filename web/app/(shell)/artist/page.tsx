@@ -7,6 +7,9 @@ import { OffersPanel } from "@/components/offers/OffersPanel";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { UploadCloud } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,13 @@ export default async function ArtistPage() {
       <PageHeader
         title="My Tasks"
         description="Assets assigned to you."
+        actions={
+          <Button size="sm" asChild>
+            <Link href="/artist/submit">
+              <UploadCloud className="h-3.5 w-3.5" /> Submit final files
+            </Link>
+          </Button>
+        }
       />
 
             <div className="shrink-0 max-h-[45vh] overflow-y-auto px-4 sm:px-6 pt-4 empty:hidden">
