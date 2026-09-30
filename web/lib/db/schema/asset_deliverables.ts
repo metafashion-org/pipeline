@@ -2,7 +2,7 @@ import { pgTable, uuid, text, integer, bigint, timestamp, index } from "drizzle-
 import { assets } from "./assets";
 import { personnel } from "./personnel";
 import { assetFinalSubmissions } from "./asset_final_submissions";
-import type { FinalFileKind } from "@/lib/deliverables/final-file-kinds";
+import type { FinalFileKind } from "@/lib/deliverables/final-zip";
 
 /**
  * One final file an artist handed in for an asset. The bytes live in the Shared Drive, in
@@ -19,8 +19,8 @@ export const assetDeliverables = pgTable(
     // The submission this file came in with. Null only for files recorded before submissions had a
     // row of their own (drizzle/0037 links those it can).
     submissionId: uuid("submission_id").references(() => assetFinalSubmissions.id, { onDelete: "cascade" }),
-    // Which slot of the submission form it was uploaded in: asset images, the 3D files .zip or a
-    // motion pack .zip (lib/deliverables/final-file-kinds.ts). Null for files from before the slots.
+    // What the file is: "final_zip", the one .zip an artist hands in (lib/deliverables/final-zip.ts).
+    // Null for files handed in before that.
     kind: text("kind").$type<FinalFileKind>(),
     fileName: text("file_name").notNull(),
     mimeType: text("mime_type"),

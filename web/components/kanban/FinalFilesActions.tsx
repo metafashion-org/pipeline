@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { apiCall } from "@/lib/api-client";
-import { FINAL_FILE_KINDS, FINAL_FILE_RULES, type FinalFileKind } from "@/lib/deliverables/final-file-kinds";
 import { formatFileSize } from "@/components/deliverables/drive-upload-client";
 
 /**
@@ -44,11 +43,8 @@ interface FinalFilesSubmission {
   submittedAt: string;
   comments: string | null;
   submittedBy: string | null;
-  files: { id: string; kind: FinalFileKind | null; fileName: string; sizeBytes: number | null; driveUrl: string }[];
+  files: { id: string; fileName: string; sizeBytes: number | null; driveUrl: string }[];
 }
-
-// Files from before the form had slots have no kind; they're listed last under this heading.
-const UNSORTED_FILES_LABEL = "Files";
 
 /**
  * The asset's final-files submissions, newest first: each version's files and a link to its Drive
@@ -62,44 +58,30 @@ export function FinalFilesList({ sku, enabled }: { sku: string; enabled: boolean
 
   return (
     <div className="space-y-3">
-      {submissions.map((submission) => {
-        // Grouped by the form slot each file came in, in the form's order.
-        const groups = [...FINAL_FILE_KINDS, null]
-          .map((kind) => ({
-            label: kind ? FINAL_FILE_RULES[kind].label : UNSORTED_FILES_LABEL,
-            files: submission.files.filter((f) => f.kind === kind),
-          }))
-          .filter((group) => group.files.length > 0);
-        return (
-          <div key={submission.version} className="text-xs space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">
-                Version {submission.version} · {formatDate(submission.submittedAt)}
-                {submission.submittedBy ? ` · ${submission.submittedBy}` : ""}
-              </span>
-              <a href={submission.folderUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                Open folder
-              </a>
-            </div>
-            {submission.comments && <p className="text-muted-foreground whitespace-pre-line">&ldquo;{submission.comments}&rdquo;</p>}
-            {groups.map((group) => (
-              <div key={group.label}>
-                <p className="text-muted-foreground">{group.label}</p>
-                <ul className="space-y-0.5">
-                  {group.files.map((file) => (
-                    <li key={file.id} className="flex justify-between gap-2">
-                      <a href={file.driveUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">
-                        {file.fileName}
-                      </a>
-                      {file.sizeBytes !== null && <span className="shrink-0 text-muted-foreground">{formatFileSize(file.sizeBytes)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+      {submissions.map((submission) => (
+        <div key={submission.version} className="text-xs space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">
+              Version {submission.version} · {formatDate(submission.submittedAt)}
+              {submission.submittedBy ? ` · ${submission.submittedBy}` : ""}
+            </span>
+            <a href={submission.folderUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Open folder
+            </a>
           </div>
-        );
-      })}
+          {submission.comments && <p className="text-muted-foreground whitespace-pre-line">&ldquo;{submission.comments}&rdquo;</p>}
+          <ul className="space-y-0.5">
+            {submission.files.map((file) => (
+              <li key={file.id} className="flex justify-between gap-2">
+                <a href={file.driveUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:underline">
+                  {file.fileName}
+                </a>
+                {file.sizeBytes !== null && <span className="shrink-0 text-muted-foreground">{formatFileSize(file.sizeBytes)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

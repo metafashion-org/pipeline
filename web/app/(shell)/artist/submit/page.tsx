@@ -8,6 +8,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { FINAL_FILES_ACCEPTED_FROM_STATUS } from "@/lib/deliverables/deliverables-service";
+import { getZipGuidance } from "@/lib/deliverables/zip-guidance";
 import { FinalFilesForm, type SubmittableAsset } from "@/components/deliverables/FinalFilesForm";
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -36,10 +37,12 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
     forTeam || personnelId
       ? await db
           .select({
+            id: assets.id,
             sku: assets.sku,
             itemName: assets.itemName,
             category: assets.category,
             referenceImages: assets.referenceImages,
+            recolorReferenceImages: assets.recolorReferenceImages,
             artistName: personnel.name,
           })
           .from(assets)
@@ -53,12 +56,14 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
           .orderBy(asc(assets.sku))
       : [];
 
+  const guidance = await getZipGuidance(rows);
   const submittable: SubmittableAsset[] = rows.map((row) => ({
     sku: row.sku,
     itemName: row.itemName,
     category: row.category,
     artistName: row.artistName,
     coverFileId: parseDriveRefs(row.referenceImages).find((ref) => ref.fileId)?.fileId ?? null,
+    guidance: guidance.get(row.id) ?? { recolourCount: 0, briefNotes: [], guidelines: [] },
   }));
 
   const { sku } = await searchParams;
@@ -67,7 +72,7 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
     <div className="flex flex-col h-full bg-background text-foreground">
       <PageHeader
         title="Submit final files"
-        description="Hand in an approved asset's images, 3D files and motion pack. They go to the team Drive and the asset moves to Ready for Upload."
+        description="Hand in an approved asset as one .zip. It goes to the team Drive and the asset moves to Ready for Upload."
       />
       <main className="flex-1 overflow-auto p-4 sm:p-6">
         <FinalFilesForm assets={submittable} initialSku={sku ?? null} submitterEmail={session.user.email ?? null} forTeam={forTeam} />

@@ -5,13 +5,11 @@ import { errorMessage } from "@/lib/errors";
 import { isConfigured, getOrCreateFinalFilesFolder, startResumableUpload } from "@/lib/assets/drive-upload";
 import { FINAL_FILES_ACCEPTED_FROM_STATUS, nextFinalFilesVersion } from "@/lib/deliverables/deliverables-service";
 import { canSubmitFinalFiles, findAssetForFinalFiles } from "@/lib/deliverables/final-files-access";
-import { FINAL_FILE_KINDS, checkFinalFile } from "@/lib/deliverables/final-file-kinds";
+import { checkFinalZip } from "@/lib/deliverables/final-zip";
 
 export const dynamic = "force-dynamic";
 
 const SessionSchema = z.object({
-  // The form slot the file is for. Each has its own types and size limit (final-file-kinds.ts).
-  kind: z.enum(FINAL_FILE_KINDS),
   fileName: z.string().trim().min(1).max(300),
   mimeType: z.string().trim().max(200).optional(),
   sizeBytes: z.number().int().positive(),
@@ -41,7 +39,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const parsed = SessionSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "Missing file details" }, { status: 400 });
-  const problem = checkFinalFile(parsed.data.kind, parsed.data.fileName, parsed.data.sizeBytes);
+  // One .zip with everything in it, up to the size limit (lib/deliverables/final-zip.ts).
+  const problem = checkFinalZip(parsed.data.fileName, parsed.data.sizeBytes);
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
   // Drive has to answer the browser's upload with CORS headers for this exact origin.
