@@ -39,6 +39,7 @@ const RULES: MoveRule[] = [
   rule("in_review", "approved", "operator"),
   rule("in_review", "revisions_requested", "operator"),
   rule("revisions_requested", "in_progress", "artist"),
+  rule("revisions_requested", "approved", "operator"),
   rule("approved", "final_files_received", null, true),
   rule("final_files_received", "ready_for_upload", null, true),
   rule("ready_for_upload", "uploaded_to_roblox", null, true),
@@ -145,10 +146,14 @@ function testNextStep() {
   });
   assert.deepStrictEqual(step(OPERATOR, card("final_files_received")), { tone: "auto", text: "Moves to Ready for Upload on its own" });
 
-  // Revisions Requested moves back to an earlier column, In Production, and that is its next step.
+  // Revisions Requested: the artist moves it back to In Production (an earlier column, and still its
+  // next step), or the team approves it straight away once the changes are in.
   assert.deepStrictEqual(step(ARTIST, card("revisions_requested")), { tone: "you", text: "You can move it to In Production" });
+  assert.deepStrictEqual(step(OPERATOR, card("revisions_requested")), { tone: "you", text: "You can move it to Approved" });
   assert.deepStrictEqual(describeColumn(ARTIST, "revisions_requested", STATUSES, RULES).next, { tone: "you", text: "Next: you" });
-  assert.deepStrictEqual(describeColumn(OPERATOR, "revisions_requested", STATUSES, RULES).next, { tone: "other", text: "Next: the artist" });
+  assert.deepStrictEqual(describeColumn(OPERATOR, "revisions_requested", STATUSES, RULES).next, { tone: "you", text: "Next: you" });
+  assert.ok(allowedTargets(OPERATOR, card("revisions_requested"), STATUSES, RULES).has("approved"));
+  assert.ok(!allowedTargets(ARTIST, card("revisions_requested"), STATUSES, RULES).has("approved"));
 
   // A missing receipt holds a card in Marked for Payment.
   assert.deepStrictEqual(step(OPERATOR, card("marked_for_payment")), { tone: "blocked", text: "Needs the payment receipt" });

@@ -46,7 +46,7 @@ export const CANONICAL_STATUSES = [
     sortOrder: 5,
     description: "The team asked the artist for changes.",
     whoCanMoveIn: ["operator", "admin"],
-    nextActionHint: "The artist moves it back to In Production while making the changes.",
+    nextActionHint: "The artist moves it back to In Production while making the changes. If the changes are already in, the team moves it straight to Approved.",
     automationNote: null,
   },
   {
@@ -111,6 +111,7 @@ export const CANONICAL_TRANSITION_RULES = [
   { fromStatus: "in_progress", toStatus: "in_review", role: "artist", isAutomatic: false, triggerNote: "The artist submits a draft for review." },
   { fromStatus: "in_review", toStatus: "revisions_requested", role: "operator", isAutomatic: false, triggerNote: "The team asks the artist for changes." },
   { fromStatus: "revisions_requested", toStatus: "in_progress", role: "artist", isAutomatic: false, triggerNote: "The artist starts on the changes." },
+  { fromStatus: "revisions_requested", toStatus: "approved", role: "operator", isAutomatic: false, triggerNote: "The team approves the changes once they're in." },
   { fromStatus: "in_review", toStatus: "approved", role: "operator", isAutomatic: false, triggerNote: "The team approves the draft." },
   { fromStatus: "uploaded_to_roblox", toStatus: "marked_for_payment", role: "payment_admin", isAutomatic: false, triggerNote: "The payment admin, or someone allowed to mark payments, marks it for payment." },
   { fromStatus: "marked_for_payment", toStatus: "payment_done", role: "payment_admin", isAutomatic: false, triggerNote: "The payment admin pays the artist and attaches the receipt." },

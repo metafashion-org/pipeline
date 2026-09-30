@@ -253,6 +253,13 @@
       "when": 1790575818338,
       "tag": "0035_curation_review",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790750345241,
+      "tag": "0036_revisions_to_approved",
+      "breakpoints": true
     }
   ]
 }
