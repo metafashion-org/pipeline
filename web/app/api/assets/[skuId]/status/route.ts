@@ -5,7 +5,8 @@ import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { TransitionRefusedError } from "@/lib/kanban/transition-errors";
 import { z } from "zod";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
-import { notifyArtistAssetApproved } from "@/lib/notifications/artist-approval";
+import { notifyArtistOfStatusChange } from "@/lib/notifications/artist-status";
+import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 
 const StatusSchema = z.object({
   status: z.string().optional(),
@@ -44,9 +45,10 @@ export async function PATCH(
       caps: user.caps,
     });
 
-    // Approved is the artist's cue to hand in the final files, so they're told by email and Discord
-    // with a link to Submit final files. Never throws, so it can't undo the move.
-    if (result.changed && newStatus === "approved") await notifyArtistAssetApproved(skuId);
+    // Approved (hand in the final files) and Revisions Requested (make the changes, then send it back
+    // for review) are the artist's cue, so they're told by email and Discord. Never throws, so it
+    // can't undo the move.
+    if (result.changed && isArtistNotifiedStatus(newStatus)) await notifyArtistOfStatusChange(skuId, newStatus);
 
     // A status change can move an asset into or out of the Uploader Queue, and into Marketing's
     // "uploaded but not marketed" list, so both cached views are dropped rather than guessing which

@@ -19,6 +19,8 @@ import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { AssetOfferStatus } from "@/components/offers/AssetOfferStatus";
 import { CurationReviewSection } from "@/components/curation/CurationReviewSection";
 import { CURATED_STATUS } from "@/lib/kanban/move-rules";
+import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
+import { RemindArtistButton } from "./remind-artist-button";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
 // section shows: the hand-in button while Approved, the handed-in versions after.
@@ -167,6 +169,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                 canManage={viewerCapabilities.canAssignArtists}
                 enabled={open}
               />
+            )}
+            {viewerCapabilities.canAssignArtists && asset.artistName && isArtistNotifiedStatus(asset.currentStatus) && (
+              <RemindArtistButton sku={asset.sku} artistName={asset.artistName} status={asset.currentStatus} />
             )}
           </div>
         </section>
