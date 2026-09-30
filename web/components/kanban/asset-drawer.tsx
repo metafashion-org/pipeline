@@ -21,6 +21,7 @@ import { CurationReviewSection } from "@/components/curation/CurationReviewSecti
 import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
+import { HideCardButton } from "./board-visibility-buttons";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
 // section shows: the hand-in button while Approved, the handed-in versions after.
@@ -274,6 +275,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <AssetHistory sku={asset.sku} enabled={open} />
           </div>
         </section>
+
+        {viewerCapabilities.canAssignArtists && <HideCardButton sku={asset.sku} itemName={asset.itemName} />}
       </SheetContent>
     </Sheet>
   );

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
+import { shownOnBoard } from "@/lib/assets/board-visibility";
 import { personnel } from "@/lib/db/schema/personnel";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
@@ -31,8 +32,8 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
   const forTeam = caps.canAssignArtists;
   const personnelId = session.user.personnelId;
 
-  // Only an Approved asset takes final files. An artist sees only their own; with no personnel
-  // record they have none.
+  // Only an Approved asset takes final files, and not one the team took off the board. An artist
+  // sees only their own; with no personnel record they have none.
   const rows =
     forTeam || personnelId
       ? await db
@@ -50,6 +51,7 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
           .where(
             and(
               eq(assets.currentStatus, FINAL_FILES_ACCEPTED_FROM_STATUS),
+              shownOnBoard(),
               forTeam ? undefined : eq(assets.currentArtistId, personnelId as string)
             )
           )

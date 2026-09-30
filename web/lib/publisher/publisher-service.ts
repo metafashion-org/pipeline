@@ -7,7 +7,8 @@ import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { assetDeliverables } from "@/lib/db/schema/asset_deliverables";
 import { driveFolderUrl } from "@/lib/assets/drive-upload";
-import { eq, asc, desc, inArray } from "drizzle-orm";
+import { and, eq, asc, desc, inArray } from "drizzle-orm";
+import { shownOnBoard } from "@/lib/assets/board-visibility";
 import { parseRobloxLinkLines } from "./roblox-links";
 
 export interface ReadyForUploadItem {
@@ -48,7 +49,8 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
     .leftJoin(brandGroups, eq(assets.brandGroupId, brandGroups.id))
-    .where(eq(assets.currentStatus, "ready_for_upload"))
+    // A hidden card is old work the team took off the board, so it is not waiting on the uploader.
+    .where(and(eq(assets.currentStatus, "ready_for_upload"), shownOnBoard()))
     .orderBy(asc(assets.updatedAt));
 
   if (rows.length === 0) return [];

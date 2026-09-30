@@ -27,6 +27,7 @@ import {
   type TransitionErrorDetails,
 } from "./transition-errors";
 import { CURATED_STATUS, actorRoles, checkMove, type MoveRefusal, type MoveRule, type TransitionActor } from "./move-rules";
+import { shownOnBoard } from "@/lib/assets/board-visibility";
 
 export type { TransitionActor } from "./move-rules";
 
@@ -155,7 +156,8 @@ export async function getKanbanBoardData(
     // Filter in the query rather than after it. An artist's board read every asset in the
     // table and then discarded all but their own in JavaScript, on every page load. Compared
     // lowercase on both sides so this keeps the case-insensitive behaviour the filter had.
-    .where(artistEmail ? sql`lower(${personnel.email}) = ${artistEmail.toLowerCase()}` : undefined),
+    // Cards the team hid (lib/assets/board-visibility.ts) are left off both boards.
+    .where(and(shownOnBoard(), artistEmail ? sql`lower(${personnel.email}) = ${artistEmail.toLowerCase()}` : undefined)),
     db
       .select({
         assetId: artifactSkuLinks.assetId,
@@ -187,7 +189,7 @@ export async function getKanbanBoardData(
           .select({ assetId: curationItemIdeas.assetId, submittedBy: curationItemIdeas.submittedBy, status: curationItemIdeas.status })
           .from(curationItemIdeas)
           .innerJoin(assets, eq(curationItemIdeas.assetId, assets.id))
-          .where(eq(assets.currentStatus, CURATED_STATUS))
+          .where(and(eq(assets.currentStatus, CURATED_STATUS), shownOnBoard()))
       : Promise.resolve([]),
   ]);
 
