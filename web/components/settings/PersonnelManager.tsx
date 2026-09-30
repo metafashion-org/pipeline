@@ -44,9 +44,15 @@ import { Trash2, Link2, RefreshCw, Mail, MessageSquare, AlertTriangle } from "lu
 import { apiCall } from "@/lib/api-client";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format-date";
+import { PERSONNEL_ROLE_OPTIONS } from "@/lib/auth/rbac";
 import type { OnboardingRequestRow } from "@/lib/personnel/onboarding-sync";
 
-const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "uploader", "marketing", "payment_admin"];
+const ROLE_OPTIONS: readonly string[] = PERSONNEL_ROLE_OPTIONS;
+// Role chips show the stored role name, except where it reads badly.
+const ROLE_CHIP_LABELS: Record<string, string> = { full_time: "full-time team", payment_admin: "payment admin" };
+function roleChipLabel(role: string): string {
+  return ROLE_CHIP_LABELS[role.toLowerCase()] ?? role;
+}
 
 interface PersonnelRow {
   id: string;
@@ -406,7 +412,7 @@ export function PersonnelManager({
                           className="cursor-pointer"
                           onClick={() => toggleAddRole(role)}
                         >
-                          {role}
+                          {roleChipLabel(role)}
                         </Badge>
                       ))}
                     </div>
@@ -473,7 +479,7 @@ export function PersonnelManager({
                         onClick={() => openEditRoles(p)}
                       >
                         {p.roles.map((r) => (
-                          <Badge key={r} variant="secondary">{r}</Badge>
+                          <Badge key={r} variant="secondary">{roleChipLabel(r)}</Badge>
                         ))}
                       </button>
                       <Dialog
@@ -492,7 +498,7 @@ export function PersonnelManager({
                                 className="cursor-pointer"
                                 onClick={() => toggleEditRole(role)}
                               >
-                                {role}
+                                {roleChipLabel(role)}
                               </Badge>
                             ))}
                           </div>

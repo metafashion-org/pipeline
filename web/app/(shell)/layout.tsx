@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { teamDay } from "@/lib/team-tasks/task-rules";
 import { SWRProvider } from "@/components/providers/SWRProvider";
 import { ViewerProvider } from "@/components/providers/ViewerProvider";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
@@ -29,7 +30,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             the page and can widen it, which is how the board's column labels made the whole app
             scroll sideways. */}
         <div className="relative flex h-dvh w-full overflow-hidden">
-          <AppSidebar viewer={{ email: session?.user?.email ?? null, roles, capabilityOverrides }} />
+          <AppSidebar viewer={{ email: session?.user?.email ?? null, roles, capabilityOverrides }} today={teamDay(new Date())} />
           <div className="flex-1 min-w-0 overflow-hidden">{children}</div>
         </div>
       </ViewerProvider>

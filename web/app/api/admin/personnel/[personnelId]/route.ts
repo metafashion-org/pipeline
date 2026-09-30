@@ -9,11 +9,11 @@ import { ADMIN_ONLY_MESSAGE, isAdminAccessChangeByNonAdmin } from "@/lib/auth/ad
 import { invalidatePersonnelAuthCache } from "@/lib/auth/personnel-auth";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { PERSONNEL_ROLE_OPTIONS } from "@/lib/auth/rbac";
 
-const ROLE_OPTIONS = ["admin", "operator", "curator", "artist", "publisher", "uploader", "marketing", "payment_admin"] as const;
 
 const UpdateRolesSchema = z.object({
-  roles: z.array(z.enum(ROLE_OPTIONS)).min(1),
+  roles: z.array(z.enum(PERSONNEL_ROLE_OPTIONS)).min(1),
 });
 
 export async function PATCH(

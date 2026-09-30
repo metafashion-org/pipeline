@@ -24,9 +24,14 @@ import {
   Eye,
   ListTodo,
   UploadCloud,
+  ListChecks,
+  Info,
 } from "lucide-react";
 import { isRouteAllowedForRoles, getEffectiveCapabilities, ALL_ROLES, type SystemRole } from "@/lib/auth/rbac";
 import { ModeToggle } from "@/components/ui/mode-toggle";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatDate } from "@/lib/format-date";
+import { whatsNewFor, type WhatsNewEntry } from "./whats-new";
 import {
   Select,
   SelectContent,
@@ -48,6 +53,7 @@ function isArtistOnly(roles: string[]): boolean {
 const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; onlyFor?: (roles: string[]) => boolean }[] = [
   { href: "/artist", icon: ListTodo, label: "My Tasks", onlyFor: isArtistOnly },
   { href: "/artist/submit", icon: UploadCloud, label: "Submit final files" },
+  { href: "/team", icon: ListChecks, label: "Team Tasks" },
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
   { href: "/admin/calendar", icon: CalendarDays, label: "Calendar" },
@@ -71,12 +77,44 @@ const ROLE_LABELS: Record<SystemRole, string> = {
   publisher: "Publisher",
   marketing: "Marketing",
   payment_admin: "Payment Admin",
+  full_time: "Full-time team",
 };
 
 export interface SidebarViewer {
   email: string | null;
   roles: string[];
   capabilityOverrides: Record<string, boolean>;
+}
+
+// A new page's "New ⓘ" mark. Clicking it says why the page was added and what it's for. A sibling
+// of the link, not inside it, so opening it doesn't navigate.
+function WhatsNewMark({ label, entry }: { label: string; entry: WhatsNewEntry }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`New: why we added ${label}`}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400 hover:bg-emerald-500/25"
+        >
+          New
+          <Info className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="start" className="w-72 space-y-2 text-sm">
+        <p className="font-medium">New: {label}</p>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Why we added it</p>
+          <p>{entry.why}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">What it&apos;s for</p>
+          <p>{entry.whatFor}</p>
+        </div>
+        <p className="text-xs text-muted-foreground">Marked new until {formatDate(entry.newUntil)}.</p>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // Split out of AppSidebar so the picker's own JSX branching doesn't add to that function's
@@ -131,7 +169,7 @@ function PreviewRolePicker({
 // read here with useSession. That avoids mounting a SessionProvider and refetching on the client
 // something the server rendered this page with, and it means the nav is correct in the first
 // paint instead of filtering itself once the session arrives.
-export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
+export function AppSidebar({ viewer, today }: { viewer: SidebarViewer; today: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   // Separate from `collapsed`: on a phone the sidebar is a panel that slides over the page and
@@ -222,25 +260,33 @@ export function AppSidebar({ viewer }: { viewer: SidebarViewer }) {
         {visibleItems.map(({ href, icon: Icon, label }) => {
             // "/admin" and "/artist" are also the start of their section's other pages, so they match exactly.
             const isActive = href === "/admin" || href === "/artist" ? pathname === href : pathname.startsWith(href);
+            const whatsNew = whatsNewFor(href, today);
             return (
-              <Link
-                key={href}
-                href={href}
-                title={collapsed ? label : undefined}
-                aria-current={isActive ? "page" : undefined}
-                // min-h-10 rather than py-2: 40px is a target you can hit without aiming, and the
-                // rows were 32px.
-                className={`w-full flex items-center gap-3 min-h-10 pl-3 pr-2.5 rounded-md transition-colors ${
-                  isActive
-                    ? "text-white bg-sidebar-accent font-medium"
-                    : "text-sidebar-foreground hover:text-white hover:bg-sidebar-accent/60"
-                }`}
-                style={{ borderLeft: `3px solid ${isActive ? "var(--sidebar-primary)" : "transparent"}`, paddingLeft: "9px" }}
-              >
-                <Icon className="w-[18px] h-[18px] shrink-0" />
-                {!collapsed && <span className="truncate">{label}</span>}
-            </Link>
-          );
+              <div key={href} className="relative">
+                <Link
+                  href={href}
+                  title={collapsed ? label : undefined}
+                  aria-current={isActive ? "page" : undefined}
+                  // min-h-10 rather than py-2: 40px is a target you can hit without aiming, and the
+                  // rows were 32px. The right padding leaves room for a new page's mark.
+                  className={`w-full flex items-center gap-3 min-h-10 pl-3 rounded-md transition-colors ${whatsNew && !collapsed ? "pr-16" : "pr-2.5"} ${
+                    isActive
+                      ? "text-white bg-sidebar-accent font-medium"
+                      : "text-sidebar-foreground hover:text-white hover:bg-sidebar-accent/60"
+                  }`}
+                  style={{ borderLeft: `3px solid ${isActive ? "var(--sidebar-primary)" : "transparent"}`, paddingLeft: "9px" }}
+                >
+                  <span className="relative shrink-0">
+                    <Icon className="w-[18px] h-[18px]" />
+                    {/* Collapsed, the rail has no room for the mark, so a dot says the page is new. */}
+                    {whatsNew && collapsed && <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400" aria-label="New" />}
+                  </span>
+                  {/* A label beside a New mark wraps rather than being cut off. */}
+                  {!collapsed && <span className={whatsNew ? "leading-tight py-1" : "truncate"}>{label}</span>}
+                </Link>
+                {whatsNew && !collapsed && <WhatsNewMark label={label} entry={whatsNew} />}
+              </div>
+            );
         })}
       </div>
 

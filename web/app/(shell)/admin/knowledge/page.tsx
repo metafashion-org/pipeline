@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 // The Knowledge Registry, per the brief's §7 — every submitted artifact
 // lands here with its real, permanent typed ID (TR001, RK001, etc.).
-export default async function KnowledgePage() {
+export default async function KnowledgePage({ searchParams }: { searchParams: Promise<{ artifact?: string }> }) {
   const session = await getServerSession(authOptions);
   // Was admin-only, which is stricter than it needs to be given this page
   // lives under /admin (proxy.ts already only lets admin/operator this
@@ -36,7 +36,7 @@ export default async function KnowledgePage() {
       />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">
-        <KnowledgeRegistry initialArtifacts={artifacts} artifactTypes={types} />
+        <KnowledgeRegistry initialArtifacts={artifacts} artifactTypes={types} initialOpenId={(await searchParams).artifact ?? null} />
       </main>
     </div>
   );
