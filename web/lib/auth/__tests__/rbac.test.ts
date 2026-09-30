@@ -103,6 +103,16 @@ function testRbacSystem() {
   assert.strictEqual(landingPathForRoles(["payment_admin"]), "/admin");
   assert.strictEqual(landingPathForRoles([]), "/unauthorized", "someone with no roles has nowhere to land");
 
+  // Team Tasks is for the full-time team and admins. Freelancers never reach it.
+  assert.strictEqual(isRouteAllowedForRoles("/team", ["curator", "full_time"]), true, "a full-time curator opens Team Tasks");
+  assert.strictEqual(isRouteAllowedForRoles("/team", ["Full_Time"]), true, "the full-time role is matched case-insensitively");
+  assert.strictEqual(isRouteAllowedForRoles("/team", ["admin"]), true, "admins open Team Tasks");
+  assert.strictEqual(isRouteAllowedForRoles("/team", ["artist"]), false, "a freelance artist can't open Team Tasks");
+  assert.strictEqual(isRouteAllowedForRoles("/team", ["operator", "publisher"]), false, "operators need the full-time role too");
+  assert.strictEqual(isRouteAllowedForRoles("/admin", ["full_time"]), false, "the full-time role alone doesn't open the admin pages");
+  assert.strictEqual(landingPathForRoles(["full_time"]), "/team", "someone who is only full-time lands on Team Tasks");
+  assert.strictEqual(landingPathForRoles(["curator", "full_time"]), "/curator", "a full-time curator still lands on Curation");
+
   console.log("✓ All P2-T6 7-Role RBAC assertions passed cleanly!");
 }
 

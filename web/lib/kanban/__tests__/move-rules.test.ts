@@ -62,6 +62,7 @@ const NO_CAPS: CapabilitySet = {
   canAccessCuratorTools: false,
   canAccessMarketingTools: false,
   canManagePersonnel: false,
+  canUseTeamTasks: false,
 };
 
 const ARTIST_ID = "artist-1";

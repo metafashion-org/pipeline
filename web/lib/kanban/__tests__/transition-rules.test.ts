@@ -31,6 +31,7 @@ const NO_CAPS: CapabilitySet = {
   canAccessCuratorTools: false,
   canAccessMarketingTools: false,
   canManagePersonnel: false,
+  canUseTeamTasks: false,
 };
 
 // An operator granted canMarkForPayment as a per-person override, but not the payment_admin

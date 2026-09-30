@@ -53,6 +53,11 @@ export function useViewerCapabilities(): CapabilitySet {
   return useViewer().capabilities;
 }
 
+/** The signed-in person's personnel id, or null when they have no personnel record. */
+export function useViewerPersonnelId(): string | null {
+  return useViewer().personnelId;
+}
+
 /** The signed-in person as a card mover, in the shape checkMove (lib/kanban/move-rules.ts) takes. */
 export function useViewerAsActor(): TransitionActor {
   const { capabilities, roles, personnelId } = useViewer();

@@ -12,6 +12,7 @@ import { TREND_BRIEF_PREFIX } from "@/lib/knowledge/artifact-forms";
 import { ArtifactLinksDialog } from "./ArtifactLinksDialog";
 import { ArtifactDetailSheet } from "./ArtifactDetailSheet";
 import { NewArtifactDialog, type ArtifactTypeOption } from "./NewArtifactDialog";
+import { LinkedTeamTasks } from "./LinkedTeamTasks";
 
 // GET returns the same rows the page was rendered with (lib/knowledge/artifacts-service.ts), so a
 // create or archive refreshes the list without a page reload.
@@ -36,9 +37,12 @@ function matchesSearch(artifact: RegistryArtifactView, query: string): boolean {
 export function KnowledgeRegistry({
   initialArtifacts,
   artifactTypes,
+  initialOpenId = null,
 }: {
   initialArtifacts: RegistryArtifactView[];
   artifactTypes: ArtifactTypeOption[];
+  /** An artifact to open on load, from ?artifact=<id> (Team Tasks links here). */
+  initialOpenId?: string | null;
 }) {
   const { data, mutate } = useSWR<{ artifacts: RegistryArtifactView[] }>(ARTIFACTS_URL, jsonFetcher, {
     fallbackData: { artifacts: initialArtifacts },
@@ -46,7 +50,7 @@ export function KnowledgeRegistry({
   const artifacts = data?.artifacts ?? initialArtifacts;
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
   const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialOpenId);
   const [linksArtifact, setLinksArtifact] = useState<RegistryArtifactView | null>(null);
 
   const trendBriefs = useMemo(() => artifacts.filter((a) => a.typePrefix === TREND_BRIEF_PREFIX), [artifacts]);
@@ -150,7 +154,9 @@ export function KnowledgeRegistry({
           setOpenId(null);
           mutate();
         }}
-      />
+      >
+        {openArtifact && <LinkedTeamTasks key={openArtifact.id} artifactId={openArtifact.id} artifactTitle={openArtifact.title} />}
+      </ArtifactDetailSheet>
 
       {linksArtifact && (
         <ArtifactLinksDialog

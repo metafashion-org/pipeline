@@ -2,6 +2,7 @@
   "framework": "nextjs",
   "regions": ["bom1"],
   "crons": [
-    { "path": "/api/cron/email-queue", "schedule": "30 3 * * *" }
+    { "path": "/api/cron/email-queue", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/team-summary", "schedule": "30 13 * * *" }
   ]
 }

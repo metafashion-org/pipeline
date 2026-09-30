@@ -5,7 +5,10 @@ export type SystemRole =
   | "artist"
   | "publisher"
   | "marketing"
-  | "payment_admin";
+  | "payment_admin"
+  // Full-time internal staff (artists, curators, managers, in the office or remote). Opens Team Tasks
+  // and puts the person in its columns; combine it with their working role, e.g. ["curator", "full_time"].
+  | "full_time";
 
 // Every real role, for anything that needs to enumerate them (e.g. the sidebar's "preview nav as"
 // picker). "uploader" is deliberately excluded — it is an alias for "publisher" (see
@@ -18,7 +21,32 @@ export const ALL_ROLES: SystemRole[] = [
   "publisher",
   "marketing",
   "payment_admin",
+  "full_time",
 ];
+
+/** The role that makes someone part of the full-time team on Team Tasks. */
+export const FULL_TIME_ROLE: SystemRole = "full_time";
+
+/** Whether these roles include the full-time team role. Compared lowercase, like the rest of this file. */
+export function isFullTimeTeam(roles: (SystemRole | string)[]): boolean {
+  return roles.some((r) => String(r).toLowerCase() === FULL_TIME_ROLE);
+}
+
+/**
+ * Every role the Personnel page can give someone, including "uploader", which the live data still
+ * uses as the publisher role's name (see ROLE_ALIASES).
+ */
+export const PERSONNEL_ROLE_OPTIONS = [
+  "admin",
+  "operator",
+  "curator",
+  "artist",
+  "publisher",
+  "uploader",
+  "marketing",
+  "payment_admin",
+  "full_time",
+] as const;
 
 // The live personnel.roles data uses "uploader" for the role the brief calls
 // "Uploader," which docs/PLAN.md §5 defines as this app's "publisher" role.
@@ -45,6 +73,8 @@ export interface CapabilitySet {
   // Split from canManageSystemConfig so someone can run onboarding without also getting Settings,
   // Forms and the brief-field config. Only an admin can grant, change or remove admin access.
   canManagePersonnel: boolean;
+  // Opening Team Tasks, the full-time team's day-to-day task board. Admins and the full_time role.
+  canUseTeamTasks: boolean;
 }
 
 export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
@@ -64,6 +94,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: true,
 
     canManagePersonnel: true,
+    canUseTeamTasks: true,
   },
   operator: {
     canAssignArtists: true,
@@ -81,6 +112,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   },
   curator: {
     canAssignArtists: false,
@@ -98,6 +130,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   },
   artist: {
     canAssignArtists: false,
@@ -115,6 +148,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   },
   publisher: {
     canAssignArtists: false,
@@ -132,6 +166,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   },
   marketing: {
     canAssignArtists: false,
@@ -149,6 +184,7 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: true,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   },
   payment_admin: {
     canAssignArtists: false,
@@ -166,6 +202,25 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
+  },
+  full_time: {
+    canAssignArtists: false,
+    canMoveToInProduction: false,
+    canMoveToInReview: false,
+    canRequestRevisions: false,
+    canApprove: false,
+    canAssignPublisher: false,
+    canPublishToRoblox: false,
+    canMarkForPayment: false,
+    canMarkPaymentDone: false,
+    canViewAllAssets: false,
+    canManageSystemConfig: false,
+    canAccessCuratorTools: false,
+    canAccessMarketingTools: false,
+
+    canManagePersonnel: false,
+    canUseTeamTasks: true,
   },
 };
 
@@ -193,6 +248,7 @@ export function getEffectiveCapabilities(
     canAccessMarketingTools: false,
 
     canManagePersonnel: false,
+    canUseTeamTasks: false,
   };
 
   // Union capabilities granted by any assigned role
@@ -275,6 +331,9 @@ export function isRouteAllowedForRoles(
   if (pathname.startsWith("/curator")) {
     return caps.canAccessCuratorTools || has("curator");
   }
+  if (pathname.startsWith("/team")) {
+    return caps.canUseTeamTasks;
+  }
 
   return true;
 }
@@ -290,7 +349,7 @@ export function landingPathForRoles(
   roles: (SystemRole | string)[],
   capabilityOverrides: Record<string, boolean> = {}
 ): string {
-  const candidates = ["/admin", "/artist", "/curator", "/publisher"];
+  const candidates = ["/admin", "/artist", "/curator", "/publisher", "/team"];
   return candidates.find((p) => isRouteAllowedForRoles(p, roles, capabilityOverrides)) || "/unauthorized";
 }
 

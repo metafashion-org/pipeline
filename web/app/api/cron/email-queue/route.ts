@@ -3,6 +3,8 @@ import { ENV } from "@/lib/env";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { sendDueEmails } from "@/lib/email/queue-worker";
 import { linkMissingArtistChannels } from "@/lib/discord/artist-channel";
+import { makeRecurringTasksFor } from "@/lib/team-tasks/recurring-service";
+import { teamDay } from "@/lib/team-tasks/task-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -28,5 +30,11 @@ export async function GET(request: NextRequest) {
     console.error("[cron] Discord channel linking failed:", error);
     return null;
   });
-  return NextResponse.json({ processed: results.length, results, discordLinks });
+  // Same morning run (9 am in India): makes today's repeating Team Tasks, so they're in each
+  // owner's plan before the day starts. Opening the Team Tasks board makes them too if this didn't run.
+  const recurringTasks = await makeRecurringTasksFor(teamDay(new Date())).catch((error) => {
+    console.error("[cron] making repeating team tasks failed:", error);
+    return null;
+  });
+  return NextResponse.json({ processed: results.length, results, discordLinks, recurringTasks });
 }
