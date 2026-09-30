@@ -1,6 +1,9 @@
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { assetDeliverables } from "@/lib/db/schema/asset_deliverables";
+import { assetFinalSubmissions } from "@/lib/db/schema/asset_final_submissions";
+import { personnel } from "@/lib/db/schema/personnel";
+import { checkSubmission, type FinalFileKind } from "./final-file-kinds";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { asc, desc, eq, max } from "drizzle-orm";
@@ -12,6 +15,8 @@ export const FINAL_FILES_ACCEPTED_FROM_STATUS = "approved";
 
 /** One file of a final-files submission, already verified to be in the submission's Drive folder. */
 export interface FinalFileInput {
+  /** The form slot it was uploaded in. */
+  kind: FinalFileKind;
   fileName: string;
   mimeType: string | null;
   sizeBytes: number | null;
@@ -32,7 +37,7 @@ export async function nextFinalFilesVersion(assetId: string): Promise<number> {
 /**
  * Records a final-files submission and puts the asset in the uploader's queue.
  *
- * Input: the SKU, the submission's version, its files, who submitted, and optional notes.
+ * Input: the SKU, the submission's version, its files, who submitted, and the artist's comments.
  * Output: the asset's new status.
  *
  * Per the brief's §8 the asset has to be Approved and the submission has to hold at least one
@@ -46,7 +51,7 @@ export async function submitFinalFiles(
   version: number,
   files: FinalFileInput[],
   submitterId?: string,
-  notes?: string
+  comments?: string
 ) {
   const assetRecord = await db.select().from(assets).where(eq(assets.sku, sku)).limit(1);
   if (assetRecord.length === 0) throw new Error(`Asset with SKU '${sku}' not found`);
@@ -78,15 +83,25 @@ export async function submitFinalFiles(
     throw new Error("Submission rejected: at least one final file is required.");
   }
 
+  // The same rules the Submit final files page checks before uploading: at least one image, the 3D
+  // files or a motion pack, and no more files in a slot than it takes.
+  const problem = checkSubmission(files);
+  if (problem) throw new Error(`Submission rejected: ${problem}`);
+
+  const [submission] = await db
+    .insert(assetFinalSubmissions)
+    .values({ assetId: asset.id, version, comments: comments || null, submittedBy: submitterId || null })
+    .returning({ id: assetFinalSubmissions.id });
+
   await db.insert(assetDeliverables).values(
-    files.map((file) => ({ ...file, assetId: asset.id, version, uploadedBy: submitterId || null }))
+    files.map((file) => ({ ...file, assetId: asset.id, version, submissionId: submission.id, uploadedBy: submitterId || null }))
   );
 
   await updateAssetStatusInKanban(
     sku,
     "final_files_received",
     { system: true },
-    notes ? `Final files v${version} submitted: ${notes}` : `Final files v${version} submitted (${files.length} files)`
+    comments ? `Final files v${version} submitted: ${comments}` : `Final files v${version} submitted (${files.length} files)`
   );
 
   await db.insert(auditLog).values({
@@ -94,7 +109,7 @@ export async function submitFinalFiles(
     entityType: "asset",
     entityId: asset.id,
     actorId: submitterId || null,
-    payload: { sku, version, files: files.map((f) => ({ name: f.fileName, driveFileId: f.driveFileId })) },
+    payload: { sku, version, submissionId: submission.id, files: files.map((f) => ({ name: f.fileName, kind: f.kind, driveFileId: f.driveFileId })) },
   });
 
   const queued = await notifyUploader(sku, submitterId, `Final files v${version} are in Drive, ready to upload`);
@@ -105,16 +120,38 @@ export interface FinalFilesSubmission {
   version: number;
   folderUrl: string;
   submittedAt: Date;
-  files: { id: string; fileName: string; mimeType: string | null; sizeBytes: number | null; driveUrl: string }[];
+  /** The artist's comments on this hand-in, or null. */
+  comments: string | null;
+  /** Who handed it in, or null when unknown. */
+  submittedBy: string | null;
+  files: {
+    id: string;
+    kind: FinalFileKind | null;
+    fileName: string;
+    mimeType: string | null;
+    sizeBytes: number | null;
+    driveUrl: string;
+  }[];
 }
 
-/** Every final-files submission for an asset, newest version first, each with its files and folder. */
+/**
+ * Every final-files submission for an asset, newest version first, each with its files (and the
+ * slot each came in), its folder, the artist's comments and who handed it in.
+ */
 export async function getFinalFilesForAsset(assetId: string): Promise<FinalFilesSubmission[]> {
-  const rows = await db
-    .select()
-    .from(assetDeliverables)
-    .where(eq(assetDeliverables.assetId, assetId))
-    .orderBy(desc(assetDeliverables.version), asc(assetDeliverables.fileName));
+  const [rows, submissions] = await Promise.all([
+    db
+      .select()
+      .from(assetDeliverables)
+      .where(eq(assetDeliverables.assetId, assetId))
+      .orderBy(desc(assetDeliverables.version), asc(assetDeliverables.fileName)),
+    db
+      .select({ version: assetFinalSubmissions.version, comments: assetFinalSubmissions.comments, submittedBy: personnel.name })
+      .from(assetFinalSubmissions)
+      .leftJoin(personnel, eq(assetFinalSubmissions.submittedBy, personnel.id))
+      .where(eq(assetFinalSubmissions.assetId, assetId)),
+  ]);
+  const submissionByVersion = new Map(submissions.map((s) => [s.version, s]));
 
   const byVersion = new Map<number, FinalFilesSubmission>();
   for (const row of rows) {
@@ -122,10 +159,13 @@ export async function getFinalFilesForAsset(assetId: string): Promise<FinalFiles
       version: row.version,
       folderUrl: driveFolderUrl(row.driveFolderId),
       submittedAt: row.createdAt,
+      comments: submissionByVersion.get(row.version)?.comments ?? null,
+      submittedBy: submissionByVersion.get(row.version)?.submittedBy ?? null,
       files: [],
     };
     submission.files.push({
       id: row.id,
+      kind: row.kind,
       fileName: row.fileName,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,

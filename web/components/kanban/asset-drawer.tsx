@@ -11,7 +11,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
-import { SubmitFinalFilesDialog, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
+import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
@@ -225,7 +225,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
               {canSubmitFinalFiles && asset.currentStatus === "approved" && (
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <p className="text-xs text-muted-foreground">Approved. Waiting on the artist&apos;s final files.</p>
-                  <SubmitFinalFilesDialog sku={asset.sku} />
+                  <HandInFinalFilesLink sku={asset.sku} />
                 </div>
               )}
               {/* Assets handed in before files went straight to Ready for Upload can still be sitting here. */}
