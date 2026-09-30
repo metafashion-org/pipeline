@@ -4,8 +4,8 @@ import { personnel } from "./personnel";
 
 /**
  * One hand-in of an asset's final files, from the Submit final files page (the in-app replacement
- * for the "3D Art Submission Form" Google Form). Its files are asset_deliverables rows pointing at
- * it; the files themselves are in the Shared Drive under "<SKU>/Final Files/v<version>/".
+ * for the "3D Art Submission Form" Google Form). Its .zip is an asset_deliverables row pointing at
+ * it; the file itself is in the Shared Drive under "<SKU>/Final Files/v<version>/".
  */
 export const assetFinalSubmissions = pgTable(
   "asset_final_submissions",

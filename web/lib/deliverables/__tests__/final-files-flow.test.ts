@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { submitFinalFiles, notifyUploader, getFinalFilesForAsset, nextFinalFilesVersion, type FinalFileInput } from "../deliverables-service";
-import type { FinalFileKind } from "../final-file-kinds";
+import { FINAL_ZIP_KIND } from "../final-zip";
 import { recordRobloxUpload } from "@/lib/publisher/publisher-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
@@ -16,9 +16,9 @@ const ARTIST_EMAIL = "test-final-files-flow-artist@example.com";
 let assetId = "";
 
 // What the route passes in after reading the files back from Drive; no Drive call in this test.
-function fakeFile(name: string, kind: FinalFileKind): FinalFileInput {
+function fakeFile(name: string): FinalFileInput {
   return {
-    kind,
+    kind: FINAL_ZIP_KIND,
     fileName: name,
     mimeType: "application/octet-stream",
     sizeBytes: 1024,
@@ -62,7 +62,7 @@ async function testFinalFilesUploaderRobloxFlow() {
   try {
     // 1. submitFinalFiles must reject an asset that isn't Approved yet.
     try {
-      await submitFinalFiles(TEST_SKU, 1, [fakeFile("front.png", "images"), fakeFile("hat.zip", "model_zip")], artist.id);
+      await submitFinalFiles(TEST_SKU, 1, [fakeFile("hat.zip")], artist.id);
       assert.fail("Should reject submission when asset is not Approved");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -88,22 +88,24 @@ async function testFinalFilesUploaderRobloxFlow() {
     }
     console.log("Confirmed submitFinalFiles rejects an empty file list");
 
-    // 2b. The form's rules: at least one image, and the 3D files or a motion pack.
-    try {
-      await submitFinalFiles(TEST_SKU, 1, [fakeFile("hat.zip", "model_zip")], artist.id);
-      assert.fail("Should reject a submission with no images");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      assert.ok(message.includes("at least one image"), `Unexpected rejection message: ${message}`);
+    // 2b. Everything goes in one .zip: two files, or a file that isn't a .zip, are refused.
+    for (const files of [[fakeFile("hat.zip"), fakeFile("extra.zip")], [fakeFile("front.png")]]) {
+      try {
+        await submitFinalFiles(TEST_SKU, 1, files, artist.id);
+        assert.fail("Should reject anything but one .zip");
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        assert.ok(message.includes("one .zip") || message.includes("isn't a .zip"), `Unexpected rejection message: ${message}`);
+      }
     }
-    console.log("Confirmed submitFinalFiles rejects a submission with no images");
+    console.log("Confirmed submitFinalFiles takes exactly one .zip");
 
     // 3. A valid submission records the files and puts the asset straight in the uploader's queue.
     assert.strictEqual(await nextFinalFilesVersion(assetId), 1, "The first submission is version 1");
     const submitResult = await submitFinalFiles(
       TEST_SKU,
       1,
-      [fakeFile("front.png", "images"), fakeFile("hat.zip", "model_zip")],
+      [fakeFile("hat.zip")],
       artist.id,
       "Logo removed from the brim"
     );
@@ -116,7 +118,7 @@ async function testFinalFilesUploaderRobloxFlow() {
     const submissions = await getFinalFilesForAsset(assetId);
     assert.strictEqual(submissions.length, 1);
     assert.strictEqual(submissions[0].version, 1);
-    assert.deepStrictEqual(submissions[0].files.map((f) => `${f.kind}:${f.fileName}`), ["images:front.png", "model_zip:hat.zip"]);
+    assert.deepStrictEqual(submissions[0].files.map((f) => `${f.kind}:${f.fileName}`), ["final_zip:hat.zip"]);
     assert.strictEqual(submissions[0].comments, "Logo removed from the brim");
     assert.strictEqual(submissions[0].submittedBy, "Test Final Files Artist");
     assert.strictEqual(await nextFinalFilesVersion(assetId), 2, "The next submission would be version 2");

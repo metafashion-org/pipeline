@@ -3,7 +3,7 @@ import { assets } from "@/lib/db/schema/assets";
 import { assetDeliverables } from "@/lib/db/schema/asset_deliverables";
 import { assetFinalSubmissions } from "@/lib/db/schema/asset_final_submissions";
 import { personnel } from "@/lib/db/schema/personnel";
-import { checkSubmission, type FinalFileKind } from "./final-file-kinds";
+import { checkFinalZip, type FinalFileKind } from "./final-zip";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { asc, desc, eq, max } from "drizzle-orm";
@@ -15,7 +15,7 @@ export const FINAL_FILES_ACCEPTED_FROM_STATUS = "approved";
 
 /** One file of a final-files submission, already verified to be in the submission's Drive folder. */
 export interface FinalFileInput {
-  /** The form slot it was uploaded in. */
+  /** What the file is: the one .zip an artist hands in. */
   kind: FinalFileKind;
   fileName: string;
   mimeType: string | null;
@@ -83,9 +83,9 @@ export async function submitFinalFiles(
     throw new Error("Submission rejected: at least one final file is required.");
   }
 
-  // The same rules the Submit final files page checks before uploading: at least one image, the 3D
-  // files or a motion pack, and no more files in a slot than it takes.
-  const problem = checkSubmission(files);
+  // Everything goes in one .zip, the same rule the Submit final files page checks before uploading.
+  if (files.length > 1) throw new Error("Submission rejected: hand in one .zip with everything in it.");
+  const problem = checkFinalZip(files[0].fileName, files[0].sizeBytes ?? 0);
   if (problem) throw new Error(`Submission rejected: ${problem}`);
 
   const [submission] = await db
@@ -135,8 +135,8 @@ export interface FinalFilesSubmission {
 }
 
 /**
- * Every final-files submission for an asset, newest version first, each with its files (and the
- * slot each came in), its folder, the artist's comments and who handed it in.
+ * Every final-files submission for an asset, newest version first, each with its files, its
+ * folder, the artist's comments and who handed it in.
  */
 export async function getFinalFilesForAsset(assetId: string): Promise<FinalFilesSubmission[]> {
   const [rows, submissions] = await Promise.all([
