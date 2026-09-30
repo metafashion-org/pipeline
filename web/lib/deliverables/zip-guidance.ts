@@ -3,8 +3,9 @@ import { artifactSkuLinks } from "@/lib/db/schema/artifact_sku_links";
 import { artifactCategoryLinks } from "@/lib/db/schema/artifact_category_links";
 import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { artifactTypeConfig } from "@/lib/db/schema/artifact_type_config";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getBriefFieldsForAsset } from "@/lib/curation/curation-service";
+import { activeArtifact } from "@/lib/knowledge/artifacts-service";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 
 /** A Registry item linked to the asset or its category, such as motion pack guidelines. */
@@ -53,7 +54,7 @@ export async function getZipGuidance(
           .from(artifactSkuLinks)
           .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id))
           .innerJoin(artifactTypeConfig, eq(knowledgeArtifacts.artifactTypeId, artifactTypeConfig.id))
-          .where(inArray(artifactSkuLinks.assetId, assetIds))
+          .where(and(inArray(artifactSkuLinks.assetId, assetIds), activeArtifact()))
       : Promise.resolve([]),
     categories.length > 0
       ? db
@@ -61,7 +62,7 @@ export async function getZipGuidance(
           .from(artifactCategoryLinks)
           .innerJoin(knowledgeArtifacts, eq(artifactCategoryLinks.artifactId, knowledgeArtifacts.id))
           .innerJoin(artifactTypeConfig, eq(knowledgeArtifacts.artifactTypeId, artifactTypeConfig.id))
-          .where(inArray(artifactCategoryLinks.category, categories))
+          .where(and(inArray(artifactCategoryLinks.category, categories), activeArtifact()))
       : Promise.resolve([]),
     Promise.all(assetRows.map((a) => getBriefFieldsForAsset(a.id))),
   ]);

@@ -28,6 +28,7 @@ import {
 } from "./transition-errors";
 import { CURATED_STATUS, actorRoles, checkMove, type MoveRefusal, type MoveRule, type TransitionActor } from "./move-rules";
 import { shownOnBoard } from "@/lib/assets/board-visibility";
+import { activeArtifact } from "@/lib/knowledge/artifacts-service";
 
 export type { TransitionActor } from "./move-rules";
 
@@ -166,7 +167,8 @@ export async function getKanbanBoardData(
         title: knowledgeArtifacts.title,
       })
       .from(artifactSkuLinks)
-      .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id)),
+      .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id))
+      .where(activeArtifact()),
     // One row per asset: its newest offer.
     db
       .selectDistinctOn([assetOffers.assetId], { assetId: assetOffers.assetId, status: assetOffers.status })

@@ -86,6 +86,10 @@ export interface ArtifactSubmissionValues {
   tags?: string[];
   category?: string;
   usageNotes?: string;
+  /** The per-type fields with no column, keyed as lib/knowledge/artifact-forms.ts defines them. */
+  details?: Record<string, unknown>;
+  /** The Trend Brief a moodboard or recolor kit came from. */
+  trendArtifactId?: string;
 }
 
 export async function processArtifactSubmission(submissionId: string, actorId?: string) {
@@ -106,6 +110,8 @@ export async function processArtifactSubmission(submissionId: string, actorId?: 
     fileUrl: vals.fileUrl,
     tags: vals.tags,
     usageNotes: vals.usageNotes,
+    details: vals.details,
+    trendArtifactId: vals.trendArtifactId,
     addedBy: submission.submitterId || undefined,
     actorId,
   });

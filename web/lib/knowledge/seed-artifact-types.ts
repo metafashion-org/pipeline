@@ -15,16 +15,18 @@ import { artifactTypeConfig } from "@/lib/db/schema/artifact_type_config";
 import { eq } from "drizzle-orm";
 
 export const CANONICAL_ARTIFACT_TYPES = [
-  { prefix: "TR", label: "Trend Brief", sortOrder: 0 },
-  { prefix: "INS", label: "Insight", sortOrder: 1 },
-  { prefix: "ANA", label: "Analysis", sortOrder: 2 },
-  { prefix: "RK", label: "Recolor Kit", sortOrder: 3 },
-  { prefix: "REF", label: "Reference", sortOrder: 4 },
-  { prefix: "MBD", label: "Moodboard", sortOrder: 5 },
-  { prefix: "TG", label: "Technical Guideline", sortOrder: 6 },
-  { prefix: "MKT", label: "Marketing Insight", sortOrder: 7 },
-  { prefix: "CD", label: "Creation Doc", sortOrder: 8 },
-  { prefix: "PRM", label: "Prompt", sortOrder: 9 },
+  { prefix: "TR", label: "Trend Brief", sortOrder: 0, isActive: true },
+  { prefix: "INS", label: "Insight", sortOrder: 1, isActive: true },
+  { prefix: "ANA", label: "Analysis", sortOrder: 2, isActive: true },
+  { prefix: "RK", label: "Recolor Kit", sortOrder: 3, isActive: true },
+  // Retired from the New Artifact form (migration 0039): no artifacts and no clear use.
+  { prefix: "REF", label: "Reference", sortOrder: 4, isActive: false },
+  { prefix: "MBD", label: "Moodboard", sortOrder: 5, isActive: true },
+  { prefix: "TG", label: "Technical Guideline", sortOrder: 6, isActive: true },
+  // Retired from the New Artifact form (migration 0039): marketing insights are filed as Insights.
+  { prefix: "MKT", label: "Marketing Insight", sortOrder: 7, isActive: false },
+  { prefix: "CD", label: "Creation Doc", sortOrder: 8, isActive: true },
+  { prefix: "PRM", label: "Prompt", sortOrder: 9, isActive: true },
 ];
 
 /**
@@ -46,7 +48,7 @@ export async function seedArtifactTypes(): Promise<{ created: number }> {
     if (existing) {
       await db
         .update(artifactTypeConfig)
-        .set({ label: type.label, sortOrder: type.sortOrder })
+        .set({ label: type.label, sortOrder: type.sortOrder, isActive: type.isActive })
         .where(eq(artifactTypeConfig.id, existing.id));
     } else {
       await db.insert(artifactTypeConfig).values(type);

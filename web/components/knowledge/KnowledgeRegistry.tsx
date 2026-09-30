@@ -1,203 +1,87 @@
 "use client";
 
-import { errorMessage } from "@/lib/errors";
-import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from "react";
+import useSWR from "swr";
+import { ExternalLink, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiCall } from "@/lib/api-client";
+import { jsonFetcher } from "@/lib/fetcher";
 import { formatDate } from "@/lib/format-date";
-import { toast } from "sonner";
-import { Plus, ExternalLink, Link2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { RegistryArtifactView } from "@/lib/dashboard/views";
+import { TREND_BRIEF_PREFIX } from "@/lib/knowledge/artifact-forms";
 import { ArtifactLinksDialog } from "./ArtifactLinksDialog";
+import { ArtifactDetailSheet } from "./ArtifactDetailSheet";
+import { NewArtifactDialog, type ArtifactTypeOption } from "./NewArtifactDialog";
 
-interface ArtifactType {
-  id: string;
-  prefix: string;
-  label: string;
+// GET returns the same rows the page was rendered with (lib/knowledge/artifacts-service.ts), so a
+// create or archive refreshes the list without a page reload.
+const ARTIFACTS_URL = "/api/admin/knowledge/artifacts";
+const ALL_TYPES = "all";
+// How much of an artifact's description the list shows under its title.
+const SNIPPET_CHARS = 140;
+
+function matchesSearch(artifact: RegistryArtifactView, query: string): boolean {
+  if (!query) return true;
+  const haystack = [artifact.artifactId, artifact.title, artifact.description, artifact.usageNotes, artifact.typeLabel, ...(artifact.tags ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query.toLowerCase());
 }
-
-interface Artifact {
-  id: string;
-  artifactId: string;
-  title: string;
-  description: string | null;
-  source: string | null;
-  fileUrl: string | null;
-  tags: string[] | null;
-  usageNotes: string | null;
-  createdAt: string;
-  typeLabel: string;
-  typePrefix: string;
-}
-
-const EMPTY_FORM = {
-  artifactTypeId: "",
-  title: "",
-  description: "",
-  source: "",
-  fileUrl: "",
-  tags: "",
-  category: "",
-  usageNotes: "",
-};
 
 /**
- * The Knowledge Registry — a list of every submitted artifact with its real,
- * permanent typed id (TR001, RK001, etc. — see lib/knowledge/artifact-id-service.ts),
- * plus the submission form that creates new ones.
+ * The Registry: every artifact with its permanent typed ID (TR001, INS002, ...), filterable by
+ * type and searchable, with the New Artifact form and each artifact's detail sheet.
  */
 export function KnowledgeRegistry({
   initialArtifacts,
   artifactTypes,
 }: {
-  initialArtifacts: Artifact[];
-  artifactTypes: ArtifactType[];
+  initialArtifacts: RegistryArtifactView[];
+  artifactTypes: ArtifactTypeOption[];
 }) {
-  const [artifacts, setArtifacts] = useState(initialArtifacts);
-  const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [linksArtifact, setLinksArtifact] = useState<Artifact | null>(null);
-  const [linkCounts, setLinkCounts] = useState<Record<string, number>>({});
+  const { data, mutate } = useSWR<{ artifacts: RegistryArtifactView[] }>(ARTIFACTS_URL, jsonFetcher, {
+    fallbackData: { artifacts: initialArtifacts },
+  });
+  const artifacts = data?.artifacts ?? initialArtifacts;
+  const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
+  const [query, setQuery] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [linksArtifact, setLinksArtifact] = useState<RegistryArtifactView | null>(null);
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) setForm(EMPTY_FORM);
-    setOpen(next);
-  };
-
-  const handleSubmit = async () => {
-    if (!form.artifactTypeId) {
-      toast.error("Artifact type is required");
-      return;
-    }
-    if (!form.title.trim()) {
-      toast.error("Title is required");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const { ok, data } = await apiCall<{ artifact: Artifact }>("/api/admin/knowledge/artifacts", {
-        method: "POST",
-        body: {
-          artifactTypeId: form.artifactTypeId,
-          title: form.title.trim(),
-          description: form.description.trim() || undefined,
-          source: form.source.trim() || undefined,
-          fileUrl: form.fileUrl.trim() || undefined,
-          tags: form.tags.trim() ? form.tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
-          category: form.category.trim() || undefined,
-          usageNotes: form.usageNotes.trim() || undefined,
-        },
-      });
-      if (!ok) throw new Error(data.error || "Failed to create artifact");
-
-      const type = artifactTypes.find((t) => t.id === form.artifactTypeId)!;
-      setArtifacts((prev) => [
-        ...prev,
-        {
-          id: data.artifact.id,
-          artifactId: data.artifact.artifactId,
-          title: data.artifact.title,
-          description: data.artifact.description,
-          source: data.artifact.source,
-          fileUrl: data.artifact.fileUrl,
-          tags: data.artifact.tags,
-          usageNotes: data.artifact.usageNotes,
-          createdAt: data.artifact.createdAt,
-          typeLabel: type.label,
-          typePrefix: type.prefix,
-        },
-      ]);
-      toast.success(`Created ${data.artifact.artifactId}`);
-      handleOpenChange(false);
-    } catch (e: unknown) {
-      toast.error(errorMessage(e, "Failed to create artifact"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const trendBriefs = useMemo(() => artifacts.filter((a) => a.typePrefix === TREND_BRIEF_PREFIX), [artifacts]);
+  // Chips for the types that have artifacts, in the order types are configured.
+  const typeChips = artifactTypes.filter((t) => artifacts.some((a) => a.typePrefix === t.prefix));
+  const shown = artifacts
+    .filter((a) => typeFilter === ALL_TYPES || a.typePrefix === typeFilter)
+    .filter((a) => matchesSearch(a, query.trim()))
+    .slice()
+    .reverse();
+  const openArtifact = artifacts.find((a) => a.id === openId) ?? null;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="h-4 w-4 mr-1.5" /> New Artifact
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Submit a Registry Artifact</DialogTitle>
-              <DialogDescription>It gets a permanent ID (TR001, for example) on submit, so it can be cited and linked from anywhere.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="artifact-type" className="text-xs text-muted-foreground mb-1 block">Type</label>
-                <Select value={form.artifactTypeId} onValueChange={(v) => setForm({ ...form, artifactTypeId: v })}>
-                  <SelectTrigger id="artifact-type">
-                    <SelectValue placeholder="Select a type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {artifactTypes.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.label} ({t.prefix})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label htmlFor="artifact-title" className="text-xs text-muted-foreground mb-1 block">Title</label>
-                <Input id="artifact-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Q3 streetwear color trends" />
-              </div>
-              <div>
-                <label htmlFor="artifact-description" className="text-xs text-muted-foreground mb-1 block">Description</label>
-                <Textarea id="artifact-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="artifact-source" className="text-xs text-muted-foreground mb-1 block">Source</label>
-                  <Input id="artifact-source" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="Where this came from" />
-                </div>
-                <div>
-                  <label htmlFor="artifact-file-url" className="text-xs text-muted-foreground mb-1 block">File / Link</label>
-                  <Input id="artifact-file-url" value={form.fileUrl} onChange={(e) => setForm({ ...form, fileUrl: e.target.value })} placeholder="https://..." />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="artifact-tags" className="text-xs text-muted-foreground mb-1 block">Tags (comma-separated)</label>
-                  <Input id="artifact-tags" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="streetwear, y2k" />
-                </div>
-                <div>
-                  <label htmlFor="artifact-category" className="text-xs text-muted-foreground mb-1 block">Category (links this artifact to it)</label>
-                  <Input id="artifact-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Outerwear" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="artifact-usage-notes" className="text-xs text-muted-foreground mb-1 block">Usage Notes</label>
-                <Textarea id="artifact-usage-notes" value={form.usageNotes} onChange={(e) => setForm({ ...form, usageNotes: e.target.value })} rows={2} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={submitting}>{submitting ? "Submitting..." : "Submit"}</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[{ prefix: ALL_TYPES, label: "All" }, ...typeChips].map((t) => (
+            <button
+              key={t.prefix}
+              type="button"
+              onClick={() => setTypeFilter(t.prefix)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                typeFilter === t.prefix ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the Registry" className="h-8 w-[220px] pl-7 text-xs" />
+        </div>
+        <NewArtifactDialog types={artifactTypes} trendBriefs={trendBriefs} onCreated={() => mutate()} />
       </div>
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -208,47 +92,47 @@ export function KnowledgeRegistry({
                 <th className="text-left px-4 py-2 font-medium">ID</th>
                 <th className="text-left px-4 py-2 font-medium">Type</th>
                 <th className="text-left px-4 py-2 font-medium">Title</th>
-                <th className="text-left px-4 py-2 font-medium">Tags</th>
                 <th className="text-left px-4 py-2 font-medium">Added</th>
-                <th className="text-left px-4 py-2 font-medium">File</th>
-                <th className="text-left px-4 py-2 font-medium">Links</th>
+                <th className="text-left px-4 py-2 font-medium">Open</th>
               </tr>
             </thead>
             <tbody>
-              {artifacts.length === 0 && (
+              {shown.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    No artifacts yet. Submit the first one above.
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    {artifacts.length === 0 ? "Nothing in the Registry yet. Add the first one above." : "Nothing matches."}
                   </td>
                 </tr>
               )}
-              {artifacts.map((a) => (
-                <tr key={a.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2 font-mono text-xs">{a.artifactId}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{a.typeLabel}</td>
-                  <td className="px-4 py-2">{a.title}</td>
-                  <td className="px-4 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {(a.tags || []).map((t) => (
-                        <span key={t} className="text-xs px-1.5 py-0.5 bg-muted rounded-full text-muted-foreground">
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground text-xs">{formatDate(a.createdAt)}</td>
-                  <td className="px-4 py-2">
-                    {a.fileUrl && (
-                      <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+              {shown.map((a) => (
+                <tr key={a.id} className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/40" onClick={() => setOpenId(a.id)}>
+                  <td className="px-4 py-2 font-mono text-xs align-top">{a.artifactId}</td>
+                  <td className="px-4 py-2 text-muted-foreground align-top">{a.typeLabel}</td>
+                  <td className="px-4 py-2 align-top">
+                    <p>{a.title}</p>
+                    {a.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {a.description.length > SNIPPET_CHARS ? `${a.description.slice(0, SNIPPET_CHARS)}...` : a.description}
+                      </p>
                     )}
                   </td>
-                  <td className="px-4 py-2">
-                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setLinksArtifact(a)}>
-                      <Link2 className="h-3 w-3" />
-                      {linkCounts[a.id] !== undefined ? linkCounts[a.id] : "Manage"}
-                    </Button>
+                  <td className="px-4 py-2 text-muted-foreground text-xs align-top whitespace-nowrap">
+                    {formatDate(a.createdAt)}
+                    {a.addedByName && <span className="block">{a.addedByName}</span>}
+                  </td>
+                  <td className="px-4 py-2 align-top">
+                    {a.fileUrl && (
+                      <a
+                        href={a.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        aria-label={`Open ${a.artifactId}`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -257,13 +141,24 @@ export function KnowledgeRegistry({
         </div>
       </div>
 
+      <ArtifactDetailSheet
+        artifact={openArtifact}
+        allArtifacts={artifacts}
+        onOpenChange={(open) => !open && setOpenId(null)}
+        onManageLinks={(a) => setLinksArtifact(a)}
+        onArchived={() => {
+          setOpenId(null);
+          mutate();
+        }}
+      />
+
       {linksArtifact && (
         <ArtifactLinksDialog
           open={!!linksArtifact}
           onOpenChange={(v) => !v && setLinksArtifact(null)}
           artifactId={linksArtifact.id}
           artifactLabel={`${linksArtifact.artifactId} — ${linksArtifact.title}`}
-          onLinksChanged={(count) => setLinkCounts((prev) => ({ ...prev, [linksArtifact.id]: count }))}
+          onLinksChanged={() => mutate()}
         />
       )}
     </div>

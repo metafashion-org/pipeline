@@ -14,6 +14,7 @@ import { artifactTypeConfig } from "@/lib/db/schema/artifact_type_config";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, and } from "drizzle-orm";
+import { activeArtifact } from "./artifacts-service";
 
 // The brief's §7 names 6 "attachable to" surfaces. Before this round, only
 // SKU/category/guideline had link TABLES at all (style systems, marketing
@@ -292,7 +293,7 @@ export async function getArtifactsForSku(assetId: string) {
     .from(artifactSkuLinks)
     .innerJoin(knowledgeArtifacts, eq(artifactSkuLinks.artifactId, knowledgeArtifacts.id))
     .innerJoin(artifactTypeConfig, eq(knowledgeArtifacts.artifactTypeId, artifactTypeConfig.id))
-    .where(eq(artifactSkuLinks.assetId, assetId));
+    .where(and(eq(artifactSkuLinks.assetId, assetId), activeArtifact()));
 }
 
 export async function getArtifactsForAsset(sku: string) {
