@@ -249,6 +249,45 @@ export async function uploadCurationFile(fileName: string, mimeType: string, byt
   return uploadFileToFolder(folderId, fileName, mimeType, bytes);
 }
 
+// Files added on the Registry's New Artifact form: an insight's screenshots, the files that went
+// into a prompt, an analysis PDF. An artifact has no ID until it is submitted, so these share one
+// folder, as curation pictures do.
+const REGISTRY_FOLDER_NAME = "Meta Fashion Pipeline — Registry";
+// Each recolor kit gets its own folder in here, named after the kit.
+const RECOLOR_KITS_FOLDER_NAME = "Meta Fashion Pipeline — Recolor Kits";
+
+function requireDriveConfigured(): void {
+  if (!isConfigured()) {
+    throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
+  }
+}
+
+/** Uploads a file added to a Registry artifact into the shared Registry folder. */
+export async function uploadRegistryFile(fileName: string, mimeType: string, bytes: Buffer): Promise<UploadedReference> {
+  requireDriveConfigured();
+  const folderId = await getOrCreateFolder(REGISTRY_FOLDER_NAME);
+  return uploadFileToFolder(folderId, fileName, mimeType, bytes);
+}
+
+/** An uploaded recolor image, with the link to the kit's folder it went in. */
+export interface UploadedKitImage extends UploadedReference {
+  folderUrl: string;
+}
+
+/**
+ * Uploads one recolor image into the kit's own folder, "Meta Fashion Pipeline — Recolor Kits/<kit
+ * name>", made on the first upload. The folder link becomes the recolor kit's link in the Registry.
+ *
+ * Input: the kit name, and the file's name, type and bytes. Output: the file's link and the folder's.
+ */
+export async function uploadRecolorKitImage(kitName: string, fileName: string, mimeType: string, bytes: Buffer): Promise<UploadedKitImage> {
+  requireDriveConfigured();
+  const kitsFolderId = await getOrCreateFolder(RECOLOR_KITS_FOLDER_NAME);
+  const kitFolderId = await getOrCreateFolderIn(kitName, kitsFolderId);
+  const uploaded = await uploadFileToFolder(kitFolderId, fileName, mimeType, bytes);
+  return { ...uploaded, folderUrl: driveFolderUrl(kitFolderId) };
+}
+
 /**
  * Uploads a payment summary (the bank's payout confirmation) into that artist's payments folder.
  * Same underlying upload as uploadReferenceFile — only which folder it lands in differs, because

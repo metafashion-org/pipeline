@@ -43,21 +43,31 @@ export const getPublisherQueueView = cachedView(
   [CACHE_TAGS.publisherQueue]
 );
 
+/** One Registry artifact as the Registry page and its detail sheet show it. */
+export interface RegistryArtifactView {
+  id: string;
+  artifactId: string;
+  title: string;
+  description: string | null;
+  source: string | null;
+  fileUrl: string | null;
+  tags: string[] | null;
+  usageNotes: string | null;
+  /** The per-type fields with no column, keyed as lib/knowledge/artifact-forms.ts defines them. */
+  details: Record<string, unknown>;
+  trendArtifactId: string | null;
+  trendCode: string | null;
+  trendTitle: string | null;
+  addedByName: string | null;
+  createdAt: string;
+  typeLabel: string;
+  typePrefix: string;
+}
+
 export interface KnowledgeRegistryView {
-  artifacts: Array<{
-    id: string;
-    artifactId: string;
-    title: string;
-    description: string | null;
-    source: string | null;
-    fileUrl: string | null;
-    tags: string[] | null;
-    usageNotes: string | null;
-    createdAt: string;
-    typeLabel: string;
-    typePrefix: string;
-  }>;
-  types: Array<{ id: string; prefix: string; label: string }>;
+  artifacts: RegistryArtifactView[];
+  /** Every type; inactive ones are kept so their artifacts still show their type, but are left off the New Artifact form. */
+  types: Array<{ id: string; prefix: string; label: string; isActive: boolean }>;
 }
 
 export const getKnowledgeRegistryView = cachedView(
@@ -65,7 +75,7 @@ export const getKnowledgeRegistryView = cachedView(
     const [artifacts, types] = await Promise.all([getKnowledgeArtifacts(), listArtifactTypes()]);
     return {
       artifacts: artifacts.map((a) => ({ ...a, createdAt: a.createdAt.toISOString() })),
-      types: types.map((t) => ({ id: t.id, prefix: t.prefix, label: t.label })),
+      types: types.map((t) => ({ id: t.id, prefix: t.prefix, label: t.label, isActive: t.isActive })),
     };
   },
   ["knowledge-registry-view"],

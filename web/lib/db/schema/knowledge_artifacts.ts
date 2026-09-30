@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { artifactTypeConfig } from "./artifact_type_config";
 import { personnel } from "./personnel";
 
@@ -17,6 +17,15 @@ export const knowledgeArtifacts = pgTable("knowledge_artifacts", {
   tags: text("tags").array().default([]), // covers both general tags and the brief's "aesthetic/style tags" — see HANDOFF.md's scoping note
   addedBy: uuid("added_by").references(() => personnel.id),
   usageNotes: text("usage_notes"),
+  // The per-type fields that have no column of their own, keyed as lib/knowledge/artifact-forms.ts
+  // defines them: a prompt's chatLink and inputs, an insight's seenOn and attachments, a trend
+  // brief's season.
+  details: jsonb("details").$type<Record<string, unknown>>().default({}).notNull(),
+  // The Trend Brief this moodboard or recolor kit came from.
+  trendArtifactId: uuid("trend_artifact_id").references((): AnyPgColumn => knowledgeArtifacts.id, { onDelete: "set null" }),
+  // Set when someone takes the artifact out of the Registry. Nothing is deleted and the ID stays claimed.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  archivedBy: uuid("archived_by").references(() => personnel.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), // doubles as "Date added"
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

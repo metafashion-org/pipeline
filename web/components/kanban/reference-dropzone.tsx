@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type DragEvent, type ReactNode } from "react";
-import { useReferenceUpload } from "./use-reference-upload";
+import { useReferenceUpload, type UploadedFileResponse } from "./use-reference-upload";
 
 /**
  * Wraps a reference-files section (its label, thumbnails and upload button) as a drop target, on
@@ -21,6 +21,7 @@ import { useReferenceUpload } from "./use-reference-upload";
 export function ReferenceDropzone({
   sku,
   uploadUrl,
+  extraFields,
   disabled,
   onUploaded,
   children,
@@ -28,11 +29,13 @@ export function ReferenceDropzone({
   sku?: string;
   /** Where to upload instead of the board's reference route, e.g. the Curation form's. */
   uploadUrl?: string;
+  /** Sent with each file, e.g. the recolor kit name the Registry's upload route files images under. */
+  extraFields?: Record<string, string>;
   disabled?: boolean;
-  onUploaded: (urls: string[]) => void;
+  onUploaded: (urls: string[], responses: UploadedFileResponse[]) => void;
   children: (state: { uploading: boolean; uploadFiles: (files: File[]) => void }) => ReactNode;
 }) {
-  const { uploading, uploadFiles } = useReferenceUpload({ sku, uploadUrl, onUploaded });
+  const { uploading, uploadFiles } = useReferenceUpload({ sku, uploadUrl, extraFields, onUploaded });
   const [isDraggedOver, setIsDraggedOver] = useState(false);
   const dragDepth = useRef(0);
 

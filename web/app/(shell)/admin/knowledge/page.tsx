@@ -4,10 +4,6 @@ import { redirect } from "next/navigation";
 import { canManageKnowledge, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { getKnowledgeRegistryView } from "@/lib/dashboard/views";
 import { KnowledgeRegistry } from "@/components/knowledge/KnowledgeRegistry";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
-
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +32,7 @@ export default async function KnowledgePage() {
     <div className="flex flex-col h-full bg-background text-foreground">
       <PageHeader
         title="Registry"
-        description="Trend briefs, insights, recolor kits and references, each with a permanent ID."
+        description="Trends, insights, moodboards, recolor kits, prompts and docs, each with a permanent ID."
       />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6">

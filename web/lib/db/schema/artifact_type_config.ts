@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 
 // The configurable prefix list from the brief's §7 — admin-editable, not
 // hardcoded. Seeded with the brief's own 10 examples (TR/INS/ANA/RK/REF/
@@ -11,5 +11,7 @@ export const artifactTypeConfig = pgTable("artifact_type_config", {
   label: text("label").notNull(), // e.g. "Trend Brief"
   nextSequence: integer("next_sequence").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
+  // False takes the type off the Registry's New Artifact form. Artifacts of it keep their IDs.
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
