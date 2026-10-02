@@ -42,9 +42,12 @@ export function TaskSheetManager() {
   async function syncNow() {
     setWorking(true);
     try {
-      const { ok, data: res } = await apiCall<{ added: number; errors: number }>("/api/admin/task-sheet/sync", { method: "POST" });
+      const { ok, data: res } = await apiCall<{ added: number; errors: number; artifactsAdded: number; artifactErrors: number }>("/api/admin/task-sheet/sync", {
+        method: "POST",
+      });
       if (!ok) return toast.error(res.error || "Couldn't read the sheet");
-      toast.success(`Added ${res.added} task${res.added === 1 ? "" : "s"}${res.errors ? `, ${res.errors} with errors (see the sheet)` : ""}`);
+      const failed = res.errors + res.artifactErrors;
+      toast.success(`Added ${res.added} task(s) and ${res.artifactsAdded} artifact(s)${failed ? `. ${failed} row(s) have errors; see the sheet` : ""}`);
       await mutate();
     } finally {
       setWorking(false);
@@ -55,11 +58,12 @@ export function TaskSheetManager() {
     <Card className="shadow-sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <SheetIcon className="h-4 w-4" /> Task sheet for Instinct
+          <SheetIcon className="h-4 w-4" /> Task and artifact sheet for Instinct
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Instinct adds Team Tasks by writing rows here: title, owner, area, dueOn, notes. The Kanban reads new rows when anyone opens Team Tasks
-          (at most once a minute) and at 7 pm, and writes &quot;Added&quot; or the error in the status column.
+          Instinct writes rows in two tabs: Tasks (title, owner, area, dueOn, notes) adds Team Tasks, and Artifacts (type, title and the
+          type&apos;s fields) adds to the Registry. The Kanban reads new rows when anyone opens Team Tasks (at most once a minute) and at 7 pm,
+          and writes &quot;Added&quot; or the error in each row&apos;s status column.
         </p>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">

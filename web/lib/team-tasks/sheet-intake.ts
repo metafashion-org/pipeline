@@ -12,6 +12,7 @@ import { createSharedSheet, readSheetRows, writeSheetCells } from "@/lib/assets/
 import { createTeamTask, TeamTaskInputError } from "./team-tasks-service";
 import { resolveTeamMember } from "./team-members";
 import { TEAM_TASK_AREAS, teamDay } from "./task-rules";
+import { ARTIFACTS_TAB, ARTIFACT_SHEET_HEADER, syncArtifactRows } from "@/lib/knowledge/artifact-sheet-intake";
 
 const SHEET_SETTING_KEY = "team_task_sheet";
 const LAST_SYNC_SETTING_KEY = "team_task_sheet_last_sync";
@@ -19,8 +20,9 @@ const LAST_SYNC_SETTING_KEY = "team_task_sheet_last_sync";
 // every load and two loads at once don't add the same row twice.
 const MIN_SYNC_GAP_MS = 60 * 1000;
 export const TASK_SHEET_HEADER = ["title", "owner", "area", "dueOn", "notes", "status (filled in by the Kanban)"];
+const TASKS_TAB = "Tasks";
 // Rows 2 to 1000, columns A (title) to F (status).
-const SHEET_RANGE = "A2:F1000";
+const SHEET_RANGE = `${TASKS_TAB}!A2:F1000`;
 const FIRST_DATA_ROW = 2;
 const STATUS_COLUMN = "F";
 const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,7 +66,7 @@ export async function getLastTaskSheetSync(): Promise<Date | null> {
 export async function setUpTaskSheet(
   input: { name: string; email: string },
   actorId: string | null,
-  makeSheet: (name: string, header: string[], email: string) => Promise<{ id: string; url: string }> = createSharedSheet
+  makeSheet: (name: string, tabs: { title: string; header: string[] }[], email: string) => Promise<{ id: string; url: string }> = createSharedSheet
 ): Promise<TaskSheetConfig> {
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
@@ -75,7 +77,14 @@ export async function setUpTaskSheet(
     existing ??
     (await db.insert(personnel).values({ name, email, roles: [], notes: "Outside tool that adds Team Tasks through the task sheet. Has no page access." }).returning())[0];
 
-  const sheet = await makeSheet(`${name} → Team Tasks`, TASK_SHEET_HEADER, email);
+  const sheet = await makeSheet(
+    `${name} → Team Tasks`,
+    [
+      { title: TASKS_TAB, header: TASK_SHEET_HEADER },
+      { title: ARTIFACTS_TAB, header: ARTIFACT_SHEET_HEADER },
+    ],
+    email
+  );
   const config: TaskSheetConfig = { sheetId: sheet.id, url: sheet.url, email, actorId: tool.id };
   await db
     .insert(appSettings)
@@ -112,13 +121,16 @@ async function parseRow(row: string[]): Promise<{ error: string } | { title: str
 }
 
 /**
- * Adds every new row of the task sheet as a Team Task and writes the result in its status column.
+ * Adds every new row of the task sheet's Tasks tab as a Team Task, and of its Artifacts tab as a
+ * Registry artifact, writing the result in each row's status column.
  * A row is new when it has a title and an empty status. Runs at most once a minute unless forced.
  *
  * Input: whether to skip the once-a-minute limit, and the sheet reader and writer. Output: how many
  * rows were added and how many had errors; null when the sheet isn't set up or a read ran recently.
  */
-export async function syncTaskSheet(options: { force?: boolean; io?: SheetIo } = {}): Promise<{ added: number; errors: number } | null> {
+export async function syncTaskSheet(
+  options: { force?: boolean; io?: SheetIo } = {}
+): Promise<{ added: number; errors: number; artifactsAdded: number; artifactErrors: number } | null> {
   const config = await getTaskSheetConfig();
   if (!config) return null;
   if (!(await claimSyncSlot(Boolean(options.force)))) return null;
@@ -130,7 +142,7 @@ export async function syncTaskSheet(options: { force?: boolean; io?: SheetIo } =
   for (const [index, row] of rows.entries()) {
     const status = (row[5] ?? "").trim();
     if (status || !(row[0] ?? "").trim()) continue;
-    const cell = `${STATUS_COLUMN}${FIRST_DATA_ROW + index}`;
+    const cell = `${TASKS_TAB}!${STATUS_COLUMN}${FIRST_DATA_ROW + index}`;
     const parsed = await parseRow(row);
     if ("error" in parsed) {
       await io.write(config.sheetId, cell, [[`Error: ${parsed.error}. Fix the row and clear this cell to retry.`]]);
@@ -150,5 +162,6 @@ export async function syncTaskSheet(options: { force?: boolean; io?: SheetIo } =
       errors++;
     }
   }
-  return { added, errors };
+  const artifacts = await syncArtifactRows(config, io);
+  return { added, errors, artifactsAdded: artifacts.added, artifactErrors: artifacts.errors };
 }

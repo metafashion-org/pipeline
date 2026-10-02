@@ -429,14 +429,15 @@ const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
 const SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
 
 /**
- * Makes a Google Sheet in the shared drive's "Meta Fashion Pipeline — Team Tasks" folder, writes its header row,
- * and shares it with the company domain and one outside email as an editor. The service account's
+ * Makes a Google Sheet in the shared drive's "Meta Fashion Pipeline — Team Tasks" folder with one tab
+ * per entry in `tabs` (each with its header row), and shares it with the company domain and one
+ * outside email as an editor. The service account's
  * drive.file scope only reaches files it created, which is why the Kanban makes the sheet itself.
  *
- * Input: the sheet's name, its header row, and the email to share it with. Output: the sheet's id
+ * Input: the sheet's name, its tabs, and the email to share it with. Output: the sheet's id
  * and link. Throws when Drive isn't configured or Google refuses (e.g. outside sharing is off).
  */
-export async function createSharedSheet(name: string, header: string[], editorEmail: string): Promise<{ id: string; url: string }> {
+export async function createSharedSheet(name: string, tabs: { title: string; header: string[] }[], editorEmail: string): Promise<{ id: string; url: string }> {
   requireDriveConfigured();
   const folderId = await getOrCreateFolder("Meta Fashion Pipeline — Team Tasks");
   const file = await authedFetch(`${DRIVE_API}/files?supportsAllDrives=true&fields=id`, {
@@ -444,7 +445,18 @@ export async function createSharedSheet(name: string, header: string[], editorEm
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, mimeType: SHEET_MIME_TYPE, parents: [folderId] }),
   });
-  await writeSheetCells(file.id, "A1", [header]);
+  // A new sheet has one tab, id 0: rename it to the first tab, then add the rest.
+  await authedFetch(`${SHEETS_API}/${file.id}:batchUpdate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      requests: [
+        { updateSheetProperties: { properties: { sheetId: 0, title: tabs[0].title }, fields: "title" } },
+        ...tabs.slice(1).map((tab) => ({ addSheet: { properties: { title: tab.title } } })),
+      ],
+    }),
+  });
+  for (const tab of tabs) await writeSheetCells(file.id, `'${tab.title}'!A1`, [tab.header]);
   await shareWithDomain(file.id);
   await authedFetch(`${DRIVE_API}/files/${file.id}/permissions?supportsAllDrives=true&sendNotificationEmail=true`, {
     method: "POST",
