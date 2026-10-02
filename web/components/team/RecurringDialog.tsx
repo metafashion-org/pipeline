@@ -38,6 +38,8 @@ interface RecurrenceRow {
     area: string;
     ownerId: string;
     weekdays: number[];
+    monthDays: number[];
+    helperIds: string[];
     targetCount: number | null;
     focus: string | null;
     focusUntil: string | null;
@@ -48,11 +50,18 @@ interface RecurrenceRow {
   ownerName: string;
 }
 
+// A rule repeats on weekdays or on dates of the month.
+type RepeatMode = "weekdays" | "monthDays";
+
 interface RuleForm {
   title: string;
   area: string;
   ownerId: string;
+  helperIds: string[];
+  mode: RepeatMode;
   weekdays: number[];
+  /** Dates of the month as typed, e.g. "15, 30". */
+  monthDays: string;
   targetCount: string;
   focus: string;
   focusUntil: string;
@@ -63,11 +72,26 @@ interface RuleForm {
 }
 
 function emptyForm(ownerId: string, today: string): RuleForm {
-  return { title: "", area: "", ownerId, weekdays: MONDAY_TO_SATURDAY, targetCount: "", focus: "", focusUntil: "", startsOn: today, endsOn: "", notes: "", isActive: true };
+  return { title: "", area: "", ownerId, helperIds: [], mode: "weekdays", weekdays: MONDAY_TO_SATURDAY, monthDays: "", targetCount: "", focus: "", focusUntil: "", startsOn: today, endsOn: "", notes: "", isActive: true };
 }
 
-function daysLabel(weekdays: number[]): string {
-  return WEEKDAYS.filter((w) => weekdays.includes(w.day)).map((w) => w.label).join(", ");
+// "15, 30" -> [15, 30]; anything that isn't a date of the month is dropped.
+function parseMonthDays(text: string): number[] {
+  return text
+    .split(/[\s,]+/)
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 1 && d <= 31);
+}
+
+function ordinal(n: number): string {
+  const suffix = n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th";
+  return `${n}${suffix}`;
+}
+
+function daysLabel(weekdays: number[], monthDays: number[]): string {
+  const parts = WEEKDAYS.filter((w) => weekdays.includes(w.day)).map((w) => w.label);
+  if (monthDays.length > 0) parts.push(`the ${monthDays.map(ordinal).join(" and ")} of each month`);
+  return parts.join(", ");
 }
 
 /**
@@ -94,7 +118,10 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
       title: r.title,
       area: r.area,
       ownerId: r.ownerId,
+      helperIds: r.helperIds,
+      mode: r.monthDays.length > 0 ? "monthDays" : "weekdays",
       weekdays: r.weekdays,
+      monthDays: r.monthDays.join(", "),
       targetCount: r.targetCount ? String(r.targetCount) : "",
       focus: r.focus ?? "",
       focusUntil: r.focusUntil ?? "",
@@ -107,7 +134,9 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
 
   async function save() {
     if (!form) return;
-    if (!form.title.trim() || !form.area || !form.ownerId || form.weekdays.length === 0) {
+    const weekdays = form.mode === "weekdays" ? form.weekdays : [];
+    const monthDays = form.mode === "monthDays" ? parseMonthDays(form.monthDays) : [];
+    if (!form.title.trim() || !form.area || !form.ownerId || (weekdays.length === 0 && monthDays.length === 0)) {
       toast.error("Fill in the title, owner, kind and days");
       return;
     }
@@ -117,7 +146,9 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
         title: form.title,
         area: form.area,
         ownerId: form.ownerId,
-        weekdays: form.weekdays,
+        helperIds: form.helperIds.filter((id) => id !== form.ownerId),
+        weekdays,
+        monthDays,
         targetCount: form.targetCount ? Number(form.targetCount) : null,
         focus: form.focus || null,
         focusUntil: form.focusUntil || null,
@@ -153,7 +184,7 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
           <Repeat className="h-4 w-4" /> Repeating
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Repeating tasks</DialogTitle>
           <DialogDescription>
@@ -173,7 +204,7 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
               >
                 <span className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">{row.recurrence.title}</span>
-                  <span className="text-xs text-muted-foreground">{row.recurrence.isActive ? daysLabel(row.recurrence.weekdays) : "Off"}</span>
+                  <span className="text-xs text-muted-foreground">{row.recurrence.isActive ? daysLabel(row.recurrence.weekdays, row.recurrence.monthDays) : "Off"}</span>
                 </span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   {row.ownerName} · {areaLabel(row.recurrence.area)}
@@ -224,7 +255,50 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Repeats on</p>
+              <p className="text-xs text-muted-foreground">Helpers (optional)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {members
+                  .filter((m) => m.id !== form.ownerId)
+                  .map((m) => {
+                    const helping = form.helperIds.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setForm({ ...form, helperIds: helping ? form.helperIds.filter((id) => id !== m.id) : [...form.helperIds, m.id] })}
+                        className={cn("rounded-full border px-2.5 py-0.5 text-xs", helping ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground">Repeats on</p>
+                <div className="flex rounded-md border p-0.5">
+                  {(["weekdays", "monthDays"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setForm({ ...form, mode })}
+                      className={cn("rounded px-2 py-0.5 text-xs", form.mode === mode ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                    >
+                      {mode === "weekdays" ? "Weekdays" : "Dates each month"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {form.mode === "monthDays" ? (
+                <Input
+                  value={form.monthDays}
+                  onChange={(e) => setForm({ ...form, monthDays: e.target.value })}
+                  placeholder="e.g. 15, 30 (the 30th falls on 28 Feb)"
+                  className="h-9"
+                  aria-label="Dates of the month"
+                />
+              ) : (
               <div className="flex flex-wrap gap-1.5">
                 {WEEKDAYS.map((w) => {
                   const on = form.weekdays.includes(w.day);
@@ -240,6 +314,7 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
                   );
                 })}
               </div>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">

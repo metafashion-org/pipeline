@@ -117,7 +117,7 @@ export function HiddenCardsButton() {
           <EyeOff className="h-3.5 w-3.5" /> Hidden cards
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Hidden cards</DialogTitle>
           <DialogDescription>

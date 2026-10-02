@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db/client";
 import { teamTasks } from "@/lib/db/schema/team_tasks";
@@ -346,7 +346,8 @@ export async function getTeamWeek(weekStart: string): Promise<TeamWeek> {
     db
       .select({ taskId: teamTasks.id, title: teamTasks.title, ownerId: teamTasks.ownerId, completedAt: teamTasks.completedAt })
       .from(teamTasks)
-      .where(and(eq(teamTasks.status, DONE_STATUS), gte(teamTasks.completedAt, start), lt(teamTasks.completedAt, end))),
+      // Counted work is shown by its count on its own day, not as "finished" on the day it was closed.
+      .where(and(eq(teamTasks.status, DONE_STATUS), isNull(teamTasks.targetCount), gte(teamTasks.completedAt, start), lt(teamTasks.completedAt, end))),
     db
       .select({
         personnelId: teamTaskDayPlans.personnelId,

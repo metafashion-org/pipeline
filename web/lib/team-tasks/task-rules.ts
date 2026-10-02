@@ -81,6 +81,22 @@ export function weekdayOf(day: string): number {
   return new Date(Date.UTC(year, month - 1, date)).getUTCDay();
 }
 
+/**
+ * Whether a repeating task falls on a day: its weekday is one of the rule's weekdays, or its date
+ * is one of the rule's dates of the month. A date the month doesn't have (the 30th in February)
+ * falls on the month's last day.
+ *
+ * Input: the day ("YYYY-MM-DD"), the rule's weekdays (0 = Sunday) and dates of the month.
+ * Output: true when the rule makes a task that day.
+ */
+export function repeatsOn(day: string, weekdays: number[], monthDays: number[]): boolean {
+  if (weekdays.includes(weekdayOf(day))) return true;
+  const [year, month, date] = day.split("-").map(Number);
+  // Day 0 of the next month is the last day of this one.
+  const lastDate = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return monthDays.some((d) => Math.min(d, lastDate) === date);
+}
+
 /** A "YYYY-MM-DD" day moved by a number of days. */
 export function addDays(day: string, days: number): string {
   const [year, month, date] = day.split("-").map(Number);
