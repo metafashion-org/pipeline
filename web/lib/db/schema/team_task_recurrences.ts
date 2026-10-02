@@ -16,6 +16,11 @@ export const teamTaskRecurrences = pgTable("team_task_recurrences", {
   ownerId: uuid("owner_id").references(() => personnel.id).notNull(),
   // 0 = Sunday ... 6 = Saturday, as Date.getDay() numbers them.
   weekdays: integer("weekdays").array().default([]).notNull(),
+  // Dates of the month, 1-31, e.g. [15, 30] for a payments reminder. A date a month doesn't have
+  // falls on its last day.
+  monthDays: integer("month_days").array().default([]).notNull(),
+  // People helping the owner on each task the rule makes.
+  helperIds: uuid("helper_ids").array().default([]).notNull(),
   // How many of something the day's task is for, e.g. 45 assets. Null for a plain task.
   targetCount: integer("target_count"),
   focus: text("focus"),

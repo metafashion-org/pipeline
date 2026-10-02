@@ -288,6 +288,13 @@
       "when": 1790796150261,
       "tag": "0040_team_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790928019364,
+      "tag": "0041_monthly_repeats",
+      "breakpoints": true
     }
   ]
 }

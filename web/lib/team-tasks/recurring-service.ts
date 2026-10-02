@@ -2,16 +2,19 @@ import { and, asc, eq, gte, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { teamTaskRecurrences } from "@/lib/db/schema/team_task_recurrences";
 import { teamTasks } from "@/lib/db/schema/team_tasks";
+import { teamTaskHelpers } from "@/lib/db/schema/team_task_helpers";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { listTeamMembers } from "./team-members";
 import { addToDayPlan, TEAM_TASK_ENTITY, TeamTaskInputError, TeamTaskNotFoundError } from "./team-tasks-service";
-import { DONE_STATUS, isTeamTaskArea, weekdayOf } from "./task-rules";
+import { DONE_STATUS, isTeamTaskArea, repeatsOn } from "./task-rules";
 
 // Where recurrence changes are logged in audit_log.
 const RECURRENCE_ENTITY = "team_task_recurrence";
 const SUNDAY = 0;
 const SATURDAY = 6;
+const FIRST_MONTH_DAY = 1;
+const LAST_MONTH_DAY = 31;
 
 export interface RecurrenceInput {
   title: string;
@@ -19,6 +22,10 @@ export interface RecurrenceInput {
   ownerId: string;
   /** 0 = Sunday ... 6 = Saturday. */
   weekdays: number[];
+  /** Dates of the month, 1-31. A date a month doesn't have falls on its last day (30 -> 28 Feb). */
+  monthDays?: number[];
+  /** People helping the owner on each task it makes. */
+  helperIds?: string[];
   targetCount?: number | null;
   focus?: string | null;
   focusUntil?: string | null;
@@ -31,12 +38,15 @@ export interface RecurrenceInput {
 async function validateRecurrence(input: RecurrenceInput): Promise<void> {
   if (!input.title.trim()) throw new TeamTaskInputError("The repeating task needs a title");
   if (!isTeamTaskArea(input.area)) throw new TeamTaskInputError("Pick what kind of task it is");
-  if (input.weekdays.length === 0 || input.weekdays.some((d) => !Number.isInteger(d) || d < SUNDAY || d > SATURDAY)) {
-    throw new TeamTaskInputError("Pick the days it repeats on");
+  const monthDays = input.monthDays ?? [];
+  if (input.weekdays.some((d) => !Number.isInteger(d) || d < SUNDAY || d > SATURDAY)) throw new TeamTaskInputError("Those aren't weekdays");
+  if (monthDays.some((d) => !Number.isInteger(d) || d < FIRST_MONTH_DAY || d > LAST_MONTH_DAY)) {
+    throw new TeamTaskInputError("Dates of the month go from 1 to 31");
   }
-  if (!(await listTeamMembers()).some((m) => m.id === input.ownerId)) {
-    throw new TeamTaskInputError("The owner must be someone on the full-time team");
-  }
+  if (input.weekdays.length === 0 && monthDays.length === 0) throw new TeamTaskInputError("Pick the days it repeats on");
+  const members = new Set((await listTeamMembers()).map((m) => m.id));
+  if (!members.has(input.ownerId)) throw new TeamTaskInputError("The owner must be someone on the full-time team");
+  if ((input.helperIds ?? []).some((id) => !members.has(id))) throw new TeamTaskInputError("Each helper must be someone on the full-time team");
 }
 
 function recurrenceValues(input: RecurrenceInput) {
@@ -45,6 +55,8 @@ function recurrenceValues(input: RecurrenceInput) {
     area: input.area,
     ownerId: input.ownerId,
     weekdays: [...new Set(input.weekdays)].sort((a, b) => a - b),
+    monthDays: [...new Set(input.monthDays ?? [])].sort((a, b) => a - b),
+    helperIds: [...new Set(input.helperIds ?? [])].filter((id) => id !== input.ownerId),
     targetCount: input.targetCount ?? null,
     focus: input.focus?.trim() || null,
     focusUntil: input.focusUntil || null,
@@ -102,27 +114,28 @@ export async function updateRecurrence(id: string, input: RecurrenceInput, actor
 }
 
 /**
- * Makes the day's task for every repeating task that falls on that day, and puts each in its
- * owner's plan for the day. The owner's earlier open tasks from the same rule are closed as done:
- * each day's task stands for that day, so yesterday's count stays as it was left.
+ * Makes the day's task for every repeating task that falls on that day, with its helpers, and puts
+ * it in the owner's plan for the day. For counted work (a rule with a target) the earlier open
+ * tasks from the same rule are closed as done: each day's task stands for that day, so yesterday's
+ * count stays as it was left. Other repeating tasks, such as a payments reminder, stay open until
+ * someone finishes them.
  *
  * Safe to run any number of times a day: a rule makes at most one task per day.
  *
  * Input: the day. Output: how many tasks were made.
  */
 export async function makeRecurringTasksFor(day: string): Promise<number> {
-  const weekday = weekdayOf(day);
-  const rules = await db
+  const active = await db
     .select()
     .from(teamTaskRecurrences)
     .where(
       and(
         eq(teamTaskRecurrences.isActive, true),
         lte(teamTaskRecurrences.startsOn, day),
-        or(isNull(teamTaskRecurrences.endsOn), gte(teamTaskRecurrences.endsOn, day)),
-        sql`${weekday} = any(${teamTaskRecurrences.weekdays})`
+        or(isNull(teamTaskRecurrences.endsOn), gte(teamTaskRecurrences.endsOn, day))
       )
     );
+  const rules = active.filter((rule) => repeatsOn(day, rule.weekdays, rule.monthDays));
 
   let made = 0;
   for (const rule of rules) {
@@ -148,11 +161,17 @@ export async function makeRecurringTasksFor(day: string): Promise<number> {
         .returning({ id: teamTasks.id });
       if (!task) return false;
 
-      const now = new Date();
-      await tx
-        .update(teamTasks)
-        .set({ status: DONE_STATUS, completedAt: now, updatedAt: now })
-        .where(and(eq(teamTasks.recurrenceId, rule.id), lt(teamTasks.occurrenceOn, day), ne(teamTasks.status, DONE_STATUS)));
+      if (rule.targetCount !== null) {
+        const now = new Date();
+        await tx
+          .update(teamTasks)
+          .set({ status: DONE_STATUS, completedAt: now, updatedAt: now })
+          .where(and(eq(teamTasks.recurrenceId, rule.id), lt(teamTasks.occurrenceOn, day), ne(teamTasks.status, DONE_STATUS)));
+      }
+      const helperIds = rule.helperIds.filter((id) => id !== rule.ownerId);
+      if (helperIds.length > 0) {
+        await tx.insert(teamTaskHelpers).values(helperIds.map((personnelId) => ({ taskId: task.id, personnelId }))).onConflictDoNothing();
+      }
       await addToDayPlan(tx, rule.ownerId, task.id, day);
       await tx.insert(auditLog).values({
         action: "makeRecurringTask",
