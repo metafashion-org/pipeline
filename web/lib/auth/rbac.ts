@@ -294,6 +294,8 @@ const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   // canViewAllAssets check every other /admin/* page not listed above gets — several roles other
   // than payment_admin/admin have that capability too.
   ["/admin/archive", "canMarkPaymentDone"],
+  // Artists' bank and identity details: the people who pay artists (see canHandleArtistPayDetails).
+  ["/admin/artist-details", "canMarkForPayment"],
 ];
 
 /**
@@ -362,6 +364,16 @@ export function landingPathForRoles(
  *
  * canAssignArtists is what an operator brings: it is held by admin and operator and by nobody else, so the union covers exactly the three roles the registry is for, and a per-person override still moves the boundary the way it does everywhere else.
  */
+/**
+ * Whether someone may see artists' full bank details and approve changes to them: the people who
+ * pay artists, i.e. who can mark an asset for payment or mark it paid.
+ *
+ * Input: their effective capabilities. Output: true for them.
+ */
+export function canHandleArtistPayDetails(caps: CapabilitySet): boolean {
+  return caps.canMarkForPayment || caps.canMarkPaymentDone;
+}
+
 export function canManageKnowledge(caps: CapabilitySet): boolean {
   return caps.canManageSystemConfig || caps.canAssignArtists || caps.canAccessCuratorTools;
 }

@@ -46,3 +46,6 @@ export * from "./team_task_links";
 export * from "./team_task_comments";
 export * from "./team_task_day_plans";
 export * from "./team_notifications";
+export * from "./artist_profile_files";
+export * from "./artist_profiles";
+export * from "./artist_profile_change_requests";
