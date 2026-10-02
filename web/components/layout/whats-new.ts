@@ -13,6 +13,20 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    href: "/artist/profile",
+    newUntil: "2026-10-20",
+    why: "It replaces the Team Onboarding Google Form, which never asked for a bank account number or IFSC.",
+    whatFor:
+      "Add your UPI ID, bank account, IFSC, PAN, your Aadhaar, PAN and cheque images, and your signed NDA once. This is what we pay you on. A later change needs a reason and our approval.",
+  },
+  {
+    href: "/admin/artist-details",
+    newUntil: "2026-10-20",
+    why: "So we have every artist's bank and UPI details in one place before each payment on the 15th and 30th.",
+    whatFor:
+      "See who has filled in their details, open an artist's full details (each view is logged), approve or decline changes, and remind the artists who haven't filled it in.",
+  },
+  {
     href: "/team",
     newUntil: "2026-10-15",
     why: "So everyone can see what each person on the full-time team is working on today and what's next, without chasing updates.",

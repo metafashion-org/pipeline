@@ -24,6 +24,8 @@ import {
   Eye,
   ListTodo,
   UploadCloud,
+  IdCard,
+  Landmark,
   ListChecks,
   Info,
 } from "lucide-react";
@@ -45,6 +47,11 @@ import {
 // disappearing.
 // An artist's own pages. My Tasks only renders for someone whose collapsed role is artist (see
 // app/(shell)/artist/page.tsx), so it is shown only to artists who don't also run production.
+// My details is for anyone who is paid as an artist, including admins who also hold the role.
+function hasArtistRole(roles: string[]): boolean {
+  return roles.some((r) => r.toLowerCase() === "artist");
+}
+
 function isArtistOnly(roles: string[]): boolean {
   const normalized = roles.map((r) => r.toLowerCase());
   return normalized.includes("artist") && !normalized.includes("admin") && !normalized.includes("operator");
@@ -53,6 +60,7 @@ function isArtistOnly(roles: string[]): boolean {
 const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; onlyFor?: (roles: string[]) => boolean }[] = [
   { href: "/artist", icon: ListTodo, label: "My Tasks", onlyFor: isArtistOnly },
   { href: "/artist/submit", icon: UploadCloud, label: "Submit final files" },
+  { href: "/artist/profile", icon: IdCard, label: "My details", onlyFor: hasArtistRole },
   { href: "/team", icon: ListChecks, label: "Team Tasks" },
   { href: "/admin", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/admin/board", icon: KanbanSquare, label: "Board" },
@@ -60,6 +68,7 @@ const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; on
   { href: "/curator", icon: Sparkles, label: "Curation" },
   { href: "/admin/knowledge", icon: BookOpen, label: "Registry" },
   { href: "/admin/archive", icon: Wallet, label: "Payments" },
+  { href: "/admin/artist-details", icon: Landmark, label: "Artist details" },
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/publisher", icon: PackageCheck, label: "Uploader Queue" },

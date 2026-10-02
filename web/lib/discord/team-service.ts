@@ -15,6 +15,7 @@ import { db } from "@/lib/db/client";
 import { discordTempAccess } from "@/lib/db/schema/discord_temp_access";
 import { eq, lte } from "drizzle-orm";
 import { linkOnboardedMember } from "./artist-channel";
+import { newArtistDetailsText } from "@/lib/artist-details/details-notifications";
 import {
   discordFetch,
   isConfigured,
@@ -289,6 +290,10 @@ export async function onboardMember(options: OnboardOptions) {
 
   const msg = await sendMessage(newChannel.id, NEW_CHANNEL_MESSAGE_TEMPLATE(`<@${match.user.id}>`, department));
   await pinMessage(newChannel.id, msg.id).catch((e: Error) => console.error("[discord] pin failed (channel still created fine):", e.message));
+  // Asks the new artist to fill in My details (bank, UPI, PAN, documents, NDA) so they can be paid.
+  await sendMessage(newChannel.id, newArtistDetailsText(`<@${match.user.id}>`)).catch((e: Error) =>
+    console.error("[discord] My details message failed (channel still created fine):", e.message)
+  );
 
   return {
     linkedPersonnel,

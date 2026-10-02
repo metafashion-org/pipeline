@@ -173,12 +173,17 @@ export interface UploadedReference {
   fileId: string;
 }
 
-/** The actual multipart upload, shared by every caller below — only the destination folder differs. */
+/**
+ * The actual multipart upload, shared by every caller below — only the destination folder differs.
+ * Files are shared with the company domain, and with anyone who has the link unless `domainOnly`
+ * (identity documents and bank proofs must not be readable by link).
+ */
 async function uploadFileToFolder(
   folderId: string,
   fileName: string,
   mimeType: string,
-  bytes: Buffer
+  bytes: Buffer,
+  sharing: { domainOnly: boolean } = { domainOnly: false }
 ): Promise<UploadedReference> {
   const boundary = `metafashion-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const metadata = JSON.stringify({ name: fileName, parents: [folderId] });
@@ -207,7 +212,7 @@ async function uploadFileToFolder(
   }
   const created = await res.json();
   await shareWithDomain(created.id);
-  await shareWithAnyoneReader(created.id);
+  if (!sharing.domainOnly) await shareWithAnyoneReader(created.id);
 
   return {
     url: `https://drive.google.com/file/d/${created.id}/view`,
@@ -260,6 +265,22 @@ function requireDriveConfigured(): void {
   if (!isConfigured()) {
     throw new Error("Drive upload isn't configured (GOOGLE_SERVICE_ACCOUNT_JSON / GOOGLE_SHARED_DRIVE_ID missing).");
   }
+}
+
+// Each artist's documents from My details go in their own folder in here.
+const ARTISTS_FOLDER_NAME = "Meta Fashion Pipeline — Artists";
+
+/**
+ * Uploads one of an artist's documents (Aadhaar, PAN, cheque, resume, agreement) into
+ * "Meta Fashion Pipeline — Artists/<artist name>". Shared with the company domain only, never by link.
+ *
+ * Input: the artist's name, and the file's name, type and bytes. Output: the file's link.
+ */
+export async function uploadArtistDocument(artistName: string, fileName: string, mimeType: string, bytes: Buffer): Promise<UploadedReference> {
+  requireDriveConfigured();
+  const artistsFolderId = await getOrCreateFolder(ARTISTS_FOLDER_NAME);
+  const artistFolderId = await getOrCreateFolderIn(artistName, artistsFolderId);
+  return uploadFileToFolder(artistFolderId, fileName, mimeType, bytes, { domainOnly: true });
 }
 
 /** Uploads a file added to a Registry artifact into the shared Registry folder. */
