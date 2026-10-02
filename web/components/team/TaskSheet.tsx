@@ -133,6 +133,10 @@ export function TaskSheet({
   const { data, mutate } = useSWR<TaskDetailView>(taskDetailUrl(taskId), jsonFetcher);
   const [newSubtask, setNewSubtask] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  // Giving a task with no due date to someone else asks for the date first: they're notified the
+  // moment the owner changes, and the notice should carry the date.
+  const [pendingOwnerId, setPendingOwnerId] = useState<string | null>(null);
+  const [pendingDueOn, setPendingDueOn] = useState("");
   const members: TeamMember[] = board.members;
   const names = new Map(members.map((m) => [m.id, m.name]));
 
@@ -208,7 +212,13 @@ export function TaskSheet({
             </Select>
           </Field>
           <Field label="Owner">
-            <Select value={task.ownerId} onValueChange={(ownerId) => patch({ ownerId })}>
+            <Select
+              value={task.ownerId}
+              onValueChange={(ownerId) => {
+                if (!task.dueOn && ownerId !== board.viewerId) setPendingOwnerId(ownerId);
+                else patch({ ownerId });
+              }}
+            >
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder={task.ownerName} />
               </SelectTrigger>
@@ -231,6 +241,40 @@ export function TaskSheet({
             />
           </Field>
         </div>
+
+        {pendingOwnerId && (
+          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p>
+              {names.get(pendingOwnerId) ?? "They"} get an email and a Discord ping as soon as you give them this. Set a due date first?
+            </p>
+            <Input type="date" value={pendingDueOn} onChange={(e) => setPendingDueOn(e.target.value)} className="h-8 w-[180px]" aria-label="Due date" />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={!pendingDueOn}
+                onClick={() => {
+                  patch({ ownerId: pendingOwnerId, dueOn: pendingDueOn });
+                  setPendingOwnerId(null);
+                }}
+              >
+                Give it with this due date
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  patch({ ownerId: pendingOwnerId });
+                  setPendingOwnerId(null);
+                }}
+              >
+                Give it without a due date
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPendingOwnerId(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
 
         {task.status !== DONE_STATUS && (
           <Button

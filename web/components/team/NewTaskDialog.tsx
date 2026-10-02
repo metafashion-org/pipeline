@@ -34,6 +34,9 @@ export function NewTaskDialog({
   const [dueOn, setDueOn] = useState("");
   const [notes, setNotes] = useState("");
   const [addToToday, setAddToToday] = useState(false);
+  // Shown once when the task goes to someone else without a due date: they're notified the moment
+  // it's added, so the date has to be in it before then.
+  const [askForDueDate, setAskForDueDate] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function handleOpenChange(next: boolean) {
@@ -45,14 +48,19 @@ export function NewTaskDialog({
       setDueOn("");
       setNotes("");
       setAddToToday(false);
+      setAskForDueDate(false);
     }
     setOpen(next);
   }
 
-  async function submit() {
+  async function submit(withoutDueDate = false) {
     if (!title.trim()) return toast.error("Give the task a title");
     if (!area) return toast.error("Pick what kind of task it is");
     if (!ownerId) return toast.error("Pick who owns it");
+    if (ownerId !== viewerId && !dueOn && !withoutDueDate) {
+      setAskForDueDate(true);
+      return;
+    }
     setSaving(true);
     try {
       const id = await createTask({ title, area, ownerId, dueOn: dueOn || null, notes: notes || null, addToToday });
@@ -121,11 +129,29 @@ export function NewTaskDialog({
             Add to the owner&apos;s plan for today
           </label>
         </div>
-        <DialogFooter>
-          <Button onClick={submit} disabled={saving}>
-            {saving ? "Adding..." : "Add task"}
-          </Button>
-        </DialogFooter>
+        {askForDueDate && (
+          <div className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p>
+              {members.find((m) => m.id === ownerId)?.name ?? "They"} get an email and a Discord ping as soon as you add this. Set a due date first?
+            </p>
+            <Input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} className="h-9 w-[180px]" aria-label="Due date" />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => submit()} disabled={saving || !dueOn}>
+                Add with this due date
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => submit(true)} disabled={saving}>
+                Add without a due date
+              </Button>
+            </div>
+          </div>
+        )}
+        {!askForDueDate && (
+          <DialogFooter>
+            <Button onClick={() => submit()} disabled={saving}>
+              {saving ? "Adding..." : "Add task"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
