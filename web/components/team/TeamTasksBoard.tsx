@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { DONE_STATUS, TEAM_TASK_AREAS } from "@/lib/team-tasks/task-rules";
 import { NewTaskDialog } from "./NewTaskDialog";
 import { NotificationsBell } from "./NotificationsBell";
+import { OfficeChannelButton } from "./OfficeChannelButton";
 import { PersonColumn, columnLists } from "./PersonColumn";
 import { RecurringDialog } from "./RecurringDialog";
 import { StatusColumns } from "./StatusColumns";
@@ -104,6 +105,7 @@ export function TeamTasksBoard() {
           <TaskSearch onOpenTask={openTask} />
           <WeekDialog today={board.today} onOpenTask={openTask} />
           <RecurringDialog members={board.members} today={board.today} onChanged={refresh} />
+          <OfficeChannelButton />
           <NotificationsBell unread={board.unread} onOpenTask={openTask} onRead={refresh} />
         </div>
       </div>
