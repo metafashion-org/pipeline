@@ -3,6 +3,7 @@ import { ENV } from "@/lib/env";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { sendDailySummary } from "@/lib/team-tasks/daily-summary";
 import { teamDay } from "@/lib/team-tasks/task-rules";
+import { syncTaskSheet } from "@/lib/team-tasks/sheet-intake";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ export async function GET(request: NextRequest) {
     if (!user.caps.canManageSystemConfig) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Adds any rows still waiting in Instinct's task sheet, so the summary includes them.
+  await syncTaskSheet({ force: true }).catch((error) => console.error("[task sheet] sync failed:", error));
   const now = new Date();
   const result = await sendDailySummary(teamDay(now), now);
   return NextResponse.json(result);
