@@ -73,12 +73,37 @@ export async function ensureOfficeChannel(memberDiscordIds: string[]): Promise<s
   return channel.id;
 }
 
+// Gives each person view and post access to the channel. Discord replaces a member's overwrite on
+// PUT, so running it again changes nothing.
+async function grantOfficeAccess(channelId: string, discordUserIds: string[]): Promise<void> {
+  for (const userId of discordUserIds) {
+    await putChannelPermission(channelId, userId, MEMBER_OVERWRITE, FULL_CHANNEL_ACCESS_BITS, BigInt(0));
+  }
+}
+
+/**
+ * Makes the office channel if it doesn't exist yet and gives everyone on the full-time team access,
+ * including people who joined the team after it was made.
+ *
+ * Input: the full-time team's Discord user ids. Output: the channel's link, or null when Discord
+ * isn't configured.
+ */
+export async function setUpOfficeChannel(memberDiscordIds: string[]): Promise<string | null> {
+  const channelId = await ensureOfficeChannel(memberDiscordIds);
+  if (!channelId) return null;
+  await grantOfficeAccess(channelId, memberDiscordIds);
+  return `https://discord.com/channels/${process.env.DISCORD_GUILD_ID}/${channelId}`;
+}
+
 export interface OfficeMessage {
   content: string;
   embeds?: Record<string, unknown>[];
-  /** Discord user ids to ping. Each is given access to the channel first, or Discord wouldn't notify them. */
+  /** Discord user ids to ping. */
   mentionDiscordIds: string[];
-  /** The full-time team's Discord user ids, used when the channel has to be made. */
+  /**
+   * The full-time team's Discord user ids. Each is given access before the post, so someone added
+   * to the team later can read the channel, and a ping reaches them.
+   */
   memberDiscordIds: string[];
 }
 
@@ -90,9 +115,7 @@ export async function postToOfficeChannel(message: OfficeMessage): Promise<void>
   try {
     const channelId = await ensureOfficeChannel(message.memberDiscordIds);
     if (!channelId) return;
-    for (const userId of message.mentionDiscordIds) {
-      await putChannelPermission(channelId, userId, MEMBER_OVERWRITE, FULL_CHANNEL_ACCESS_BITS, BigInt(0));
-    }
+    await grantOfficeAccess(channelId, [...new Set([...message.memberDiscordIds, ...message.mentionDiscordIds])]);
     await discordFetch(`/channels/${channelId}/messages`, {
       method: "POST",
       body: JSON.stringify({

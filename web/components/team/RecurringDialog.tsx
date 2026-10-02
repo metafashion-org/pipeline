@@ -72,7 +72,7 @@ function daysLabel(weekdays: number[]): string {
 
 /**
  * Repeating tasks: a task that is made every chosen weekday and put in the owner's plan, such as
- * "Curate assets", 45 a day, focus Christmas until 31 December. Each day's task keeps its own
+ * "Curate assets", 5 a day, focus Christmas until 31 December. Each day's task keeps its own
  * count, so the week view shows how each day went.
  */
 export function RecurringDialog({ members, today, onChanged }: { members: TeamMember[]; today: string; onChanged: () => void }) {
@@ -157,7 +157,7 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
         <DialogHeader>
           <DialogTitle>Repeating tasks</DialogTitle>
           <DialogDescription>
-            Made on the days you pick and put in the owner&apos;s plan. Add a count for daily targets, and a focus for the season, e.g. 45 a day, Christmas until 31 Dec.
+            Made on the days you pick and put in the owner&apos;s plan. Add a count for daily targets, and a focus for the season, e.g. 5 a day, Christmas until 31 Dec.
           </DialogDescription>
         </DialogHeader>
 
@@ -244,7 +244,7 @@ export function RecurringDialog({ members, today, onChanged }: { members: TeamMe
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Count a day (optional)</p>
-                <Input type="number" min={1} value={form.targetCount} onChange={(e) => setForm({ ...form, targetCount: e.target.value })} placeholder="e.g. 45" className="h-9" />
+                <Input type="number" min={1} value={form.targetCount} onChange={(e) => setForm({ ...form, targetCount: e.target.value })} placeholder="e.g. 5" className="h-9" />
               </div>
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Focus (optional)</p>

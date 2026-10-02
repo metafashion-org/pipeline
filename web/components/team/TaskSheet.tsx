@@ -290,7 +290,7 @@ export function TaskSheet({
             <Input
               type="number"
               min={1}
-              placeholder="How many, e.g. 45 assets"
+              placeholder="How many, e.g. 5 assets"
               onBlur={(e) => Number(e.target.value) > 0 && patch({ targetCount: Number(e.target.value) })}
               className="h-8 w-56 text-sm"
             />
@@ -322,39 +322,44 @@ export function TaskSheet({
         <Field label={`Subtasks (${task.subtasks.filter((s) => s.doneAt).length}/${task.subtasks.length})`}>
           <ul className="space-y-1.5">
             {task.subtasks.map((subtask) => (
-              <li key={subtask.id} className="flex items-center gap-2 rounded-md border p-1.5">
-                <input
-                  type="checkbox"
-                  checked={Boolean(subtask.doneAt)}
-                  onChange={() => updateSubtask(subtask.id, { done: !subtask.doneAt }).then(after)}
-                  className="h-3.5 w-3.5 accent-primary"
-                  aria-label={`Tick ${subtask.title}`}
-                />
-                <span className={cn("min-w-0 flex-1 truncate text-sm", subtask.doneAt && "text-muted-foreground line-through")}>{subtask.title}</span>
-                <Select value={subtask.ownerId ?? NOBODY} onValueChange={(v) => updateSubtask(subtask.id, { ownerId: v === NOBODY ? null : v }).then(after)}>
-                  <SelectTrigger className="h-7 w-[120px] text-xs" aria-label={`Who does ${subtask.title}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NOBODY}>Task owner</SelectItem>
-                    {members.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="date"
-                  key={`subdue-${subtask.id}-${subtask.dueOn}`}
-                  defaultValue={subtask.dueOn ?? ""}
-                  onChange={(e) => updateSubtask(subtask.id, { dueOn: e.target.value || null }).then(after)}
-                  className="h-7 w-[130px] text-xs"
-                  aria-label={`When ${subtask.title} is due`}
-                />
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => deleteSubtask(subtask.id).then(after)} aria-label={`Remove ${subtask.title}`}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+              <li key={subtask.id} className="space-y-1.5 rounded-md border p-2">
+                {/* The title gets the whole first line and wraps, so a long subtask is readable. */}
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(subtask.doneAt)}
+                    onChange={() => updateSubtask(subtask.id, { done: !subtask.doneAt }).then(after)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                    aria-label={`Tick ${subtask.title}`}
+                  />
+                  <span className={cn("min-w-0 flex-1 break-words text-sm leading-snug", subtask.doneAt && "text-muted-foreground line-through")}>{subtask.title}</span>
+                </label>
+                <div className="flex flex-wrap items-center gap-2 pl-5">
+                  <Select value={subtask.ownerId ?? NOBODY} onValueChange={(v) => updateSubtask(subtask.id, { ownerId: v === NOBODY ? null : v }).then(after)}>
+                    <SelectTrigger className="h-7 w-[150px] text-xs" aria-label={`Who does ${subtask.title}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NOBODY}>Task owner</SelectItem>
+                      {members.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="date"
+                    key={`subdue-${subtask.id}-${subtask.dueOn}`}
+                    defaultValue={subtask.dueOn ?? ""}
+                    onChange={(e) => updateSubtask(subtask.id, { dueOn: e.target.value || null }).then(after)}
+                    className="h-7 w-[140px] text-xs"
+                    aria-label={`When ${subtask.title} is due`}
+                  />
+                  <Button size="icon" variant="ghost" className="ml-auto h-7 w-7" onClick={() => deleteSubtask(subtask.id).then(after)} aria-label={`Remove ${subtask.title}`}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
