@@ -36,7 +36,8 @@ function DayCell({ day, onOpenTask }: { day: WeekPersonDay; onOpenTask: (taskId:
     <ul className="space-y-1">
       {day.planned.map((p, i) => {
         const count = countFor.get(p.taskId);
-        const done = p.status === DONE_STATUS;
+        // Counted work shows its count instead of a tick: a day closed at 0/5 isn't done.
+        const done = p.status === DONE_STATUS && !count;
         return (
           <li key={p.taskId}>
             <button type="button" onClick={() => onOpenTask(p.taskId)} className={cn("text-left leading-snug hover:underline", done && "text-muted-foreground")}>
@@ -48,6 +49,7 @@ function DayCell({ day, onOpenTask }: { day: WeekPersonDay; onOpenTask: (taskId:
                   {count.focus ? ` · ${count.focus}` : ""}
                 </span>
               )}
+
               {done && <Check className="ml-1 inline h-3 w-3 text-emerald-400" />}
             </button>
           </li>
@@ -90,7 +92,7 @@ export function WeekDialog({ today, onOpenTask }: { today: string; onOpenTask: (
           <CalendarRange className="h-4 w-4" /> Week
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setWeekStart(addDays(weekStart, -DAYS_PER_WEEK))} aria-label="Previous week">
