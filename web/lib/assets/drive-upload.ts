@@ -424,3 +424,47 @@ export async function shareFinalFile(fileId: string): Promise<void> {
   await shareWithDomain(fileId);
   await shareWithAnyoneReader(fileId);
 }
+
+const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+const SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+
+/**
+ * Makes a Google Sheet in the shared drive's "Meta Fashion Pipeline — Team Tasks" folder, writes its header row,
+ * and shares it with the company domain and one outside email as an editor. The service account's
+ * drive.file scope only reaches files it created, which is why the Kanban makes the sheet itself.
+ *
+ * Input: the sheet's name, its header row, and the email to share it with. Output: the sheet's id
+ * and link. Throws when Drive isn't configured or Google refuses (e.g. outside sharing is off).
+ */
+export async function createSharedSheet(name: string, header: string[], editorEmail: string): Promise<{ id: string; url: string }> {
+  requireDriveConfigured();
+  const folderId = await getOrCreateFolder("Meta Fashion Pipeline — Team Tasks");
+  const file = await authedFetch(`${DRIVE_API}/files?supportsAllDrives=true&fields=id`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: SHEET_MIME_TYPE, parents: [folderId] }),
+  });
+  await writeSheetCells(file.id, "A1", [header]);
+  await shareWithDomain(file.id);
+  await authedFetch(`${DRIVE_API}/files/${file.id}/permissions?supportsAllDrives=true&sendNotificationEmail=true`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "user", role: "writer", emailAddress: editorEmail }),
+  });
+  return { id: file.id, url: `https://docs.google.com/spreadsheets/d/${file.id}/edit` };
+}
+
+/** The cell values in an A1 range of a sheet the service account made, as rows of strings. */
+export async function readSheetRows(sheetId: string, range: string): Promise<string[][]> {
+  const data = await authedFetch(`${SHEETS_API}/${sheetId}/values/${encodeURIComponent(range)}`);
+  return (data.values ?? []) as string[][];
+}
+
+/** Writes rows of values starting at an A1 cell of a sheet the service account made. */
+export async function writeSheetCells(sheetId: string, startCell: string, rows: string[][]): Promise<void> {
+  await authedFetch(`${SHEETS_API}/${sheetId}/values/${encodeURIComponent(startCell)}?valueInputOption=RAW`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ values: rows }),
+  });
+}

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { syncTaskSheet } from "@/lib/team-tasks/sheet-intake";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getTeamBoard } from "@/lib/team-tasks/team-board";
 import { makeRecurringTasksFor } from "@/lib/team-tasks/recurring-service";
@@ -24,5 +25,8 @@ export async function GET() {
     getTeamBoard(today),
     user.personnelId ? listTeamNotifications(user.personnelId) : Promise.resolve({ unread: 0 }),
   ]);
+  // Picks up rows Instinct wrote in the task sheet after this response is sent, at most once a
+  // minute; Vercel's plan only runs scheduled jobs daily, so board loads are what keep it current.
+  after(() => syncTaskSheet().catch((error) => console.error("[task sheet] sync failed:", error)));
   return NextResponse.json({ ...board, viewerId: user.personnelId ?? null, unread: notifications.unread });
 }
