@@ -37,3 +37,19 @@ export async function personName(id: string): Promise<string | null> {
   const [row] = await db.select({ name: personnel.name }).from(personnel).where(eq(personnel.id, id)).limit(1);
   return row?.name ?? null;
 }
+
+/**
+ * A team member named by id, email, or name (case ignored; a first name works when only one
+ * member has it). Used by outside tools that know people by name, not id.
+ *
+ * Input: the id, email or name. Output: the member, or null when none or more than one match.
+ */
+export async function resolveTeamMember(ref: string): Promise<TeamMember | null> {
+  const needle = ref.trim().toLowerCase();
+  if (!needle) return null;
+  const members = await listTeamMembers();
+  const exact = members.find((m) => m.id === ref.trim() || m.email.toLowerCase() === needle || m.name.toLowerCase() === needle);
+  if (exact) return exact;
+  const byFirstName = members.filter((m) => m.name.toLowerCase().split(/\s+/)[0] === needle);
+  return byFirstName.length === 1 ? byFirstName[0] : null;
+}

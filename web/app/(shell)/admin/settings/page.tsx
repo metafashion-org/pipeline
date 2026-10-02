@@ -7,6 +7,7 @@ import { getCurationFieldConfigs, seedDefaultCurationFieldConfig } from "@/lib/c
 import { SettingsManager } from "@/components/settings/SettingsManager";
 import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
 import { CategoriesManager } from "@/components/settings/CategoriesManager";
+import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
 import { CurationReviewSwitch } from "@/components/settings/CurationReviewSwitch";
 import { getCurationReviewMode } from "@/lib/settings/app-settings";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ export default async function SettingsPage() {
         <CurationReviewSwitch initialMode={curationReviewMode} />
         <BrandGroupsManager />
         <CategoriesManager />
+        <ApiKeysManager />
         <SettingsManager initialStatuses={statuses} initialRules={rules} initialCurationFields={curationFields} />
       </main>
     </div>
