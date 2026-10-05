@@ -1,8 +1,9 @@
 import { errorMessage } from "@/lib/errors";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { recordRobloxUpload } from "@/lib/publisher/publisher-service";
+import { notifyArtistOfRobloxUpload } from "@/lib/notifications/pipeline-notices";
 import { parseRobloxLinkLines } from "@/lib/publisher/roblox-links";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
@@ -67,6 +68,8 @@ export async function POST(
     });
     // The asset leaves the Ready for Upload queue and arrives in Marketing's "uploaded but not marketed" list, so both cached views are now out of date.
     revalidateViews(CACHE_TAGS.publisherQueue, CACHE_TAGS.marketing);
+    // The artist hears their asset is live, with the links.
+    after(() => notifyArtistOfRobloxUpload(result.sku, result.links.map((link) => link.url)));
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     return NextResponse.json(

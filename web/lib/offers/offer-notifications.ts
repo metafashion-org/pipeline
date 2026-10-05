@@ -58,7 +58,7 @@ function finalFilesSubmitUrl(sku: string): string {
 }
 
 // The board opens straight to an asset's drawer when loaded with ?asset=<SKU> (see TaskCard.tsx).
-function boardAssetUrl(sku: string): string {
+export function boardAssetUrl(sku: string): string {
   return appUrl(`/admin/board?asset=${encodeURIComponent(sku)}`);
 }
 
@@ -83,7 +83,7 @@ async function getTeamEmails(summary: OfferSummary): Promise<string[]> {
 }
 
 // Every offer email shows the asset the same way: picture, name, SKU and type, fee and deadline.
-function renderOfferEmail(
+export function renderOfferEmail(
   summary: OfferSummary,
   parts: Pick<EmailLayoutInput, "preheader" | "eyebrow" | "tone" | "intro" | "quote" | "details" | "note" | "button"> & {
     deadline?: Date | null;
@@ -104,7 +104,7 @@ function renderOfferEmail(
 
 // Queues each email, then tries to send straight away. A failed send stays queued and the daily
 // cron retries it, so none of this is allowed to fail the action that caused the notification.
-async function queueAndSend(assetId: string, toEmails: string[], subject: string, bodyHtml: string): Promise<void> {
+export async function queueAndSend(assetId: string, toEmails: string[], subject: string, bodyHtml: string): Promise<void> {
   try {
     for (const toEmail of toEmails) {
       await enqueueEmail({ assetId, toEmail, subject, bodyHtml });
@@ -115,7 +115,7 @@ async function queueAndSend(assetId: string, toEmails: string[], subject: string
   }
 }
 
-interface ArtistDiscordMessage {
+export interface ArtistDiscordMessage {
   content: string;
   title: string;
   description: string;
@@ -146,7 +146,7 @@ async function artistDiscordTarget(summary: OfferSummary): Promise<string | null
 
 // Posts to the artist on Discord, mentioning them so Discord notifies them. Best-effort: no
 // Discord account, Discord being unset or down, or DMs turned off only means no Discord message.
-async function postToArtistChannel(message: ArtistDiscordMessage): Promise<void> {
+export async function postToArtistChannel(message: ArtistDiscordMessage): Promise<void> {
   const { summary } = message;
   if (!isDiscordConfigured()) return;
   const mention = summary.artistDiscordUserId ? `<@${summary.artistDiscordUserId}> ` : "";

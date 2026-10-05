@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { uploadPaymentSummaryFile, isConfigured } from "@/lib/assets/drive-upload";
 import { attachPaymentSummaryForArtist } from "@/lib/payments/payment-batch-service";
+import { notifyArtistOfPayment } from "@/lib/notifications/pipeline-notices";
 import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { eq } from "drizzle-orm";
@@ -82,6 +83,8 @@ export async function POST(request: NextRequest) {
       actor: { roles: user.roles, personnelId: user.personnelId },
     });
 
+    // One notice for the whole payout, listing every asset in it.
+    after(() => notifyArtistOfPayment(result.skus));
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {
     console.error("Payment summary attach failed:", error);
