@@ -17,7 +17,6 @@ import { formatDate } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
 import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { AssetOfferStatus } from "@/components/offers/AssetOfferStatus";
-import { CurationReviewSection } from "@/components/curation/CurationReviewSection";
 import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
@@ -136,10 +135,6 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
-        {/* A card in Curated is a curator's idea waiting for the team: what they wrote, and approve or send back. */}
-        {asset.currentStatus === CURATED_STATUS && (
-          <CurationReviewSection sku={asset.sku} enabled={open} canReview={viewerCapabilities.canAssignArtists} />
-        )}
 
         {/* 2. Artist Assignment */}
         <section className="space-y-2">

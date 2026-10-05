@@ -2,12 +2,13 @@ import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
-import { curationReviewAppliesTo, getCurationReviewMode } from "@/lib/settings/app-settings";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { nextSequentialSku } from "@/lib/assets/sku";
 import { toFileStoreEntries } from "@/lib/assets/file-store";
+import { recordSignoffRequest } from "@/lib/signoff/signoff-service";
+import { SIGNOFF_STATUS, signsOff } from "@/lib/signoff/signoff-rules";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -41,9 +42,8 @@ export async function GET() {
     // board filtered to their own email, which is empty.
     const artistFilterEmail = user.caps.canViewAllAssets ? undefined : user.email;
 
-    // An artist's own board never has a Curated column: curated ideas have no artist yet.
-    const showCurated = !artistFilterEmail && curationReviewAppliesTo(await getCurationReviewMode(), user.roles);
-    const { columns, rules } = await getKanbanBoardData(artistFilterEmail, { showCurated });
+    // Assets waiting for sign-off aren't on the board; they're on the Sign-off page.
+    const { columns, rules } = await getKanbanBoardData(artistFilterEmail);
 
     return NextResponse.json({
       data: columns,
@@ -98,6 +98,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Arjun signs off everything someone else adds before it goes on the board; his own adds go
+  // straight to Unassigned (lib/signoff/signoff-rules.ts).
+  const needsSignoff = !signsOff(user.roles);
   try {
     const [created] = await db
       .insert(assets)
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
         sku,
         itemName,
         category: category || null,
-        currentStatus: "unassigned",
+        currentStatus: needsSignoff ? SIGNOFF_STATUS : "unassigned",
         deadline,
         plannedUploadDate,
         feeAmount: feeAmount || null,
@@ -121,10 +124,11 @@ export async function POST(request: NextRequest) {
       entityType: "asset",
       entityId: created.id,
       actorId: user.personnelId || null,
-      payload: { sku, itemName, category: category || null },
+      payload: { sku, itemName, category: category || null, needsSignoff },
     });
+    if (needsSignoff) await recordSignoffRequest(created.id, user.personnelId ?? null);
 
-    return NextResponse.json({ success: true, asset: created });
+    return NextResponse.json({ success: true, asset: created, needsSignoff });
   } catch (error: unknown) {
     console.error("Error creating asset:", error);
     // postgres-js surfaces the real Postgres error as `.cause` on the drizzle-wrapped error;

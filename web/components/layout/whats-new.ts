@@ -13,6 +13,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    href: "/admin/signoff",
+    newUntil: "2026-10-20",
+    why: "It replaces the Curation form. New assets used to go straight on the board; now Arjun signs each one off first.",
+    whatFor:
+      "Assets added with New Asset wait here. Arjun approves them onto the board, sends them back with feedback, or drops them. If one of yours is sent back, fix it and resubmit it here.",
+  },
+  {
     href: "/artist/profile",
     newUntil: "2026-10-20",
     why: "It replaces the Team Onboarding Google Form, which never asked for a bank account number or IFSC.",

@@ -81,7 +81,7 @@ someone's access takes effect immediately, not just on their next page load.
 | `/admin/archive` | admin/operator | Archived/completed assets |
 | `/admin/board` | admin/operator | (see admin board) |
 | `/artist` | artist, or `canMoveToInProduction` | Own assigned assets only |
-| `/curator` | curator, or `canAccessCuratorTools` | Idea intake / curation drafts |
+| `/admin/signoff` | `canAssignArtists` | Assets added by anyone but an admin wait here for Arjun's sign-off before they go on the board |
 | `/publisher` | publisher/uploader, or `canPublishToRoblox` | Shared "ready for upload" queue → record Roblox catalog links |
 | `/apply` | public | Public onboarding/access-request form |
 | `/forms/[formKey]` | public/authed depending on form | Generic form runtime |
