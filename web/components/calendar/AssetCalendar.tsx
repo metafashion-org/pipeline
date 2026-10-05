@@ -20,22 +20,24 @@ interface CalendarEvent {
   done: boolean;
 }
 
-// How each kind of date looks, and what it's called in the legend and filters.
+// How each kind of date looks, and what it's called in the legend and filters. The kind is shown by
+// the chip's coloured left edge and tint; the name itself is always in the normal text colour, so
+// it stays readable in both themes.
 const EVENT_STYLES: Record<EventType, { label: string; dot: string; chip: string }> = {
   deadline: {
     label: "Artist deadline",
     dot: "bg-amber-500",
-    chip: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+    chip: "border-amber-500 bg-amber-500/10",
   },
   planned_upload: {
     label: "Planned upload",
     dot: "bg-blue-500",
-    chip: "bg-blue-500/15 text-blue-800 dark:text-blue-300",
+    chip: "border-blue-500 bg-blue-500/10",
   },
   went_live: {
     label: "Went live",
     dot: "bg-emerald-500",
-    chip: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
+    chip: "border-emerald-500 bg-emerald-500/10",
   },
 };
 
@@ -92,10 +94,12 @@ function EventChip({ event }: { event: CalendarEvent }) {
       title={`${style.label}: ${event.itemName} (${event.sku})${event.artistName ? `, ${event.artistName}` : ""}${
         event.brandGroupName ? `, ${event.brandGroupName}` : ""
       }`}
-      className={`block truncate rounded px-1.5 py-0.5 text-[11px] leading-tight hover:opacity-80 ${style.chip} ${
-        event.done ? "opacity-50 line-through" : ""
+      // Two lines before cutting off, so most item names show in full.
+      className={`block line-clamp-2 break-words rounded-sm border-l-[3px] px-1.5 py-1 text-[13px] leading-snug hover:bg-accent ${style.chip} ${
+        event.done ? "text-muted-foreground" : "text-foreground"
       }`}
     >
+      {event.done && <span aria-label="Done">✓ </span>}
       {event.itemName}
     </Link>
   );
@@ -104,7 +108,7 @@ function EventChip({ event }: { event: CalendarEvent }) {
 /**
  * The company-wide asset calendar: every artist deadline, planned upload and go-live date, laid out
  * by month so everyone sees what ships when. Each entry opens the asset on the board. Done items
- * (a deadline the artist has delivered on, a planned upload that went live) are struck through.
+ * (a deadline the artist has delivered on, a planned upload that went live) get a tick and lighter text.
  */
 export function AssetCalendar() {
   const [monthKey, setMonthKey] = useState(() => todayKey().slice(0, 7));
@@ -161,6 +165,7 @@ export function AssetCalendar() {
               {EVENT_STYLES[type].label}
             </button>
           ))}
+          <span className="flex items-center px-1 text-xs text-muted-foreground">✓ = done</span>
         </div>
       </div>
 
@@ -168,7 +173,7 @@ export function AssetCalendar() {
       <div className="hidden md:block">
         <div className="grid grid-cols-7 gap-px rounded-md border bg-border overflow-hidden">
           {WEEKDAYS.map((w) => (
-            <div key={w} className="bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+            <div key={w} className="bg-muted px-2 py-1.5 text-sm font-medium text-muted-foreground">
               {w}
             </div>
           ))}
@@ -176,10 +181,15 @@ export function AssetCalendar() {
             const inMonth = day.startsWith(monthKey);
             const events = eventsByDay.get(day) ?? [];
             return (
-              <div key={day} className={`min-h-28 bg-background p-1.5 space-y-1 ${inMonth ? "" : "opacity-40"}`}>
+              // Days from the next or previous month get a grey background; their entries stay readable.
+              <div key={day} className={`min-h-32 p-1.5 space-y-1 ${inMonth ? "bg-background" : "bg-muted/60"}`}>
                 <div
-                  className={`text-xs ${
-                    day === today ? "inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground" : "text-muted-foreground"
+                  className={`text-sm font-medium ${
+                    day === today
+                      ? "inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                      : inMonth
+                        ? "text-foreground"
+                        : "text-muted-foreground"
                   }`}
                 >
                   {Number(day.slice(8))}
@@ -198,10 +208,10 @@ export function AssetCalendar() {
         {monthEvents.length === 0 && !isLoading && <p className="text-sm text-muted-foreground">Nothing scheduled this month.</p>}
         {monthEvents.map(({ day, event }) => (
           <div key={`${day}-${event.type}-${event.sku}`} className="flex items-start gap-3">
-            <span className="w-12 shrink-0 text-xs text-muted-foreground">{Number(day.slice(8))} {monthTitle.format(new Date(`${day}T00:00:00Z`)).slice(0, 3)}</span>
+            <span className="w-14 shrink-0 text-sm text-muted-foreground">{Number(day.slice(8))} {monthTitle.format(new Date(`${day}T00:00:00Z`)).slice(0, 3)}</span>
             <div className="min-w-0 flex-1 space-y-0.5">
               <EventChip event={event} />
-              <p className="text-[11px] text-muted-foreground">{EVENT_STYLES[event.type].label}</p>
+              <p className="text-xs text-muted-foreground">{EVENT_STYLES[event.type].label}</p>
             </div>
           </div>
         ))}
