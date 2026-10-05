@@ -1,6 +1,7 @@
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import { isRouteAllowedForRoles, landingPathForRoles } from "@/lib/auth/rbac";
+import { getActivePersonnelByEmail } from "@/lib/auth/personnel-auth";
 
 // Page-route gating.
 //
@@ -14,16 +15,25 @@ import { isRouteAllowedForRoles, landingPathForRoles } from "@/lib/auth/rbac";
 // Note this matcher covers pages only, never /api. API routes authorise themselves through
 // lib/auth/authed-user.ts, which is also what checks that the person is still Active.
 export default withAuth(
-    function proxy(req) {
+    async function proxy(req) {
         const path = req.nextUrl.pathname;
         const token = req.nextauth.token;
 
-        const roles = (token?.roles as string[]) || [];
-        const overrides = (token?.capabilityOverrides as Record<string, boolean>) || {};
+        // The sign-in cookie holds the roles a person had when they signed in, and nothing
+        // rewrites it afterwards (there's no SessionProvider, and server components can't set
+        // cookies). So someone given a role later, like full_time for Team Tasks, was redirected
+        // away until they signed out and in again. Their current personnel row decides instead,
+        // through the same 60-second cache the session callback uses. A deleted row or a failed
+        // read comes back with no roles and no status, which is treated as not Active, so a stale
+        // cookie never grants anything.
+        const current = typeof token?.email === "string" && token.email.trim() ? await getActivePersonnelByEmail(token.email) : null;
+        const roles = current?.roles ?? [];
+        const overrides = current?.capabilityOverrides ?? {};
+        const status = current?.personnelId ? current.status : "Inactive";
 
         if (path === "/login" || path === "/") {
             if (token && typeof token.email === "string" && token.email.trim() !== "") {
-                if (token.status && token.status !== "Active") {
+                if (status && status !== "Active") {
                     return NextResponse.redirect(new URL("/unauthorized", req.url));
                 }
                 return NextResponse.redirect(new URL(landingPathForRoles(roles, overrides), req.url));
@@ -37,7 +47,7 @@ export default withAuth(
         }
 
         // Gate strictly on Active status
-        if (token.status && token.status !== "Active") {
+        if (status && status !== "Active") {
             return NextResponse.redirect(new URL("/unauthorized", req.url));
         }
 
