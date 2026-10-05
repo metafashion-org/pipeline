@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { DriveImage } from "@/components/kanban/drive-image";
 import { apiCall } from "@/lib/api-client";
 import { MAX_FINAL_ZIP_BYTES, checkFinalZip, formatMegabytes } from "@/lib/deliverables/final-zip";
@@ -22,6 +23,8 @@ export interface SubmittableAsset {
   itemName: string;
   category: string | null;
   artistName: string | null;
+  /** Assigned to the person viewing the page. Only these are listed until the team switches to handing in for another artist. */
+  mine: boolean;
   /** The Drive file id of its first reference image, for the thumbnail, or null. */
   coverFileId: string | null;
   /** What its .zip needs beyond the standard checklist (lib/deliverables/zip-guidance.ts). */
@@ -124,9 +127,14 @@ export function FinalFilesForm({
   assets: SubmittableAsset[];
   initialSku: string | null;
   submitterEmail: string | null;
-  /** True for the team handing in on an artist's behalf: the list shows each asset's artist. */
+  /** True for the team, who may hand in on an artist's behalf through the "Hand in for another artist" switch. */
   forTeam: boolean;
 }) {
+  // An artist only ever sees their own assets. The team sees their own too, unless they switch to
+  // handing in for another artist, or a link opened someone else's asset.
+  const [forOthers, setForOthers] = useState(() => forTeam && Boolean(initialSku) && assets.some((a) => a.sku === initialSku && !a.mine));
+  const listed = forOthers ? assets.filter((a) => !a.mine) : assets.filter((a) => a.mine);
+  const othersCount = assets.filter((a) => !a.mine).length;
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -139,7 +147,7 @@ export function FinalFilesForm({
   const [isDraggedOver, setIsDraggedOver] = useState(false);
   const [handedIn, setHandedIn] = useState<string | null>(null);
 
-  const asset = assets.find((a) => a.sku === sku) ?? null;
+  const asset = listed.find((a) => a.sku === sku) ?? null;
   const requestedSkuMissing = Boolean(initialSku) && !assets.some((a) => a.sku === initialSku) && !handedIn;
 
   function pick(files: File[]) {
@@ -227,10 +235,25 @@ export function FinalFilesForm({
           </Label>
           {submitterEmail && <span className="text-xs text-muted-foreground truncate">Submitting as {submitterEmail}</span>}
         </div>
-        {assets.length === 0 ? (
+        {forTeam && (
+          <label className="flex items-center gap-2 text-sm">
+            <Switch
+              checked={forOthers}
+              disabled={busy}
+              onCheckedChange={(on) => {
+                setForOthers(on);
+                setSku("");
+              }}
+            />
+            Hand in for another artist
+            <span className="text-xs text-muted-foreground">({othersCount} approved)</span>
+          </label>
+        )}
+        {listed.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nothing is waiting for final files. An asset shows up here once the team approves its design
-            {forTeam ? "." : " and it's assigned to you."}{" "}
+            {forOthers
+              ? "No other artist's asset is waiting for final files."
+              : "Nothing assigned to you is waiting for final files. An asset shows up here once the team approves its design."}{" "}
             {!forTeam && (
               <Link href="/artist" className="text-primary hover:underline">
                 Back to My Tasks
@@ -244,14 +267,19 @@ export function FinalFilesForm({
                 <SelectValue placeholder="Choose the SKU you're handing in" />
               </SelectTrigger>
               <SelectContent>
-                {assets.map((a) => (
+                {listed.map((a) => (
                   <SelectItem key={a.sku} value={a.sku}>
                     {a.sku} · {a.itemName}
-                    {forTeam && a.artistName ? ` · ${a.artistName}` : ""}
+                    {forOthers ? ` · ${a.artistName ?? "no artist"}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {asset && forOthers && (
+              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                You&apos;re handing this in for <strong>{asset.artistName ?? "an asset with no artist"}</strong>, not for yourself.
+              </p>
+            )}
             {asset && (
               <div className="flex items-center gap-3">
                 <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-muted">

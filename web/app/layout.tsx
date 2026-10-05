@@ -46,17 +46,13 @@ export default function RootLayout({
       <body
         className={`${sans.variable} ${display.variable} ${mono.variable} antialiased`}
       >
-        {/* System is enabled because the mode toggle in the shell offers it. It was listed as a
-            choice while enableSystem was false, so picking it did nothing. Dark stays the
-            default for anyone who has not chosen. */}
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
+        {/* One theme for everyone. With a light/dark toggle each browser kept its own choice, so
+            the app looked different from login to login. forcedTheme also overrides a choice an
+            old toggle left in a browser's storage. */}
+        <ThemeProvider attribute="class" forcedTheme="dark" disableTransitionOnChange>
           {children}
-          <Toaster />
+          {/* The toaster reads next-themes' stored choice, which an old toggle may have left as light. */}
+          <Toaster theme="dark" />
         </ThemeProvider>
       </body>
     </html>
