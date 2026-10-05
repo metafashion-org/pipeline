@@ -10,7 +10,10 @@ import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord
 import { parseDriveRefs, driveThumbnailUrl } from "@/lib/assets/drive-links";
 import { formatDateTime } from "@/lib/format-date";
 import { appUrl } from "@/lib/app-url";
-import { SIGNOFF_DIGEST_TO } from "./signoff-rules";
+import { SIGNOFF_DIGEST_TO, signsOff } from "./signoff-rules";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { postToOfficeChannel } from "@/lib/discord/office-channel";
+import { listTeamMembers } from "@/lib/team-tasks/team-members";
 
 /** The Sign-off page. */
 export function signoffUrl(): string {
@@ -94,6 +97,61 @@ export async function notifySubmitterOfDecision(notice: SignoffDecisionNotice): 
     ]);
   } catch (error) {
     console.error(`[sign-off] notice for ${notice.sku} failed:`, error);
+  }
+}
+
+/**
+ * Tells the people who assign artists (Jayesh) that Arjun signed assets off and they're in Unassigned,
+ * ready to assign and price: an email each and a post in #office pinging them. Arjun himself is
+ * left out. Never throws.
+ *
+ * Input: the approved assets. Output: nothing.
+ */
+export async function notifyAssignersOfApproved(approved: { sku: string; itemName: string }[]): Promise<void> {
+  try {
+    if (approved.length === 0) return;
+    const people = (
+      await db
+        .select({ email: personnel.email, roles: personnel.roles, overrides: personnel.capabilityOverrides, discordUserId: personnel.discordUserId })
+        .from(personnel)
+        .where(eq(personnel.status, "Active"))
+    ).filter((p) => {
+      const roles = p.roles ?? [];
+      const lower = roles.map((r) => r.toLowerCase());
+      return lower.includes("full_time") && !signsOff(roles) && getEffectiveCapabilities(roles, (p.overrides as Record<string, boolean>) ?? {}).canAssignArtists;
+    });
+    if (people.length === 0) return;
+    const lines = approved.map((a) => `${a.sku} · ${a.itemName}`);
+    const boardUrl = appUrl("/admin/board");
+    const what = approved.length === 1 ? `${approved[0].itemName} is` : `${approved.length} assets are`;
+    for (const person of people) {
+      await queueAndSend(
+        person.email,
+        `Signed off: ${approved.length === 1 ? `${approved[0].itemName} (${approved[0].sku})` : `${approved.length} assets`}, ready to assign`,
+        renderEmailLayout({
+          preheader: "Arjun signed these off. Assign an artist and set the fee.",
+          eyebrow: "Ready to assign",
+          tone: EMAIL_TONE.good,
+          title: `${what} on the board`,
+          meta: ["Unassigned"],
+          imageUrl: null,
+          stats: [],
+          intro: "Arjun signed these off. They're in Unassigned: pick an artist, set the fee and deadline, and send the offer.",
+          details: lines.map((line) => ({ label: "Asset", value: line })),
+          button: { label: "Open the board", url: boardUrl },
+        })
+      );
+    }
+    const members = await listTeamMembers();
+    const mentionDiscordIds = people.map((p) => p.discordUserId).filter((id): id is string => Boolean(id));
+    await postToOfficeChannel({
+      content: `${mentionDiscordIds.map((id) => `<@${id}>`).join(" ")} Arjun signed off ${approved.length === 1 ? "an asset" : `${approved.length} assets`}. Ready to assign and price.`.trim(),
+      embeds: [{ title: "Ready to assign", url: boardUrl, description: lines.join("\n"), color: 0x16a34a }],
+      mentionDiscordIds,
+      memberDiscordIds: members.map((m) => m.discordUserId).filter((id): id is string => Boolean(id)),
+    });
+  } catch (error) {
+    console.error("[sign-off] assigner notice failed:", error);
   }
 }
 

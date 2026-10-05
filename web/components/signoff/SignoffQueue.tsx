@@ -25,6 +25,7 @@ type ItemView = Omit<SignoffItem, "submittedAt"> & { submittedAt: string };
 interface SignoffResponse {
   items: ItemView[];
   viewerSignsOff: boolean;
+  viewerEditsAll: boolean;
   viewerId: string | null;
 }
 
@@ -45,7 +46,8 @@ export function SignoffQueue() {
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
   if (error || !data) return <p className="text-sm text-destructive">{error?.message ?? "Couldn't load sign-off"}</p>;
 
-  const { items, viewerSignsOff, viewerId } = data;
+  const { items, viewerSignsOff, viewerEditsAll, viewerId } = data;
+  const canEdit = (item: ItemView) => viewerEditsAll || item.submittedById === viewerId;
   const waiting = items.filter((i) => i.state === WAITING);
   const sentBack = items.filter((i) => i.state === SENT_BACK);
   const mineSentBack = sentBack.filter((i) => i.submittedById === viewerId);
@@ -101,7 +103,7 @@ export function SignoffQueue() {
       {!viewerSignsOff && mineSentBack.length > 0 && (
         <Section title={`Sent back to you (${mineSentBack.length})`} hint="Make the changes, then resubmit it to Arjun.">
           {mineSentBack.map((item) => (
-            <AssetRow key={item.card.sku} item={item} onEdited={() => mutate()}>
+            <AssetRow key={item.card.sku} item={item} editable={canEdit(item)} onEdited={() => mutate()}>
               <Button size="sm" onClick={() => resubmit(item)} disabled={working}>
                 <Send className="h-3.5 w-3.5" /> Resubmit
               </Button>
@@ -131,6 +133,7 @@ export function SignoffQueue() {
           <AssetRow
             key={item.card.sku}
             item={item}
+            editable={canEdit(item)}
             onEdited={() => mutate()}
             checkbox={viewerSignsOff ? { checked: selected.has(item.card.sku), onChange: () => toggle(item.card.sku) } : undefined}
           >
@@ -154,7 +157,7 @@ export function SignoffQueue() {
       {(viewerSignsOff ? sentBack : sentBack.filter((i) => i.submittedById !== viewerId)).length > 0 && (
         <Section title="Sent back, waiting on changes" hint="These come back to the queue when they're resubmitted.">
           {(viewerSignsOff ? sentBack : sentBack.filter((i) => i.submittedById !== viewerId)).map((item) => (
-            <AssetRow key={item.card.sku} item={item} onEdited={() => mutate()}>
+            <AssetRow key={item.card.sku} item={item} editable={canEdit(item)} onEdited={() => mutate()}>
               {viewerSignsOff && (
                 <Button size="sm" variant="outline" onClick={() => resubmit(item)} disabled={working}>
                   Put back in my queue
@@ -212,11 +215,13 @@ function Section({ title, hint, action, children }: { title: string; hint: strin
 
 function AssetRow({
   item,
+  editable,
   onEdited,
   checkbox,
   children,
 }: {
   item: ItemView;
+  editable: boolean;
   onEdited: () => void;
   checkbox?: { checked: boolean; onChange: () => void };
   children?: React.ReactNode;
@@ -252,7 +257,7 @@ function AssetRow({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {/* The card's dates arrive as strings over JSON; EditAssetDialog reads them through new Date(). */}
-        <EditAssetDialog asset={card as unknown as KanbanAssetCard} onSaved={onEdited} />
+        {editable && <EditAssetDialog asset={card as unknown as KanbanAssetCard} onSaved={onEdited} />}
         {children}
       </div>
     </div>

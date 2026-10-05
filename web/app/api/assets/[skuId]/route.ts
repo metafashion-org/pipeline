@@ -4,9 +4,23 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canAddAssets, getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { assetSignoffs } from "@/lib/db/schema/asset_signoffs";
+import { SIGNOFF_STATUS } from "@/lib/signoff/signoff-rules";
 import { UpdateAssetSchema, computeAssetChanges } from "@/lib/assets/asset-update";
 import { eq } from "drizzle-orm";
+
+// Whether this asset is waiting for sign-off and was added by this person.
+async function isOwnAssetAwaitingSignoff(sku: string, personnelId: string | undefined): Promise<boolean> {
+  if (!personnelId) return false;
+  const [row] = await db
+    .select({ status: assets.currentStatus, submittedBy: assetSignoffs.submittedBy })
+    .from(assets)
+    .innerJoin(assetSignoffs, eq(assetSignoffs.assetId, assets.id))
+    .where(eq(assets.sku, sku))
+    .limit(1);
+  return row?.status === SIGNOFF_STATUS && row.submittedBy === personnelId;
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -18,7 +32,9 @@ export async function PATCH(
   }
 
   const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
-  if (!caps.canAssignArtists) {
+  // The team edits any asset. A curator can edit only an asset they added that is still waiting for
+  // Arjun's sign-off, so they can fix what he sent back; once it's on the board it's the team's.
+  if (!caps.canAssignArtists && !(canAddAssets(caps) && (await isOwnAssetAwaitingSignoff(skuId, session.user.personnelId)))) {
     return NextResponse.json({ error: "You don't have permission to edit assets" }, { status: 403 });
   }
 

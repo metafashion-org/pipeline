@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { getEffectiveCapabilities, isRouteAllowedForRoles, landingPathForRoles, ROLE_DEFAULT_CAPABILITIES } from "../rbac";
+import { getEffectiveCapabilities, isRouteAllowedForRoles, landingPathForRoles, ROLE_DEFAULT_CAPABILITIES, canAddAssets } from "../rbac";
 
 function testRbacSystem() {
   console.log("Verifying 7-Role RBAC Capability & Route Guard logic...");
@@ -113,6 +113,13 @@ function testRbacSystem() {
   assert.strictEqual(isRouteAllowedForRoles("/admin", ["full_time"]), false, "the full-time role alone doesn't open the admin pages");
   assert.strictEqual(landingPathForRoles(["full_time"]), "/team", "someone who is only full-time lands on Team Tasks");
   assert.strictEqual(landingPathForRoles(["curator", "full_time"]), "/team", "a full-time curator lands on Team Tasks");
+
+  // New Asset and the Sign-off page: the team who assign artists, and curators.
+  assert.strictEqual(canAddAssets(getEffectiveCapabilities(["curator"])), true, "a curator adds assets for sign-off");
+  assert.strictEqual(canAddAssets(getEffectiveCapabilities(["operator"])), true, "an operator adds assets");
+  assert.strictEqual(canAddAssets(getEffectiveCapabilities(["artist"])), false, "a freelance artist doesn't");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/signoff", ["curator", "full_time"], { canViewAllAssets: true }), true, "a curator opens Sign-off");
+  assert.strictEqual(isRouteAllowedForRoles("/admin/signoff", ["artist"]), false);
 
   console.log("✓ All P2-T6 7-Role RBAC assertions passed cleanly!");
 }
