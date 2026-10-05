@@ -16,6 +16,7 @@ import { areaLabel, statusLabel, BLOCKED_STATUS, DONE_STATUS, TEAM_TASK_AREAS, T
 import type { TeamMember } from "@/lib/team-tasks/team-members";
 import { MentionInput } from "./MentionInput";
 import { addComment, addLink, addSubtask, deleteSubtask, removeLink, setTodayPlan, updateSubtask, updateTask } from "./team-actions";
+import { detailWithSubtask, detailWithTask } from "./optimistic";
 import { taskDetailUrl, type BoardView, type LinkOptionsView, type TaskDetailView } from "./team-types";
 
 // A Select can't hold an empty value, so "nobody" has its own.
@@ -146,6 +147,23 @@ export function TaskSheet({
     onChanged();
   }
 
+  // Shows a change in the sheet at once and saves it in the background, then refreshes the board.
+  // If the save fails, the sheet goes back to how it was and the save's own toast says why.
+  async function saveShown(write: () => Promise<boolean>, preview: (current: TaskDetailView) => TaskDetailView) {
+    try {
+      await mutate(
+        async () => {
+          if (!(await write())) throw new Error("not saved");
+          return undefined;
+        },
+        { optimisticData: (current) => preview(current as TaskDetailView), rollbackOnError: true, populateCache: false, revalidate: true }
+      );
+      onChanged();
+    } catch {
+      // The failed write already showed its error.
+    }
+  }
+
   if (!data) {
     return (
       <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -160,7 +178,13 @@ export function TaskSheet({
   const { task } = data;
   const ownerPlan = board.plans.filter((p) => p.personnelId === task.ownerId).map((p) => p.taskId);
   const inOwnersToday = ownerPlan.includes(task.id);
-  const patch = (fields: Record<string, unknown>) => updateTask(task.id, fields).then(after);
+  const patch = (fields: Record<string, unknown>) =>
+    saveShown(
+      () => updateTask(task.id, fields),
+      (current) => detailWithTask(current, fields, typeof fields.ownerId === "string" ? names.get(fields.ownerId) : undefined)
+    );
+  const patchSubtask = (subtaskId: string, fields: Record<string, unknown>) =>
+    saveShown(() => updateSubtask(subtaskId, fields), (current) => detailWithSubtask(current, subtaskId, fields));
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -372,14 +396,14 @@ export function TaskSheet({
                   <input
                     type="checkbox"
                     checked={Boolean(subtask.doneAt)}
-                    onChange={() => updateSubtask(subtask.id, { done: !subtask.doneAt }).then(after)}
+                    onChange={() => patchSubtask(subtask.id, { done: !subtask.doneAt })}
                     className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
                     aria-label={`Tick ${subtask.title}`}
                   />
                   <span className={cn("min-w-0 flex-1 break-words text-sm leading-snug", subtask.doneAt && "text-muted-foreground line-through")}>{subtask.title}</span>
                 </label>
                 <div className="flex flex-wrap items-center gap-2 pl-5">
-                  <Select value={subtask.ownerId ?? NOBODY} onValueChange={(v) => updateSubtask(subtask.id, { ownerId: v === NOBODY ? null : v }).then(after)}>
+                  <Select value={subtask.ownerId ?? NOBODY} onValueChange={(v) => patchSubtask(subtask.id, { ownerId: v === NOBODY ? null : v })}>
                     <SelectTrigger className="h-7 w-[150px] text-xs" aria-label={`Who does ${subtask.title}`}>
                       <SelectValue />
                     </SelectTrigger>
@@ -396,11 +420,11 @@ export function TaskSheet({
                     type="date"
                     key={`subdue-${subtask.id}-${subtask.dueOn}`}
                     defaultValue={subtask.dueOn ?? ""}
-                    onChange={(e) => updateSubtask(subtask.id, { dueOn: e.target.value || null }).then(after)}
+                    onChange={(e) => patchSubtask(subtask.id, { dueOn: e.target.value || null })}
                     className="h-7 w-[140px] text-xs"
                     aria-label={`When ${subtask.title} is due`}
                   />
-                  <Button size="icon" variant="ghost" className="ml-auto h-7 w-7" onClick={() => deleteSubtask(subtask.id).then(after)} aria-label={`Remove ${subtask.title}`}>
+                  <Button size="icon" variant="ghost" className="ml-auto h-7 w-7" onClick={() => saveShown(() => deleteSubtask(subtask.id), (current) => detailWithSubtask(current, subtask.id, null))} aria-label={`Remove ${subtask.title}`}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>

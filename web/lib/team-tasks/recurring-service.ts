@@ -7,7 +7,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { listTeamMembers } from "./team-members";
 import { addToDayPlan, TEAM_TASK_ENTITY, TeamTaskInputError, TeamTaskNotFoundError } from "./team-tasks-service";
-import { DONE_STATUS, isTeamTaskArea, repeatsOn } from "./task-rules";
+import { DONE_STATUS, isTeamTaskArea, repeatsOn, teamDay } from "./task-rules";
 
 // Where recurrence changes are logged in audit_log.
 const RECURRENCE_ENTITY = "team_task_recurrence";
@@ -84,7 +84,7 @@ export async function listRecurrences() {
  */
 export async function createRecurrence(input: RecurrenceInput, actorId: string | null): Promise<string> {
   await validateRecurrence(input);
-  return db.transaction(async (tx) => {
+  const id = await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(teamTaskRecurrences)
       .values({ ...recurrenceValues(input), createdBy: actorId })
@@ -92,6 +92,10 @@ export async function createRecurrence(input: RecurrenceInput, actorId: string |
     await tx.insert(auditLog).values({ action: "createRecurrence", entityType: RECURRENCE_ENTITY, entityId: created.id, actorId, payload: { ...input } });
     return created.id;
   });
+  // Board loads only make repeating tasks once a day per server (makeRecurringTasksOnce), so a rule
+  // that falls on today gets today's task here rather than tomorrow.
+  await makeRecurringTasksFor(teamDay(new Date()));
+  return id;
 }
 
 /**
@@ -111,6 +115,8 @@ export async function updateRecurrence(id: string, input: RecurrenceInput, actor
     if (!updated) throw new TeamTaskNotFoundError("That repeating task doesn't exist");
     await tx.insert(auditLog).values({ action: "updateRecurrence", entityType: RECURRENCE_ENTITY, entityId: id, actorId, payload: { ...input } });
   });
+  // As in createRecurrence: a rule changed to fall on today gets today's task now.
+  await makeRecurringTasksFor(teamDay(new Date()));
 }
 
 /**
@@ -184,5 +190,18 @@ export async function makeRecurringTasksFor(day: string): Promise<number> {
     });
     if (created) made += 1;
   }
+  return made;
+}
+
+// The last day this server made repeating tasks for, so board loads after the first skip the
+// query and a transaction per rule. Each server instance runs it once a day; rules created or
+// changed during the day make their task straight away (createRecurrence, updateRecurrence).
+let recurringMadeFor: string | null = null;
+
+/** makeRecurringTasksFor, at most once a day on this server. Output: how many tasks were made. */
+export async function makeRecurringTasksOnce(day: string): Promise<number> {
+  if (recurringMadeFor === day) return 0;
+  const made = await makeRecurringTasksFor(day);
+  recurringMadeFor = day;
   return made;
 }
