@@ -14,7 +14,7 @@ import { getKanbanBoardData, updateAssetStatusInKanban, type KanbanAssetCard } f
 import type { CapabilitySet } from "@/lib/auth/rbac";
 import { hideAssetFromBoard } from "@/lib/assets/board-visibility";
 import { APPROVED, DROPPED, SENT_BACK, SIGNOFF_STATUS, WAITING, inDigestHours, signsOff, type SignoffState } from "./signoff-rules";
-import { notifySubmitterOfDecision, sendSignoffDigestEmail, type DigestItem } from "./signoff-notifications";
+import { notifyAssignersOfApproved, notifySubmitterOfDecision, sendSignoffDigestEmail, type DigestItem } from "./signoff-notifications";
 
 const SIGNOFF_ENTITY = "asset";
 const LAST_DIGEST_KEY = "signoff_digest_last_at";
@@ -115,7 +115,8 @@ async function setState(assetId: string, state: SignoffState, actorId: string | 
 }
 
 /**
- * Signs assets off onto the board: each moves to Unassigned, and whoever added it is told.
+ * Signs assets off onto the board: each moves to Unassigned, whoever added it is told, and the
+ * people who assign artists get one notice listing them all.
  *
  * Input: the SKUs and who approved them (an admin). Output: the SKUs approved. Throws SignoffError
  * for a non-admin, or an asset that isn't waiting.
@@ -123,6 +124,7 @@ async function setState(assetId: string, state: SignoffState, actorId: string | 
 export async function approveSignoffs(skus: string[], actor: SignoffActor): Promise<string[]> {
   assertSignsOff(actor);
   const approved: string[] = [];
+  const approvedItems: { sku: string; itemName: string }[] = [];
   for (const sku of skus) {
     const { asset, signoff } = await loadForDecision(sku);
     await updateAssetStatusInKanban(sku, "unassigned", { roles: actor.roles, personnelId: actor.personnelId ?? undefined, caps: actor.caps }, "Signed off onto the board");
@@ -130,7 +132,10 @@ export async function approveSignoffs(skus: string[], actor: SignoffActor): Prom
     await db.insert(auditLog).values({ action: "approveSignoff", entityType: SIGNOFF_ENTITY, entityId: asset.id, actorId: actor.personnelId, payload: { sku } });
     await notifySubmitterOfDecision({ submitterId: signoff?.submittedBy ?? null, sku, itemName: asset.itemName, decision: "approved", feedback: null });
     approved.push(sku);
+    approvedItems.push({ sku, itemName: asset.itemName });
   }
+  // One notice for the batch to whoever assigns artists (Jayesh), so they can price and assign them.
+  await notifyAssignersOfApproved(approvedItems);
   return approved;
 }
 

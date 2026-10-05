@@ -296,8 +296,6 @@ const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   ["/admin/archive", "canMarkPaymentDone"],
   // Artists' bank and identity details: the people who pay artists (see canHandleArtistPayDetails).
   ["/admin/artist-details", "canMarkForPayment"],
-  // Assets waiting for Arjun's sign-off: whoever can add assets sees where theirs stand.
-  ["/admin/signoff", "canAssignArtists"],
 ];
 
 /**
@@ -319,6 +317,8 @@ export function isRouteAllowedForRoles(
   const has = (role: string) => normalized.includes(role);
 
   if (pathname.startsWith("/admin")) {
+    // Assets waiting for Arjun's sign-off: whoever can add assets sees where theirs stand.
+    if (pathname.startsWith("/admin/signoff")) return canAddAssets(caps);
     const subsection = ADMIN_SUBSECTION_CAPABILITY.find(([prefix]) => pathname.startsWith(prefix));
     if (subsection) return caps[subsection[1]];
     return caps.canViewAllAssets || caps.canManageSystemConfig;
@@ -363,6 +363,17 @@ export function landingPathForRoles(
  *
  * canAssignArtists is what an operator brings: it is held by admin and operator and by nobody else, so the union covers exactly the three roles the registry is for, and a per-person override still moves the boundary the way it does everywhere else.
  */
+/**
+ * Whether someone may add assets with New Asset: the team who assign artists, and curators. Assets
+ * from anyone but an admin wait for Arjun's sign-off (lib/signoff/signoff-rules.ts), so a curator
+ * adding one never puts it straight on the board.
+ *
+ * Input: their effective capabilities. Output: true for them.
+ */
+export function canAddAssets(caps: CapabilitySet): boolean {
+  return caps.canAssignArtists || caps.canAccessCuratorTools;
+}
+
 /**
  * Whether someone may see artists' full bank details and approve changes to them: the people who
  * pay artists, i.e. who can mark an asset for payment or mark it paid.

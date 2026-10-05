@@ -1,6 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
+import { canAddAssets } from "@/lib/auth/rbac";
 import { getKanbanBoardData } from "@/lib/kanban/kanban-service";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canAssignArtists) {
+  if (!canAddAssets(user.caps)) {
     return NextResponse.json({ error: "You don't have permission to create assets" }, { status: 403 });
   }
 

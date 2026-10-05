@@ -88,6 +88,10 @@ async function testFlow() {
   assert.deepStrictEqual(await approveSignoffs([hat.sku], actor(admin)), [hat.sku]);
   const [onBoard] = await db.select().from(assets).where(eq(assets.id, hat.id));
   assert.strictEqual(onBoard.currentStatus, "unassigned", "Approved goes on the board");
+  const assignerMail = await db.select({ subject: emailQueue.subject }).from(emailQueue).where(eq(emailQueue.toEmail, ADDER_EMAIL));
+  assert.ok(assignerMail.some((m) => m.subject.endsWith("ready to assign")), "The full-time team who assign artists are told it's ready to assign");
+  const adminMail = await db.select({ subject: emailQueue.subject }).from(emailQueue).where(eq(emailQueue.toEmail, ADMIN_EMAIL));
+  assert.ok(!adminMail.some((m) => m.subject.endsWith("ready to assign")), "Arjun isn't told about his own sign-off");
 
   await dropSignoff(bag.sku, "Too close to an existing item", actor(admin));
   const [dropped] = await db.select().from(assets).where(eq(assets.id, bag.id));

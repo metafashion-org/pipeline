@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth/next";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { canAddAssets, getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SignoffQueue } from "@/components/signoff/SignoffQueue";
 
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function SignoffPage() {
   const session = await getServerSession(authOptions);
   const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
-  if (!session || !caps.canAssignArtists) redirect("/unauthorized");
+  if (!session || !canAddAssets(caps)) redirect("/unauthorized");
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
