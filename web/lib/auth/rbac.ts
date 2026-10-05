@@ -296,6 +296,8 @@ const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   ["/admin/archive", "canMarkPaymentDone"],
   // Artists' bank and identity details: the people who pay artists (see canHandleArtistPayDetails).
   ["/admin/artist-details", "canMarkForPayment"],
+  // Assets waiting for Arjun's sign-off: whoever can add assets sees where theirs stand.
+  ["/admin/signoff", "canAssignArtists"],
 ];
 
 /**
@@ -330,9 +332,6 @@ export function isRouteAllowedForRoles(
   if (pathname.startsWith("/marketing")) {
     return caps.canAccessMarketingTools || has("marketing");
   }
-  if (pathname.startsWith("/curator")) {
-    return caps.canAccessCuratorTools || has("curator");
-  }
   if (pathname.startsWith("/team")) {
     return caps.canUseTeamTasks;
   }
@@ -351,7 +350,7 @@ export function landingPathForRoles(
   roles: (SystemRole | string)[],
   capabilityOverrides: Record<string, boolean> = {}
 ): string {
-  const candidates = ["/admin", "/artist", "/curator", "/publisher", "/team"];
+  const candidates = ["/admin", "/artist", "/publisher", "/team"];
   return candidates.find((p) => isRouteAllowedForRoles(p, roles, capabilityOverrides)) || "/unauthorized";
 }
 

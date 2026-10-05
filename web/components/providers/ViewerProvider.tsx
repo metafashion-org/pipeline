@@ -58,6 +58,11 @@ export function useViewerPersonnelId(): string | null {
   return useViewer().personnelId;
 }
 
+/** The signed-in person's roles, as the server resolved them. */
+export function useViewerRoles(): string[] {
+  return useViewer().roles;
+}
+
 /** The signed-in person as a card mover, in the shape checkMove (lib/kanban/move-rules.ts) takes. */
 export function useViewerAsActor(): TransitionActor {
   const { capabilities, roles, personnelId } = useViewer();

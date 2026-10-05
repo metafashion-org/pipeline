@@ -17,9 +17,13 @@ import { Button } from "@/components/ui/button";
 import { AssetFormFields, EMPTY_ASSET_FORM } from "./asset-form-fields";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import Link from "next/link";
+import { useViewerRoles } from "@/components/providers/ViewerProvider";
+import { signsOff } from "@/lib/signoff/signoff-rules";
 
 /**
- * Creates an asset at status "unassigned".
+ * Creates an asset. Arjun's go straight to "unassigned"; anyone else's wait for his sign-off on the
+ * Sign-off page before they appear on the board (lib/signoff/signoff-rules.ts).
  * Shares its fields with the edit dialog, so anything settable here can be corrected later and the two never drift apart. Status, artist, Gmail threads, marketing and payment fields are all set by their own flows and are deliberately absent.
  * Revalidates the board's "/api/assets" key on success, so it can sit anywhere on the page without being wired to the board component.
  */
@@ -28,6 +32,7 @@ export function NewAssetDialog() {
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState(EMPTY_ASSET_FORM);
     const { mutate } = useSWRConfig();
+    const needsSignoff = !signsOff(useViewerRoles());
 
     // Display-only preview of the SKU this asset will get — never actually submitted (the SKU
     // field stays disabled; see AssetFormFields). The real one is computed fresh server-side at
@@ -53,7 +58,7 @@ export function NewAssetDialog() {
 
         setSubmitting(true);
         try {
-            const { ok, data: result } = await apiCall<{ asset: { sku: string } }>("/api/assets", {
+            const { ok, data: result } = await apiCall<{ asset: { sku: string }; needsSignoff?: boolean }>("/api/assets", {
                 method: "POST",
                 body: {
                     sku: form.sku.trim() || undefined,
@@ -74,7 +79,14 @@ export function NewAssetDialog() {
                 return;
             }
 
-            toast.success(`Asset created: ${result.asset.sku}`);
+            if (result.needsSignoff) {
+                toast.success(`${result.asset.sku} sent to Arjun for sign-off`, {
+                    description: "It goes on the board once he approves it.",
+                    action: { label: "Open Sign-off", onClick: () => window.location.assign("/admin/signoff") },
+                });
+            } else {
+                toast.success(`Asset created: ${result.asset.sku}`);
+            }
             handleOpenChange(false);
             mutate("/api/assets");
         } finally {
@@ -94,7 +106,17 @@ export function NewAssetDialog() {
                 <DialogHeader>
                     <DialogTitle>New Asset</DialogTitle>
                     <DialogDescription>
-                        Starts at status &ldquo;unassigned&rdquo;. Leave SKU blank to auto-generate one.
+                        {needsSignoff ? (
+                            <>
+                                Goes to Arjun for sign-off first, then onto the board. Track it on{" "}
+                                <Link href="/admin/signoff" className="underline">
+                                    Sign-off
+                                </Link>
+                                . Leave SKU blank to auto-generate one.
+                            </>
+                        ) : (
+                            <>Starts at status &ldquo;unassigned&rdquo;. Leave SKU blank to auto-generate one.</>
+                        )}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -105,7 +127,7 @@ export function NewAssetDialog() {
                         Cancel
                     </Button>
                     <Button data-testid="new-asset-submit" onClick={handleSubmit} disabled={submitting}>
-                        {submitting ? "Creating..." : "Create"}
+                        {submitting ? "Creating..." : needsSignoff ? "Send for sign-off" : "Create"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

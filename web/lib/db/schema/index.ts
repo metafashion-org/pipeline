@@ -50,3 +50,4 @@ export * from "./artist_profile_files";
 export * from "./artist_profiles";
 export * from "./artist_profile_change_requests";
 export * from "./api_keys";
+export * from "./asset_signoffs";
