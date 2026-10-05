@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
 /**
  * Submit final files: the in-app replacement for the "3D Art Submission Form" Google Form. An artist
  * picks one of their own Approved assets; the team (anyone who can assign artists) can hand in any
- * Approved asset on the artist's behalf. The same people the final-files API accepts
+ * Approved asset on the artist's behalf, behind the form's "Hand in for another artist" switch; by
+ * default everyone sees only the assets assigned to them. The same people the final-files API accepts
  * (lib/deliverables/final-files-access.ts).
  */
 export default async function SubmitFinalFilesPage({ searchParams }: { searchParams: Promise<{ sku?: string }> }) {
@@ -45,6 +46,7 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
             referenceImages: assets.referenceImages,
             recolorReferenceImages: assets.recolorReferenceImages,
             artistName: personnel.name,
+            artistId: assets.currentArtistId,
           })
           .from(assets)
           .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
@@ -64,6 +66,7 @@ export default async function SubmitFinalFilesPage({ searchParams }: { searchPar
     itemName: row.itemName,
     category: row.category,
     artistName: row.artistName,
+    mine: Boolean(personnelId) && row.artistId === personnelId,
     coverFileId: parseDriveRefs(row.referenceImages).find((ref) => ref.fileId)?.fileId ?? null,
     guidance: guidance.get(row.id) ?? { recolourCount: 0, briefNotes: [], guidelines: [] },
   }));

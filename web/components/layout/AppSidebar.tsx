@@ -30,7 +30,6 @@ import {
   Info,
 } from "lucide-react";
 import { isRouteAllowedForRoles, getEffectiveCapabilities, ALL_ROLES, type SystemRole } from "@/lib/auth/rbac";
-import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDate } from "@/lib/format-date";
 import { whatsNewFor, type WhatsNewEntry } from "./whats-new";
@@ -300,15 +299,14 @@ export function AppSidebar({ viewer, today }: { viewer: SidebarViewer; today: st
       </div>
 
       <div className="shrink-0 border-t border-sidebar-border p-2 space-y-0.5">
-        {/* Identity, theme and sign-out live here rather than being repeated in the header of
-            every page. There is one of each in the app now, always in the same place. */}
+        {/* Identity and sign-out live here rather than being repeated in the header of every page.
+            There is no theme toggle: the app is dark for everyone (app/layout.tsx). */}
         {!collapsed && viewer.email && (
           <p className="px-3 pt-1 pb-2 text-xs text-sidebar-foreground truncate" title={viewer.email}>
             {viewer.email}
           </p>
         )}
         <div className={`flex items-center gap-1 ${collapsed ? "flex-col" : ""}`}>
-          <ModeToggle />
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
