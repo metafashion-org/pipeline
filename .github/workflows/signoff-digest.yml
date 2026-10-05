@@ -1,11 +1,9 @@
 name: Sign-off digest
 
 # Emails Arjun the assets newly waiting for his sign-off, every 2 hours from 10:00 to 20:00 India
-# time. Vercel's crons on this project run once a day, so the schedule lives here and calls the
-# app's endpoint, which sends nothing when no new asset is waiting.
-#
-# Needs the repository secret CRON_SECRET, set to the same value as the CRON_SECRET environment
-# variable in the Vercel project.
+# time. Vercel's Hobby plan runs crons once a day, so the schedule lives here and calls the app's
+# endpoint, which sends nothing when no new asset is waiting. The endpoint needs no secret (see
+# web/app/api/cron/signoff-digest/route.ts).
 
 on:
   schedule:
@@ -18,11 +16,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send the sign-off digest
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          # Fails the run (so GitHub emails the repo owner) when the secret is missing or the app errors.
-          test -n "$CRON_SECRET" || { echo "CRON_SECRET repository secret is not set"; exit 1; }
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            https://kanban.metafashion.in/api/cron/signoff-digest
+        # --fail-with-body fails the run (and GitHub emails the repo owner) when the app errors.
+        run: curl --fail-with-body --silent --show-error https://kanban.metafashion.in/api/cron/signoff-digest
