@@ -20,6 +20,7 @@ import { TodayStrip } from "./TodayStrip";
 import { WeekDialog } from "./WeekDialog";
 import { setQueueOrder, setTodayPlan, updateTask } from "./team-actions";
 import { TEAM_BOARD_URL, type BoardView, type TaskView } from "./team-types";
+import { boardWithTask } from "./optimistic";
 
 // Refetches the board on its own, so what others change shows up without a reload.
 const BOARD_REFRESH_MS = 60_000;
@@ -60,16 +61,40 @@ export function TeamTasksBoard() {
   const shownIds = new Set(shownTasks.map((t) => t.id));
   const shownBoard: BoardView = { ...board, tasks: shownTasks, plans: board.plans.filter((p) => shownIds.has(p.taskId)) };
 
-  async function toggleDone(task: TaskView) {
-    if (await updateTask(task.id, { status: task.status === DONE_STATUS ? "todo" : DONE_STATUS })) await refresh();
+  // Shows a change on the board at once and saves it in the background. If the save fails, the
+  // board goes back to how it was and the save's own toast says why.
+  async function saveShown(write: () => Promise<boolean>, preview: (current: BoardView) => BoardView) {
+    try {
+      await mutate(
+        async () => {
+          if (!(await write())) throw new Error("not saved");
+          return undefined;
+        },
+        { optimisticData: (current) => preview(current as BoardView), rollbackOnError: true, populateCache: false, revalidate: true }
+      );
+    } catch {
+      // The failed write already showed its error.
+    }
   }
-  async function savePlan(personnelId: string, taskIds: string[]) {
-    await setTodayPlan(personnelId, taskIds);
-    await refresh();
+  function toggleDone(task: TaskView) {
+    const status = task.status === DONE_STATUS ? "todo" : DONE_STATUS;
+    return saveShown(() => updateTask(task.id, { status }), (current) => boardWithTask(current, task.id, { status }));
   }
-  async function saveQueue(ownerId: string, taskIds: string[]) {
-    await setQueueOrder(ownerId, taskIds);
-    await refresh();
+  function savePlan(personnelId: string, taskIds: string[]) {
+    return saveShown(
+      () => setTodayPlan(personnelId, taskIds),
+      (current) => ({
+        ...current,
+        plans: [...current.plans.filter((p) => p.personnelId !== personnelId), ...taskIds.map((taskId, position) => ({ personnelId, taskId, position }))],
+      })
+    );
+  }
+  function saveQueue(ownerId: string, taskIds: string[]) {
+    const order = new Map(taskIds.map((id, index) => [id, index]));
+    return saveShown(
+      () => setQueueOrder(ownerId, taskIds),
+      (current) => ({ ...current, tasks: current.tasks.map((t) => (order.has(t.id) ? { ...t, position: order.get(t.id) as number } : t)) })
+    );
   }
 
   return (

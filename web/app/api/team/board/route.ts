@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { syncTaskSheet } from "@/lib/team-tasks/sheet-intake";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getTeamBoard } from "@/lib/team-tasks/team-board";
-import { makeRecurringTasksFor } from "@/lib/team-tasks/recurring-service";
+import { makeRecurringTasksOnce } from "@/lib/team-tasks/recurring-service";
 import { listTeamNotifications } from "@/lib/team-tasks/team-notifications";
 import { teamTasksForbidden } from "@/lib/team-tasks/route-errors";
 import { teamDay } from "@/lib/team-tasks/task-rules";
@@ -20,7 +20,7 @@ export async function GET() {
   if (!user.caps.canUseTeamTasks) return teamTasksForbidden();
 
   const today = teamDay(new Date());
-  await makeRecurringTasksFor(today);
+  await makeRecurringTasksOnce(today);
   const [board, notifications] = await Promise.all([
     getTeamBoard(today),
     user.personnelId ? listTeamNotifications(user.personnelId) : Promise.resolve({ unread: 0 }),
