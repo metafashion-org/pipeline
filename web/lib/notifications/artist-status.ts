@@ -7,8 +7,8 @@ import { EMAIL_IMAGE_WIDTH_PX } from "@/lib/email/templates/email-layout";
 import { notifyArtistOfApproval, notifyArtistOfRevisions, type OfferSummary } from "@/lib/offers/offer-notifications";
 import type { ArtistNotifiedStatus } from "./artist-notified-statuses";
 
-// The asset and its artist, in the shape the notification emails and Discord messages take.
-async function loadArtistSummary(sku: string): Promise<OfferSummary | null> {
+/** The asset and its artist, in the shape the notification emails and Discord messages take. Null with no Active artist. */
+export async function loadArtistSummary(sku: string): Promise<OfferSummary | null> {
   const [row] = await db
     .select({
       assetId: assets.id,

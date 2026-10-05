@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { errorMessage } from "@/lib/errors";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/deliverables/deliverables-service";
 import { canSubmitFinalFiles, canViewFinalFiles, findAssetForFinalFiles } from "@/lib/deliverables/final-files-access";
 import { FINAL_ZIP_KIND, checkFinalZip } from "@/lib/deliverables/final-zip";
+import { notifyUploadersOfReadyAsset } from "@/lib/notifications/pipeline-notices";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     await Promise.all(files.map((f) => shareFinalFile(f.driveFileId)));
     const result = await submitFinalFiles(asset.sku, version, files, user.personnelId, comments);
+    // The asset is now in the Uploader Queue: the uploaders get an email and a ping in #office.
+    after(() => notifyUploadersOfReadyAsset(asset.sku));
     revalidateViews(CACHE_TAGS.publisherQueue);
     return NextResponse.json({ success: true, result });
   } catch (error) {

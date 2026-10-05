@@ -1,8 +1,9 @@
 import { errorMessage } from "@/lib/errors";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { notifyUploader } from "@/lib/deliverables/deliverables-service";
+import { notifyUploadersOfReadyAsset } from "@/lib/notifications/pipeline-notices";
 import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { z } from "zod";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
@@ -41,6 +42,7 @@ export async function POST(
 
   try {
     const result = await notifyUploader(skuId, session.user.personnelId, parseResult.data.notes);
+    after(() => notifyUploadersOfReadyAsset(skuId));
     // The asset has just become Ready for Upload, so it now belongs in the Uploader Queue.
     revalidateViews(CACHE_TAGS.publisherQueue);
     return NextResponse.json({ success: true, result });
