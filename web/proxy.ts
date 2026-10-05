@@ -23,13 +23,13 @@ export default withAuth(
         // rewrites it afterwards (there's no SessionProvider, and server components can't set
         // cookies). So someone given a role later, like full_time for Team Tasks, was redirected
         // away until they signed out and in again. Their current personnel row decides instead,
-        // through the same 60-second cache the session callback uses; the cookie's copy is only
-        // the fallback when the row can't be read.
+        // through the same 60-second cache the session callback uses. A deleted row or a failed
+        // read comes back with no roles and no status, which is treated as not Active, so a stale
+        // cookie never grants anything.
         const current = typeof token?.email === "string" && token.email.trim() ? await getActivePersonnelByEmail(token.email) : null;
-        const known = Boolean(current?.personnelId);
-        const roles = known ? current!.roles : (token?.roles as string[]) || [];
-        const overrides = known ? current!.capabilityOverrides || {} : (token?.capabilityOverrides as Record<string, boolean>) || {};
-        const status = known ? current!.status : (token?.status as string | undefined);
+        const roles = current?.roles ?? [];
+        const overrides = current?.capabilityOverrides ?? {};
+        const status = current?.personnelId ? current.status : "Inactive";
 
         if (path === "/login" || path === "/") {
             if (token && typeof token.email === "string" && token.email.trim() !== "") {
