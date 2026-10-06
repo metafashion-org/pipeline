@@ -56,6 +56,8 @@ export interface MoveCard {
   artistId: string | null;
   offerStatus: OfferStatus | null;
   hasPaymentReceipt: boolean;
+  /** Paid before the Kanban tracked payments (assets.paid_outside_at): Payment Done needs no invoice. */
+  paidOutside?: boolean;
   /** For a card in Curated: who curated it. */
   curatorId?: string | null;
   /** For a card in Curated: true while the team has sent it back to its curator. */
@@ -166,7 +168,8 @@ export function checkMove(
   }
 
   // A client requirement: the receipt is attached before a payment is marked done, for every role.
-  if (target.key === "payment_done" && !card.hasPaymentReceipt) return { kind: "receipt-required" };
+  // The exception is an asset paid before the Kanban tracked payments, which has no invoice.
+  if (target.key === "payment_done" && !card.hasPaymentReceipt && !card.paidOutside) return { kind: "receipt-required" };
 
   return null;
 }

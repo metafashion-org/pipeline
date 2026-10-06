@@ -169,6 +169,9 @@ export async function notifyArtistOfRobloxUpload(sku: string, robloxUrls: string
   try {
     const summary = await loadArtistSummary(sku);
     if (!summary) return;
+    const [paid] = await db.select({ paidOutsideAt: assets.paidOutsideAt }).from(assets).where(eq(assets.sku, sku)).limit(1);
+    // An asset paid before the Kanban tracked payments isn't paid again.
+    const paymentLine = paid?.paidOutsideAt ? "It was already paid." : "It's paid in the next payment run (the 15th or the 30th).";
     const links = robloxUrls.join("\n");
     await Promise.all([
       queueAndSend(
@@ -179,7 +182,7 @@ export async function notifyArtistOfRobloxUpload(sku: string, robloxUrls: string
           preheader: "Your asset is on the Roblox Marketplace.",
           eyebrow: "On Roblox",
           tone: EMAIL_TONE.good,
-          intro: `Hi ${summary.artistName}, ${summary.itemName} is now on Roblox. It's paid in the next payment run (the 15th or the 30th).`,
+          intro: `Hi ${summary.artistName}, ${summary.itemName} is now on Roblox. ${paymentLine}`,
           details: robloxUrls.map((url) => ({ label: "Roblox", value: url })),
           button: { label: robloxUrls[0] ? "See it on Roblox" : "Open My Tasks", url: robloxUrls[0] ?? appUrl("/artist") },
         })
@@ -187,7 +190,7 @@ export async function notifyArtistOfRobloxUpload(sku: string, robloxUrls: string
       postToArtistChannel({
         content: "your asset is live on Roblox.",
         title: `${summary.itemName} (${summary.sku})`,
-        description: `${links}\nIt's paid in the next payment run (the 15th or the 30th).`,
+        description: `${links}\n${paymentLine}`,
         color: EMBED_COLOR_LIVE,
         summary,
         withImage: true,

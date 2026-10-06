@@ -2,7 +2,7 @@ import { db } from "@/lib/db/client";
 import { paymentCycles } from "@/lib/db/schema/payment_cycles";
 import { paymentCycleItems } from "@/lib/db/schema/payment_cycle_items";
 import { assets } from "@/lib/db/schema/assets";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 // Same statuses app/admin/archive/page.tsx's Pending Payments section reads -
 // client pays out on the 15th and the last day of the month.
@@ -51,7 +51,8 @@ export async function runPaymentCyclePull(today: Date = new Date()): Promise<Pay
       currency: assets.currency,
     })
     .from(assets)
-    .where(inArray(assets.currentStatus, PENDING_PAYMENT_STATUSES));
+    // An asset paid before the Kanban tracked payments is never owed again.
+    .where(and(inArray(assets.currentStatus, PENDING_PAYMENT_STATUSES), isNull(assets.paidOutsideAt)));
 
   const [inserted] = await db
     .insert(paymentCycles)

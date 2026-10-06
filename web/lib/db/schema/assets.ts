@@ -24,6 +24,11 @@ export const assets = pgTable("assets", {
   // paymentReceiptUrl when a payment_admin attaches a payment summary for the artist. Null for
   // anything not yet paid, and for anything paid before this column existed.
   paymentBatchId: uuid("payment_batch_id").references(() => paymentBatches.id),
+  // Paid before the Kanban tracked payments. Once its Roblox link is added it moves straight to
+  // Payment Done with no invoice (lib/publisher/publisher-service.ts), and the payment summary
+  // never counts it as owed.
+  paidOutsideAt: timestamp("paid_outside_at", { withTimezone: true }),
+  paidOutsideNote: text("paid_outside_note"),
   marketingStatus: text("marketing_status"),
   lastMarketingUpdate: timestamp("last_marketing_update", { withTimezone: true }),
   gmailThreadId: text("gmail_thread_id"),

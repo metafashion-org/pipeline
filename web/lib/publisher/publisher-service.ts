@@ -10,6 +10,7 @@ import { driveFolderUrl } from "@/lib/assets/drive-upload";
 import { and, eq, asc, desc, inArray } from "drizzle-orm";
 import { shownOnBoard } from "@/lib/assets/board-visibility";
 import { parseRobloxLinkLines } from "./roblox-links";
+import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 
 export interface ReadyForUploadItem {
   id: string;
@@ -159,10 +160,20 @@ export async function recordRobloxUpload(options: RecordRobloxUploadOptions): Pr
     payload: { sku, uploadRecordIds: records.map((r) => r.id), robloxItemUrls: valid.map((l) => l.url) },
   });
 
+  // 5. An asset paid before the Kanban tracked payments goes straight on to Payment Done, through
+  // the usual order and with no invoice, so it's never counted as owed.
+  let currentStatus = "uploaded_to_roblox";
+  if (asset.paidOutsideAt) {
+    const note = asset.paidOutsideNote || "Paid outside the Kanban before the switch";
+    await updateAssetStatusInKanban(sku, "marked_for_payment", { system: true }, note);
+    await updateAssetStatusInKanban(sku, "payment_done", { system: true }, `${note}. No invoice attached.`);
+    currentStatus = "payment_done";
+  }
+
   return {
     uploadRecordIds: records.map((r) => r.id),
     sku,
-    currentStatus: "uploaded_to_roblox",
+    currentStatus,
     links: valid.map((l) => ({ url: l.url, assetId: l.assetId })),
   };
 }
