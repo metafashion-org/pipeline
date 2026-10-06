@@ -8,6 +8,11 @@ import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 import { notifyArtistOfStatusChange } from "@/lib/notifications/artist-status";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { notifyArtistOfPayment, notifyReviewersOfReview, notifyUploadersOfReadyAsset } from "@/lib/notifications/pipeline-notices";
+import { trialBotAnswerMove } from "@/lib/trial/trial-run";
+
+// The trial-run bot (lib/trial/trial-run.ts) acts after the response, within this limit. 60s is
+// the most Vercel's Hobby plan allows; a real asset's request is done well before it.
+export const maxDuration = 60;
 
 const StatusSchema = z.object({
   status: z.string().optional(),
@@ -58,6 +63,8 @@ export async function PATCH(
       if (newStatus === "in_review") after(() => notifyReviewersOfReview(skuId));
       else if (newStatus === "ready_for_upload") after(() => notifyUploadersOfReadyAsset(skuId));
       else if (newStatus === "payment_done") after(() => notifyArtistOfPayment([skuId]));
+      // On a trial asset the bot answers as the artist: makes changes, or hands in a test .zip.
+      after(() => trialBotAnswerMove(skuId, newStatus));
     }
 
     // A status change can move an asset into or out of the Uploader Queue, and into Marketing's

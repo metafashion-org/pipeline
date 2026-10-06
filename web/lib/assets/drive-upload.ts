@@ -480,3 +480,17 @@ export async function writeSheetCells(sheetId: string, startCell: string, rows: 
     body: JSON.stringify({ values: rows }),
   });
 }
+
+/**
+ * Uploads a finished .zip straight into an asset's "<SKU>/Final Files/v<N>" folder from the server.
+ * Artists upload from the browser instead (startResumableUpload); this is for the trial-run bot,
+ * which has no browser.
+ *
+ * Input: the SKU, the version, the file's name and bytes. Output: the file's id and link, and the folder's id.
+ */
+export async function uploadFinalFilesZip(sku: string, version: number, fileName: string, bytes: Buffer): Promise<UploadedReference & { folderId: string }> {
+  requireDriveConfigured();
+  const folderId = await getOrCreateFinalFilesFolder(sku, version);
+  const uploaded = await uploadFileToFolder(folderId, fileName, "application/zip", bytes, { domainOnly: true });
+  return { ...uploaded, folderId };
+}

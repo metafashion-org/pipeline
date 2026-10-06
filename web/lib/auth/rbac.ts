@@ -296,6 +296,8 @@ const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   ["/admin/archive", "canMarkPaymentDone"],
   // Artists' bank and identity details: the people who pay artists (see canHandleArtistPayDetails).
   ["/admin/artist-details", "canMarkForPayment"],
+  // The guided trial run of the asset pipeline: the team who assign artists.
+  ["/admin/trial", "canAssignArtists"],
 ];
 
 /**
