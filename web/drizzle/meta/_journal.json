@@ -316,6 +316,13 @@
       "when": 1791190158398,
       "tag": "0044_asset_signoff",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791262237207,
+      "tag": "0045_paid_outside_kanban",
+      "breakpoints": true
     }
   ]
 }

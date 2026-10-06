@@ -365,6 +365,7 @@ export async function updateAssetStatusInKanban(
       artistId: asset.currentArtistId,
       offerStatus: latestOffer?.status ?? null,
       hasPaymentReceipt: Boolean(asset.paymentReceiptUrl),
+      paidOutside: Boolean(asset.paidOutsideAt),
     },
     targetStatus[0],
     rule[0]
