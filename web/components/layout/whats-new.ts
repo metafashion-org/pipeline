@@ -13,6 +13,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    href: "/admin/trial",
+    newUntil: "2026-10-20",
+    why: "So the team can try the whole asset pipeline, offer to payment, without a real artist or real money.",
+    whatFor:
+      "Start a trial and follow the steps. A bot plays the artist and its emails and Discord messages come to you, so you see what an artist sees at every step.",
+  },
+  {
     href: "/admin/signoff",
     newUntil: "2026-10-20",
     why: "It replaces the Curation form. New assets used to go straight on the board; now Arjun signs each one off first.",

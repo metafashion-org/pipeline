@@ -1,5 +1,6 @@
 import { errorMessage } from "@/lib/errors";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { trialBotAnswerOffer } from "@/lib/trial/trial-run";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db/client";
@@ -10,6 +11,10 @@ import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { eq } from "drizzle-orm";
 import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { z } from "zod";
+
+// The trial-run bot (lib/trial/trial-run.ts) acts after the response, within this limit. 60s is
+// the most Vercel's Hobby plan allows; a real asset's request is done well before it.
+export const maxDuration = 60;
 
 const AssignSchema = z.object({
   artistId: z.uuid(),
@@ -82,6 +87,9 @@ export async function POST(
       );
     }
 
+    // On a trial asset the bot answers the offer as the artist (lib/trial/trial-run.ts); a real
+    // artist's asset is left alone.
+    after(() => trialBotAnswerOffer(skuId));
     return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     console.error("Error assigning artist:", error);
