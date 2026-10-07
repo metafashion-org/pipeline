@@ -11,7 +11,7 @@ import { jsonFetcher } from "@/lib/fetcher";
 import { cn } from "@/lib/utils";
 
 interface TrialResponse {
-  trial: { sku: string; status: string; reached: string[] } | null;
+  trial: { sku: string; status: string; reached: string[]; artistEmail: string | null } | null;
 }
 
 // How often the page re-reads the trial asset, so a step ticks itself off soon after it happens.
@@ -28,8 +28,8 @@ interface Step {
   notices: { channel: "email" | "discord"; text: string }[];
 }
 
-// The pipeline, in order. "As the artist" notices go to the trial artist, whose email
-// (jsingh+trial@metafashion.in) is Jayesh's inbox and whose Discord messages are Jayesh's DMs.
+// The pipeline, in order. "As the artist" notices go to the trial artist, whose email is a +trial
+// address on whoever started the trial (their own inbox) and whose Discord messages are their DMs.
 const STEPS: Step[] = [
   {
     reaches: "assigned",
@@ -78,7 +78,7 @@ const STEPS: Step[] = [
     title: "Approve it",
     how: (
       <>
-        Once it's back in <b>In Review</b>, move it to <b>Approved</b>. The bot hands in a test .zip a few seconds later, which moves the card to{" "}
+        Once it&apos;s back in <b>In Review</b>, move it to <b>Approved</b>. The bot hands in a test .zip a few seconds later, which moves the card to{" "}
         <b>Ready for Upload</b>.
       </>
     ),
@@ -175,7 +175,8 @@ export function TrialRunGuide() {
             work for review, makes changes when asked, and hands in a test .zip.
           </li>
           <li>
-            Everything a real artist would get comes to you: emails at <b>jsingh+trial@metafashion.in</b> (your inbox) and Discord DMs from the bot.
+            Everything a real artist would get comes to you: emails at <b>{trial?.artistEmail ?? "a +trial address on your own email"}</b> (your normal
+            inbox) and Discord DMs from the bot. Emails to the reviewers and the uploader go to them as usual.
           </li>
           <li>Each step below ticks itself off when it happens. Nothing here touches real artists or real payments; the fee is ₹1.</li>
         </ul>

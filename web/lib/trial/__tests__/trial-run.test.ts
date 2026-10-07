@@ -12,8 +12,9 @@ import { assignArtistToAsset } from "@/lib/kanban/assignment-service";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { endTrialRun, startTrialRun, trialBotAnswerMove, trialBotAnswerOffer, trialProgress, TRIAL_SKU_PREFIX } from "../trial-run";
 
-const TRIAL_ARTIST_EMAIL = "jsingh+trial@metafashion.in";
 const RUNNER_EMAIL = "test-trial-runner@example.com";
+// The bot's notices go to a +trial address on whoever started the trial.
+const TRIAL_ARTIST_EMAIL = "test-trial-runner+trial@example.com";
 
 async function cleanup() {
   const rows = await db.select({ id: assets.id }).from(assets).where(like(assets.sku, `${TRIAL_SKU_PREFIX}%`));
@@ -35,9 +36,11 @@ async function testBotPlaysTheArtist() {
   console.log("Verifying the trial bot accepts, sends for review, and resends after revisions...");
   await cleanup();
   const [runner] = await db.insert(personnel).values({ name: "Trial Runner", email: RUNNER_EMAIL, roles: ["operator", "full_time"] }).returning();
-  const sku = await startTrialRun(runner.id);
+  const started = await startTrialRun(runner.id);
+  const sku = started.sku;
   assert.ok(sku.startsWith(TRIAL_SKU_PREFIX));
-  assert.strictEqual(await startTrialRun(runner.id), sku, "Only one trial at a time");
+  assert.strictEqual(started.artistEmail, TRIAL_ARTIST_EMAIL, "The bot's email is the runner's +trial address");
+  assert.strictEqual((await startTrialRun(runner.id)).sku, sku, "Only one trial at a time");
   const [bot] = await db.select().from(personnel).where(eq(personnel.email, TRIAL_ARTIST_EMAIL));
   assert.strictEqual(bot.status, "Active");
 

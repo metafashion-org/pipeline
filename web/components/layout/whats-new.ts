@@ -13,11 +13,11 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
-    href: "/admin/trial",
+    href: "/admin/settings",
     newUntil: "2026-10-20",
-    why: "So the team can try the whole asset pipeline, offer to payment, without a real artist or real money.",
+    why: "Settings now has the Trial run, so anyone new can learn the asset pipeline, offer to payment, without a real artist or real money.",
     whatFor:
-      "Start a trial and follow the steps. A bot plays the artist and its emails and Discord messages come to you, so you see what an artist sees at every step.",
+      "Open Settings, then Trial run. A bot plays the artist and its emails and Discord messages come to you, so you see what an artist sees at every step."
   },
   {
     href: "/admin/signoff",

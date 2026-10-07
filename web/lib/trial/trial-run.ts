@@ -1,7 +1,7 @@
-// The trial run: a test asset Jayesh takes through the whole pipeline on his own, with a bot playing
-// the artist. The bot is a personnel row, "Trial Artist (bot)", whose emails go to Jayesh's inbox
-// (a +trial address) and whose Discord messages go to Jayesh's DMs, so he sees exactly what a real
-// artist sees. When the team does their part, the bot does the artist's part a few seconds later:
+// The trial run: a test asset someone on the team takes through the whole pipeline on their own,
+// with a bot playing the artist. The bot is a personnel row, "Trial Artist (bot)", whose emails go
+// to whoever started the trial (a +trial address on their own email) and whose Discord messages go
+// to their DMs, so they see exactly what a real artist sees. When the team does their part, the bot does the artist's part a few seconds later:
 // accepts the offer, sends the work for review, makes changes when asked, and hands in a test .zip.
 
 import { and, asc, desc, eq, like } from "drizzle-orm";
@@ -20,11 +20,14 @@ import { hideAssetFromBoard } from "@/lib/assets/board-visibility";
 import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord/discord-service";
 import { notifyReviewersOfReview, notifyUploadersOfReadyAsset } from "@/lib/notifications/pipeline-notices";
 
-/** Whose inbox and Discord DMs get the bot's artist notices: the person running the trial. */
-const TRIAL_RUNNER_EMAIL = "jsingh@metafashion.in";
-// A +trial address lands in the runner's own Google Workspace inbox, and is unique in personnel.
-const TRIAL_ARTIST_EMAIL = "jsingh+trial@metafashion.in";
+// The bot is found by its name; its email and Discord follow whoever starts each trial.
 const TRIAL_ARTIST_NAME = "Trial Artist (bot)";
+
+/** The bot's email for a trial runner: a +trial address, which lands in their own inbox and is unique in personnel. */
+export function trialArtistEmailFor(runnerEmail: string): string {
+  const [local, domain] = runnerEmail.toLowerCase().split("@");
+  return `${local}+trial@${domain}`;
+}
 export const TRIAL_SKU_PREFIX = "TRIAL-";
 const TRIAL_ITEM_NAME = "TRIAL - End-to-end test hat";
 // The bot waits this long before each move, so the notices arrive in the order a real artist's would.
@@ -36,15 +39,14 @@ const EMPTY_ZIP = Buffer.from([0x50, 0x4b, 0x05, 0x06, ...new Array(18).fill(0)]
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function findTrialArtist() {
-  const [row] = await db.select().from(personnel).where(eq(personnel.email, TRIAL_ARTIST_EMAIL)).limit(1);
+  const [row] = await db.select().from(personnel).where(eq(personnel.name, TRIAL_ARTIST_NAME)).limit(1);
   return row ?? null;
 }
 
 // The runner's Discord DM channel, so the bot's "artist channel" messages land in their DMs and never
 // in a real artist's channel.
-async function runnerDmChannel(): Promise<{ userId: string | null; channelId: string | null }> {
-  const [runner] = await db.select({ discordUserId: personnel.discordUserId }).from(personnel).where(eq(personnel.email, TRIAL_RUNNER_EMAIL)).limit(1);
-  const userId = runner?.discordUserId ?? null;
+async function runnerDmChannel(discordUserId: string | null): Promise<{ userId: string | null; channelId: string | null }> {
+  const userId = discordUserId;
   if (!userId || !isDiscordConfigured()) return { userId, channelId: null };
   try {
     const dm = await discordFetch<{ id: string }>("/users/@me/channels", { method: "POST", body: JSON.stringify({ recipient_id: userId }) });
@@ -69,39 +71,42 @@ export async function currentTrialAsset() {
 /** Whether this asset's artist is the trial bot. */
 async function isTrialAsset(sku: string) {
   const [row] = await db
-    .select({ asset: assets, artistEmail: personnel.email })
+    .select({ asset: assets, artistName: personnel.name })
     .from(assets)
     .leftJoin(personnel, eq(personnel.id, assets.currentArtistId))
     .where(eq(assets.sku, sku))
     .limit(1);
-  return row && row.artistEmail === TRIAL_ARTIST_EMAIL ? row.asset : null;
+  return row && row.artistName === TRIAL_ARTIST_NAME ? row.asset : null;
 }
 
 /**
- * Starts a trial run: makes (or reactivates) the trial artist and a test asset in Unassigned, ready
- * to assign. Only one trial runs at a time.
+ * Starts a trial run for whoever asked: makes (or reactivates) the trial artist, pointing its email
+ * and Discord at them, and a test asset in Unassigned, ready to assign. Only one trial runs at a time.
  *
- * Input: who started it. Output: the test asset's SKU.
+ * Input: who started it. Output: the test asset's SKU, and the email the bot's notices go to.
  */
-export async function startTrialRun(actorId: string | null): Promise<string> {
+export async function startTrialRun(actorId: string | null): Promise<{ sku: string; artistEmail: string | null }> {
   const existing = await currentTrialAsset();
-  if (existing) return existing.sku;
-
-  const dm = await runnerDmChannel();
   const artist = await findTrialArtist();
+  if (existing) return { sku: existing.sku, artistEmail: artist?.email ?? null };
+
+  const [runner] = actorId ? await db.select().from(personnel).where(eq(personnel.id, actorId)).limit(1) : [];
+  if (!runner) throw new Error("Only someone with a personnel record can start a trial");
+  const artistEmail = trialArtistEmailFor(runner.email);
+  const dm = await runnerDmChannel(runner.discordUserId);
   if (artist) {
     await db
       .update(personnel)
-      .set({ status: "Active", discordUserId: dm.userId, discordChannelId: dm.channelId, updatedAt: new Date() })
+      .set({ status: "Active", email: artistEmail, discordUserId: dm.userId, discordChannelId: dm.channelId, updatedAt: new Date() })
       .where(eq(personnel.id, artist.id));
   } else {
     await db.insert(personnel).values({
       name: TRIAL_ARTIST_NAME,
-      email: TRIAL_ARTIST_EMAIL,
+      email: artistEmail,
       roles: ["artist"],
       discordUserId: dm.userId,
       discordChannelId: dm.channelId,
-      notes: "A bot that plays the artist in a trial run (lib/trial/trial-run.ts). Its emails and Discord messages go to Jayesh.",
+      notes: "A bot that plays the artist in a trial run (lib/trial/trial-run.ts). Its emails and Discord messages go to whoever started the trial.",
     });
   }
 
@@ -110,8 +115,8 @@ export async function startTrialRun(actorId: string | null): Promise<string> {
     .insert(assets)
     .values({ sku, itemName: TRIAL_ITEM_NAME, category: "Hat", currentStatus: "unassigned", feeAmount: "1.00", currency: "INR" })
     .returning();
-  await db.insert(auditLog).values({ action: "startTrialRun", entityType: "asset", entityId: asset.id, actorId, payload: { sku } });
-  return sku;
+  await db.insert(auditLog).values({ action: "startTrialRun", entityType: "asset", entityId: asset.id, actorId, payload: { sku, artistEmail } });
+  return { sku, artistEmail };
 }
 
 /**
@@ -211,9 +216,10 @@ async function handInTestZip(sku: string, assetId: string, artistId: string): Pr
  *
  * Output: null when no trial is running.
  */
-export async function trialProgress(): Promise<{ sku: string; status: string; reached: string[] } | null> {
+export async function trialProgress(): Promise<{ sku: string; status: string; reached: string[]; artistEmail: string | null } | null> {
   const asset = await currentTrialAsset();
   if (!asset) return null;
+  const artist = await findTrialArtist();
   const history = await db.select({ toStatus: statusHistory.toStatus }).from(statusHistory).where(eq(statusHistory.assetId, asset.id)).orderBy(asc(statusHistory.createdAt));
-  return { sku: asset.sku, status: asset.currentStatus, reached: [...new Set(history.map((h) => h.toStatus))] };
+  return { sku: asset.sku, status: asset.currentStatus, reached: [...new Set(history.map((h) => h.toStatus))], artistEmail: artist?.email ?? null };
 }

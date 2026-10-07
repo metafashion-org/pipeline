@@ -19,7 +19,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
-import { formatDate } from "@/lib/format-date";
+import { formatDateTime } from "@/lib/format-date";
 
 // The board's own data (Board.tsx); refreshed so a hidden card leaves it and a restored one returns.
 const BOARD_DATA_URL = "/api/assets";
@@ -32,6 +32,7 @@ interface HiddenCard {
   artistName: string | null;
   hiddenAt: string;
   hiddenByName: string | null;
+  hiddenReason: string | null;
 }
 
 async function setHidden(sku: string, hidden: boolean): Promise<boolean> {
@@ -45,7 +46,7 @@ async function setHidden(sku: string, hidden: boolean): Promise<boolean> {
 
 /**
  * Takes this card off the board, for old or finished work nobody needs to see. Nothing is deleted:
- * the board's Hidden cards list puts it back.
+ * the board's Archived list puts it back.
  */
 export function HideCardButton({ sku, itemName }: { sku: string; itemName: string }) {
   const { mutate } = useSWRConfig();
@@ -55,7 +56,7 @@ export function HideCardButton({ sku, itemName }: { sku: string; itemName: strin
     setSaving(true);
     try {
       if (!(await setHidden(sku, true))) return;
-      toast.success(`${itemName} is off the board. Find it under Hidden cards.`);
+      toast.success(`${itemName} is archived. Find it under Archived on the board.`);
       // The card leaves the board, which unmounts it and closes this drawer with it.
       await mutate(BOARD_DATA_URL);
     } finally {
@@ -77,7 +78,7 @@ export function HideCardButton({ sku, itemName }: { sku: string; itemName: strin
             <AlertDialogTitle>Hide {itemName} from the board?</AlertDialogTitle>
             <AlertDialogDescription>
               It leaves the board, the artist&apos;s My Tasks, the calendar and the uploader queue. Its status, files, history and
-              payments stay as they are, and Hidden cards puts it back.
+              payments stay as they are, and the Archived list puts it back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -90,7 +91,7 @@ export function HideCardButton({ sku, itemName }: { sku: string; itemName: strin
   );
 }
 
-/** The board toolbar's list of hidden cards, each with a button that puts it back. */
+/** The board toolbar's Archived list: cards taken off the board, why and when, each with a button that puts it back. */
 export function HiddenCardsButton() {
   const { mutate } = useSWRConfig();
   const [open, setOpen] = useState(false);
@@ -114,28 +115,29 @@ export function HiddenCardsButton() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">
-          <EyeOff className="h-3.5 w-3.5" /> Hidden cards
+          <EyeOff className="h-3.5 w-3.5" /> Archived
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Hidden cards</DialogTitle>
+          <DialogTitle>Archived cards</DialogTitle>
           <DialogDescription>
             Cards taken off the board. Their status, files, history and payments are unchanged. Put one back to see it on the board again.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto divide-y divide-border rounded-md border">
           {!data && <p className="p-4 text-sm text-muted-foreground">Loading...</p>}
-          {data && hidden.length === 0 && <p className="p-4 text-sm text-muted-foreground">No hidden cards.</p>}
+          {data && hidden.length === 0 && <p className="p-4 text-sm text-muted-foreground">No archived cards.</p>}
           {hidden.map((card) => (
             <div key={card.sku} className="flex items-center justify-between gap-3 p-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{card.itemName}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   <span className="font-mono">{card.sku}</span> · {card.currentStatus.replace(/_/g, " ")}
-                  {card.artistName ? ` · ${card.artistName}` : ""} · hidden {formatDate(card.hiddenAt)}
+                  {card.artistName ? ` · ${card.artistName}` : ""} · archived {formatDateTime(card.hiddenAt)}
                   {card.hiddenByName ? ` by ${card.hiddenByName}` : ""}
                 </p>
+                {card.hiddenReason && <p className="text-xs">Why: {card.hiddenReason}</p>}
               </div>
               <Button size="sm" variant="outline" className="shrink-0" disabled={restoring === card.sku} onClick={() => putBack(card)}>
                 <Undo2 className="h-3.5 w-3.5" /> {restoring === card.sku ? "Putting back..." : "Put back"}

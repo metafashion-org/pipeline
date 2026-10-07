@@ -13,13 +13,14 @@ import {
     closestCorners,
 } from "@dnd-kit/core";
 import useSWR from "swr";
-import { Loader2, X, ChevronDown, Filter } from "lucide-react";
+import { Loader2, X, ChevronDown, Filter, Archive, CheckSquare } from "lucide-react";
 
 import { Column, type DropState } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { BoardRulesProvider, ToneLegend, toMoveCard } from "./board-rules";
 import { HiddenCardsButton } from "./board-visibility-buttons";
+import { ArchiveCardsDialog } from "./ArchiveCardsDialog";
 import { useViewerAsActor, useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { allowedTargets, describeColumn, type MoveRule, type MoveStatus } from "@/lib/kanban/move-rules";
 import { toast } from "sonner";
@@ -212,6 +213,12 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
     const [deadlineTo, setDeadlineTo] = useState<string>("");
     const [monthFilter, setMonthFilter] = useState<string>(""); // "YYYY-MM", from <input type="month">
     const [artifactFilter, setArtifactFilter] = useState<string[]>([]);
+    // Unassigned can fill the board as a grid, to look through every card and archive the ones
+    // nobody will make. Only that column expands; the rest of the board is unchanged.
+    const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const [picking, setPicking] = useState(false);
+    const [picked, setPicked] = useState<Set<string>>(new Set());
+    const [archiveOpen, setArchiveOpen] = useState(false);
 
     const allAssetsFlat = allColumns.flatMap((c) => c.assets);
 
@@ -499,21 +506,85 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                     Without it those labels were placed against the page, and the columns past the
                     right edge made the whole page scroll sideways, sidebar and header included. */}
                 <div className="relative flex gap-4 overflow-x-auto pb-4 h-full">
-                    {columns.map((col) => (
-                        <div key={col.key} className="shrink-0 w-[220px]">
-                            <Column
-                                id={col.key}
-                                title={col.label}
-                                description={col.description}
-                                nextActionHint={col.nextActionHint}
-                                automationNote={col.automationNote}
-                                guide={guides.get(col.key) ?? describeColumn(actor, col.key, statuses, rules)}
-                                dropState={dropStateFor(col.key)}
-                                tasks={col.assets}
-                                role={role}
-                            />
-                        </div>
-                    ))}
+                    {columns
+                        .filter((col) => !expandedKey || col.key === expandedKey)
+                        .map((col) => {
+                            const isExpanded = col.key === expandedKey;
+                            const canArchive = isExpanded && viewerCapabilities.canAssignArtists;
+                            return (
+                                <div key={col.key} className={isExpanded ? "flex-1 min-w-0" : "shrink-0 w-[220px]"}>
+                                    <Column
+                                        id={col.key}
+                                        title={col.label}
+                                        description={col.description}
+                                        nextActionHint={col.nextActionHint}
+                                        automationNote={col.automationNote}
+                                        guide={guides.get(col.key) ?? describeColumn(actor, col.key, statuses, rules)}
+                                        dropState={dropStateFor(col.key)}
+                                        tasks={col.assets}
+                                        role={role}
+                                        expanded={isExpanded}
+                                        onToggleExpand={
+                                            col.key === "unassigned"
+                                                ? () => {
+                                                      setExpandedKey(isExpanded ? null : col.key);
+                                                      setPicking(false);
+                                                      setPicked(new Set());
+                                                  }
+                                                : undefined
+                                        }
+                                        headerActions={
+                                            canArchive ? (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        variant={picking ? "secondary" : "ghost"}
+                                                        className="h-7 text-xs"
+                                                        onClick={() => {
+                                                            setPicking(!picking);
+                                                            setPicked(new Set());
+                                                        }}
+                                                    >
+                                                        <CheckSquare className="h-3.5 w-3.5" /> {picking ? "Stop picking" : "Pick cards"}
+                                                    </Button>
+                                                    {picking && (
+                                                        <>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="h-7 text-xs"
+                                                                onClick={() =>
+                                                                    setPicked(picked.size === col.assets.length ? new Set() : new Set(col.assets.map((a) => a.sku)))
+                                                                }
+                                                            >
+                                                                {picked.size === col.assets.length && col.assets.length > 0 ? "Clear" : "Pick all"}
+                                                            </Button>
+                                                            <Button size="sm" className="h-7 text-xs" disabled={picked.size === 0} onClick={() => setArchiveOpen(true)}>
+                                                                <Archive className="h-3.5 w-3.5" /> Archive {picked.size || ""}
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                </>
+                                            ) : undefined
+                                        }
+                                        selection={
+                                            canArchive && picking
+                                                ? {
+                                                      selected: picked,
+                                                      onToggle: (sku) =>
+                                                          setPicked((current) => {
+                                                              const next = new Set(current);
+                                                              if (next.has(sku)) next.delete(sku);
+                                                              else next.add(sku);
+                                                              return next;
+                                                          }),
+                                                  }
+                                                : undefined
+                                        }
+                                    />
+                                </div>
+                            );
+                        })}
                 </div>
 
                 <DragOverlay>
@@ -521,6 +592,19 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                 </DragOverlay>
             </DndContext>
             </BoardRulesProvider>
+
+            {/* Mounted only while open, so each archive starts from the default reason with nothing left over. */}
+            {archiveOpen && (
+            <ArchiveCardsDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                cards={allColumns.flatMap((c) => c.assets).filter((a) => picked.has(a.sku)).map((a) => ({ sku: a.sku, itemName: a.itemName }))}
+                onArchived={() => {
+                    setPicked(new Set());
+                    setPicking(false);
+                }}
+            />
+            )}
 
             {assignTask && (
                 <AssignTaskDialog

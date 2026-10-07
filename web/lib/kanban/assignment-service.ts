@@ -5,7 +5,8 @@ import { assignmentCcs } from "@/lib/db/schema/assignment_ccs";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, desc } from "drizzle-orm";
-import { createOfferAndNotifyArtist } from "@/lib/offers/offer-service";
+import { acceptOffer, createOfferAndNotifyArtist } from "@/lib/offers/offer-service";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 
 export interface AssignArtistOptions {
   assetId: string;
@@ -115,6 +116,12 @@ export async function assignArtistToAsset(options: AssignArtistOptions) {
     currency: assetRecord[0].currency,
     createdBy: actorId,
   });
+
+  // 8. Someone on the team who assigns artists (Jayesh) doesn't answer an offer to themselves: it's
+  // accepted at once, so they can start and move the card like any artist. My Tasks, where offers
+  // are answered, isn't in their sidebar.
+  const artistCaps = getEffectiveCapabilities(artistRecord[0].roles ?? [], (artistRecord[0].capabilityOverrides as Record<string, boolean>) ?? {});
+  if (artistCaps.canAssignArtists) await acceptOffer(offer.id, artistId);
 
   return {
     assignmentId: newAssignment.id,

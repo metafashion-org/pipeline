@@ -40,6 +40,8 @@ export const assets = pgTable("assets", {
   // lib/assets/board-visibility.ts). Null while the card shows.
   boardHiddenAt: timestamp("board_hidden_at", { withTimezone: true }),
   boardHiddenBy: uuid("board_hidden_by").references(() => personnel.id, { onDelete: "set null" }),
+  // Why it was archived (lib/assets/archive-reasons.ts), shown on the board's Archived list.
+  boardHiddenReason: text("board_hidden_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
