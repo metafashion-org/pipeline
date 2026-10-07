@@ -11,6 +11,8 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
+import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
+import { CurationNoteBox } from "./CurationNoteBox";
 import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
@@ -191,7 +193,14 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
-        <LinkedArtifacts sku={asset.sku} assetId={asset.id} enabled={open} canManage={canManageLinks} />
+        <LinkedArtifacts
+          sku={asset.sku}
+          assetId={asset.id}
+          enabled={open}
+          canManage={canManageLinks}
+          // Keyed by the saved comment so the box starts from the new text after a save or another edit.
+          linkedFooter={<CurationNoteBox key={asset.briefFields?.[CURATION_NOTE_KEY] ?? ""} sku={asset.sku} briefFields={asset.briefFields ?? {}} canEdit={canEdit} />}
+        />
 
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">

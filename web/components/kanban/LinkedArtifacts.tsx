@@ -102,6 +102,7 @@ export function LinkedArtifacts({
   assetId,
   enabled,
   canManage,
+  linkedFooter,
 }: {
   sku: string;
   /** The asset's own row id, not the SKU string — this is what artifact_sku_links.asset_id
@@ -109,6 +110,8 @@ export function LinkedArtifacts({
   assetId: string;
   enabled: boolean;
   canManage: boolean;
+  /** Shown under the links once at least one is attached: the drawer's curation comment box. */
+  linkedFooter?: React.ReactNode;
 }) {
   const linksKey = enabled ? `/api/assets/${encodeURIComponent(sku)}/artifacts` : null;
   const { data, isLoading, mutate } = useSWR<{ artifacts: LinkedArtifact[] }>(linksKey, jsonFetcher);
@@ -205,6 +208,8 @@ export function LinkedArtifacts({
             </div>
           </div>
         ))}
+
+        {artifacts.length > 0 && linkedFooter && <div className="pt-2 mt-1 border-t border-border/60">{linkedFooter}</div>}
 
         {attaching && (
           <AttachArtifactControl

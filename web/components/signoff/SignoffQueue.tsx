@@ -16,6 +16,7 @@ import { formatDate, formatDateTime } from "@/lib/format-date";
 import { formatFee } from "@/lib/format-money";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { SENT_BACK, WAITING } from "@/lib/signoff/signoff-rules";
+import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import type { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import type { SignoffItem } from "@/lib/signoff/signoff-service";
 
@@ -228,6 +229,7 @@ function AssetRow({
 }) {
   const { card } = item;
   const cover = parseDriveRefs(card.referenceImages).find((ref) => ref.fileId);
+  const curationNote = card.briefFields?.[CURATION_NOTE_KEY];
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-lg border bg-card p-3">
       {checkbox && <input type="checkbox" checked={checkbox.checked} onChange={checkbox.onChange} className="mt-1 h-4 w-4 accent-primary" aria-label={`Select ${card.sku}`} />}
@@ -246,6 +248,21 @@ function AssetRow({
         <p className="text-xs text-muted-foreground">
           Added by {item.submittedByName ?? "someone"}, {formatDateTime(item.submittedAt)}
         </p>
+        {card.linkedArtifacts.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {card.linkedArtifacts.map((a) => (
+              <Badge key={a.id} variant="secondary" className="font-normal">
+                {a.artifactId} · {a.title}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {curationNote && (
+          <p className="text-xs whitespace-pre-wrap">
+            <span className="font-medium">How these come together: </span>
+            {curationNote}
+          </p>
+        )}
         {item.state === SENT_BACK && item.feedback && (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-sm">
             <Badge variant="outline" className="mr-1.5">

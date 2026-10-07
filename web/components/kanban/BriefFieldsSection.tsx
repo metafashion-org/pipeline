@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { jsonFetcher } from "@/lib/fetcher";
+import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 
 interface FormField {
   fieldKey: string;
@@ -36,7 +37,10 @@ export function BriefFieldsSection({
   idPrefix: string;
 }) {
   const { data } = useSWR<{ formFields: FormField[] }>("/api/admin/curation-fields", jsonFetcher);
-  const fields = (data?.formFields ?? []).filter((f) => !f.appliesToCategories || f.appliesToCategories.length === 0 || f.appliesToCategories.includes(category));
+  // The curation note is asked for next to the Registry links (RegistryLinksPicker), not here.
+  const fields = (data?.formFields ?? []).filter(
+    (f) => f.fieldKey !== CURATION_NOTE_KEY && (!f.appliesToCategories || f.appliesToCategories.length === 0 || f.appliesToCategories.includes(category))
+  );
   if (fields.length === 0) return null;
 
   const set = (key: string, value: string) => onChange({ ...values, [key]: value });
