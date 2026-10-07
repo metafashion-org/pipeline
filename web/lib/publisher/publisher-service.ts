@@ -10,6 +10,7 @@ import { driveFolderUrl } from "@/lib/assets/drive-upload";
 import { and, eq, asc, desc, inArray } from "drizzle-orm";
 import { shownOnBoard } from "@/lib/assets/board-visibility";
 import { parseRobloxLinkLines } from "./roblox-links";
+import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 
 export interface ReadyForUploadItem {
@@ -27,6 +28,8 @@ export interface ReadyForUploadItem {
   // The Drive folder of the latest final files handed in, which is what gets uploaded. Null for an
   // asset handed in as pasted links, before files went into Drive.
   finalFilesFolderUrl: string | null;
+  /** The Drive file of the main concept image (the first reference image), shown on the card. */
+  coverFileId: string | null;
   updatedAt: Date;
 }
 
@@ -50,6 +53,7 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
       artistName: personnel.name,
       brandGroupName: brandGroups.name,
       brandGroupUrl: brandGroups.robloxGroupUrl,
+      referenceImages: assets.referenceImages,
       updatedAt: assets.updatedAt,
     })
     .from(assets)
@@ -69,9 +73,13 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
     .orderBy(assetDeliverables.assetId, desc(assetDeliverables.version));
   const folderByAsset = new Map(latestFolders.map((f) => [f.assetId, f.folderId]));
 
-  return rows.map((row) => {
+  return rows.map(({ referenceImages, ...row }) => {
     const folderId = folderByAsset.get(row.id);
-    return { ...row, finalFilesFolderUrl: folderId ? driveFolderUrl(folderId) : null };
+    return {
+      ...row,
+      finalFilesFolderUrl: folderId ? driveFolderUrl(folderId) : null,
+      coverFileId: parseDriveRefs(referenceImages).find((ref) => ref.fileId)?.fileId ?? null,
+    };
   });
 }
 
