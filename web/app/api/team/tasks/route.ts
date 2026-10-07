@@ -22,6 +22,7 @@ const NewTaskSchema = z.object({
   addToToday: z.boolean().optional(),
   artifactIds: z.array(z.uuid()).optional(),
   assetIds: z.array(z.uuid()).optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 /** Makes a task. Anyone on the team can make one and give it to anyone else on the team. */

@@ -13,5 +13,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ art
   if (!canManageKnowledge(user.caps) && !user.caps.canUseTeamTasks) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   if (!z.uuid().safeParse(artifactId).success) return NextResponse.json({ error: "Unknown artifact" }, { status: 404 });
 
-  return NextResponse.json({ tasks: await listTasksLinkedToArtifact(artifactId) });
+  return NextResponse.json({ tasks: await listTasksLinkedToArtifact(artifactId, user.personnelId ?? null) });
 }

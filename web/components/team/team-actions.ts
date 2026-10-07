@@ -19,6 +19,8 @@ export interface NewTaskFields {
   dueOn?: string | null;
   notes?: string | null;
   addToToday?: boolean;
+  /** Only the owner, the maker and helpers see it. */
+  isPrivate?: boolean;
 }
 
 /** Makes a task. Output: the new task's id, or null when it failed. */

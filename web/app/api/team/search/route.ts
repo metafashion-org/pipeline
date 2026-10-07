@@ -12,5 +12,5 @@ export async function GET(request: NextRequest) {
   if (!user.caps.canUseTeamTasks) return teamTasksForbidden();
 
   const query = request.nextUrl.searchParams.get("q") ?? "";
-  return NextResponse.json({ results: await searchTeamTasks(query) });
+  return NextResponse.json({ results: await searchTeamTasks(query, user.personnelId ?? null) });
 }

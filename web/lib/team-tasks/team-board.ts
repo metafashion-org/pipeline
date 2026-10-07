@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db/client";
 import { teamTasks } from "@/lib/db/schema/team_tasks";
@@ -32,8 +32,27 @@ export interface BoardSubtask {
   position: number;
 }
 
+/**
+ * The tasks a person may see: every shared task, and the private ones they own, made or help on.
+ *
+ * Input: the viewer's personnel id, or null for something everyone sees (the #office summary).
+ * Output: a condition on team_tasks.
+ */
+export function visibleTo(viewerId: string | null): SQL {
+  const shared = eq(teamTasks.isPrivate, false);
+  if (!viewerId) return shared;
+  return or(
+    shared,
+    eq(teamTasks.ownerId, viewerId),
+    eq(teamTasks.createdBy, viewerId),
+    sql`exists (select 1 from ${teamTaskHelpers} where ${teamTaskHelpers.taskId} = ${teamTasks.id} and ${teamTaskHelpers.personnelId} = ${viewerId})`
+  ) as SQL;
+}
+
 export interface BoardTask {
   id: string;
+  /** Only its owner, creator and helpers see it. */
+  isPrivate: boolean;
   title: string;
   notes: string | null;
   area: string;
@@ -105,6 +124,7 @@ async function decorateTasks(rows: (typeof teamTasks.$inferSelect)[]): Promise<B
 
   return rows.map((row) => ({
     id: row.id,
+    isPrivate: row.isPrivate,
     title: row.title,
     notes: row.notes,
     area: row.area,
@@ -137,14 +157,14 @@ async function decorateTasks(rows: (typeof teamTasks.$inferSelect)[]): Promise<B
  *
  * Input: today's day. Output: the board.
  */
-export async function getTeamBoard(today: string): Promise<TeamBoard> {
+export async function getTeamBoard(today: string, viewerId: string | null): Promise<TeamBoard> {
   const { start } = teamDayBounds(today);
   const [members, rows, plans] = await Promise.all([
     listTeamMembers(),
     db
       .select()
       .from(teamTasks)
-      .where(or(ne(teamTasks.status, DONE_STATUS), gte(teamTasks.completedAt, start)))
+      .where(and(or(ne(teamTasks.status, DONE_STATUS), gte(teamTasks.completedAt, start)), visibleTo(viewerId)))
       .orderBy(asc(teamTasks.position), asc(teamTasks.createdAt)),
     db
       .select({ personnelId: teamTaskDayPlans.personnelId, taskId: teamTaskDayPlans.taskId, position: teamTaskDayPlans.position })
@@ -180,7 +200,7 @@ export interface TeamTaskDetail {
  *
  * Input: the task id and today's day. Output: the detail. Throws TeamTaskNotFoundError.
  */
-export async function getTeamTaskDetail(taskId: string, today: string): Promise<TeamTaskDetail> {
+export async function getTeamTaskDetail(taskId: string, today: string, viewerId: string | null): Promise<TeamTaskDetail> {
   const owner = alias(personnel, "owner");
   const creator = alias(personnel, "creator");
   const [row] = await db
@@ -188,15 +208,26 @@ export async function getTeamTaskDetail(taskId: string, today: string): Promise<
     .from(teamTasks)
     .innerJoin(owner, eq(owner.id, teamTasks.ownerId))
     .leftJoin(creator, eq(creator.id, teamTasks.createdBy))
-    .where(eq(teamTasks.id, taskId))
+    .where(and(eq(teamTasks.id, taskId), visibleTo(viewerId)))
     .limit(1);
+  // A private task someone else can't see reads as missing, so its title never leaks.
   if (!row) throw new TeamTaskNotFoundError("That task doesn't exist");
 
   const otherTask = alias(teamTasks, "other_task");
   const [[decorated], taskLinks, assetLinks, artifactLinks, comments, history, planned] = await Promise.all([
     decorateTasks([row.task]),
     db
-      .select({ id: teamTaskLinks.id, taskId: teamTaskLinks.taskId, linkedTaskId: teamTaskLinks.linkedTaskId, title: otherTask.title, status: otherTask.status, otherId: otherTask.id })
+      .select({
+        id: teamTaskLinks.id,
+        taskId: teamTaskLinks.taskId,
+        linkedTaskId: teamTaskLinks.linkedTaskId,
+        title: otherTask.title,
+        status: otherTask.status,
+        otherId: otherTask.id,
+        otherPrivate: otherTask.isPrivate,
+        otherOwnerId: otherTask.ownerId,
+        otherCreatedBy: otherTask.createdBy,
+      })
       .from(teamTaskLinks)
       .innerJoin(
         otherTask,
@@ -243,7 +274,10 @@ export async function getTeamTaskDetail(taskId: string, today: string): Promise<
   ]);
 
   const links: TeamTaskLinkView[] = [
-    ...taskLinks.map((l) => ({ id: l.id, kind: "task" as const, targetId: l.otherId, label: l.title, sublabel: l.status, href: `/team?task=${l.otherId}` })),
+    ...taskLinks
+      // A linked private task shows only to its owner and creator.
+      .filter((l) => !l.otherPrivate || l.otherOwnerId === viewerId || l.otherCreatedBy === viewerId)
+      .map((l) => ({ id: l.id, kind: "task" as const, targetId: l.otherId, label: l.title, sublabel: l.status, href: `/team?task=${l.otherId}` })),
     ...assetLinks.map((l) => ({
       id: l.id,
       kind: "asset" as const,
@@ -286,7 +320,7 @@ export interface TeamTaskSearchHit {
  *
  * Input: the text. Output: up to SEARCH_RESULTS_MAX tasks, most recently active first.
  */
-export async function searchTeamTasks(query: string): Promise<TeamTaskSearchHit[]> {
+export async function searchTeamTasks(query: string, viewerId: string | null): Promise<TeamTaskSearchHit[]> {
   const text = query.trim();
   if (!text) return [];
   const pattern = `%${text}%`;
@@ -303,10 +337,13 @@ export async function searchTeamTasks(query: string): Promise<TeamTaskSearchHit[
     .from(teamTasks)
     .innerJoin(personnel, eq(personnel.id, teamTasks.ownerId))
     .where(
-      or(
-        ilike(teamTasks.title, pattern),
-        ilike(teamTasks.notes, pattern),
-        sql`exists (select 1 from ${teamTaskComments} where ${teamTaskComments.taskId} = ${teamTasks.id} and ${teamTaskComments.body} ilike ${pattern})`
+      and(
+        visibleTo(viewerId),
+        or(
+          ilike(teamTasks.title, pattern),
+          ilike(teamTasks.notes, pattern),
+          sql`exists (select 1 from ${teamTaskComments} where ${teamTaskComments.taskId} = ${teamTasks.id} and ${teamTaskComments.body} ilike ${pattern})`
+        )
       )
     )
     .orderBy(desc(teamTasks.lastActivityAt))
@@ -335,7 +372,7 @@ export interface TeamWeek {
  *
  * Input: the week's Monday. Output: the week.
  */
-export async function getTeamWeek(weekStart: string): Promise<TeamWeek> {
+export async function getTeamWeek(weekStart: string, viewerId: string | null): Promise<TeamWeek> {
   const days = Array.from({ length: DAYS_PER_WEEK }, (_, i) => addDays(weekStart, i));
   const weekEnd = addDays(weekStart, DAYS_PER_WEEK);
   const { start } = teamDayBounds(weekStart);
@@ -347,7 +384,7 @@ export async function getTeamWeek(weekStart: string): Promise<TeamWeek> {
       .select({ taskId: teamTasks.id, title: teamTasks.title, ownerId: teamTasks.ownerId, completedAt: teamTasks.completedAt })
       .from(teamTasks)
       // Counted work is shown by its count on its own day, not as "finished" on the day it was closed.
-      .where(and(eq(teamTasks.status, DONE_STATUS), isNull(teamTasks.targetCount), gte(teamTasks.completedAt, start), lt(teamTasks.completedAt, end))),
+      .where(and(eq(teamTasks.status, DONE_STATUS), isNull(teamTasks.targetCount), gte(teamTasks.completedAt, start), lt(teamTasks.completedAt, end), visibleTo(viewerId))),
     db
       .select({
         personnelId: teamTaskDayPlans.personnelId,
@@ -358,7 +395,7 @@ export async function getTeamWeek(weekStart: string): Promise<TeamWeek> {
       })
       .from(teamTaskDayPlans)
       .innerJoin(teamTasks, eq(teamTasks.id, teamTaskDayPlans.taskId))
-      .where(and(gte(teamTaskDayPlans.planOn, weekStart), lt(teamTaskDayPlans.planOn, weekEnd)))
+      .where(and(gte(teamTaskDayPlans.planOn, weekStart), lt(teamTaskDayPlans.planOn, weekEnd), visibleTo(viewerId)))
       .orderBy(asc(teamTaskDayPlans.position)),
     db
       .select({
@@ -371,7 +408,7 @@ export async function getTeamWeek(weekStart: string): Promise<TeamWeek> {
         targetCount: teamTasks.targetCount,
       })
       .from(teamTasks)
-      .where(and(isNotNull(teamTasks.targetCount), gte(teamTasks.occurrenceOn, weekStart), lt(teamTasks.occurrenceOn, weekEnd))),
+      .where(and(isNotNull(teamTasks.targetCount), gte(teamTasks.occurrenceOn, weekStart), lt(teamTasks.occurrenceOn, weekEnd), visibleTo(viewerId))),
   ]);
 
   const people = members.map((member) => {
@@ -401,7 +438,7 @@ export interface TeamLinkOptions {
  * Input: the text, and the task being linked from (left out of its own results). Output: up to
  * LINK_OPTIONS_PER_KIND of each.
  */
-export async function findTeamLinkOptions(query: string, fromTaskId: string | null): Promise<TeamLinkOptions> {
+export async function findTeamLinkOptions(query: string, fromTaskId: string | null, viewerId: string | null): Promise<TeamLinkOptions> {
   const text = query.trim();
   if (!text) return { tasks: [], assets: [], artifacts: [] };
   const pattern = `%${text}%`;
@@ -409,7 +446,7 @@ export async function findTeamLinkOptions(query: string, fromTaskId: string | nu
     db
       .select({ id: teamTasks.id, title: teamTasks.title, status: teamTasks.status })
       .from(teamTasks)
-      .where(and(ilike(teamTasks.title, pattern), fromTaskId ? ne(teamTasks.id, fromTaskId) : undefined))
+      .where(and(ilike(teamTasks.title, pattern), fromTaskId ? ne(teamTasks.id, fromTaskId) : undefined, visibleTo(viewerId)))
       .orderBy(desc(teamTasks.lastActivityAt))
       .limit(LINK_OPTIONS_PER_KIND),
     db
@@ -430,12 +467,12 @@ export async function findTeamLinkOptions(query: string, fromTaskId: string | nu
 }
 
 /** The Team Tasks linked to a Registry artifact, for its detail sheet. */
-export async function listTasksLinkedToArtifact(artifactId: string) {
+export async function listTasksLinkedToArtifact(artifactId: string, viewerId: string | null) {
   return db
     .select({ id: teamTasks.id, title: teamTasks.title, status: teamTasks.status, ownerName: personnel.name })
     .from(teamTaskLinks)
     .innerJoin(teamTasks, eq(teamTasks.id, teamTaskLinks.taskId))
     .innerJoin(personnel, eq(personnel.id, teamTasks.ownerId))
-    .where(eq(teamTaskLinks.artifactId, artifactId))
+    .where(and(eq(teamTaskLinks.artifactId, artifactId), visibleTo(viewerId)))
     .orderBy(desc(teamTasks.createdAt));
 }

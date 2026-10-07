@@ -19,5 +19,5 @@ export async function GET(request: NextRequest) {
 
   const requested = request.nextUrl.searchParams.get("start");
   const day = requested && DAY_PATTERN.test(requested) ? requested : teamDay(new Date());
-  return NextResponse.json(await getTeamWeek(weekStartOf(day)));
+  return NextResponse.json(await getTeamWeek(weekStartOf(day), user.personnelId ?? null));
 }

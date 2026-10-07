@@ -37,7 +37,8 @@ export interface PersonDaySummary {
  * Input: today's day and the current moment. Output: one summary per team member.
  */
 export async function buildDailySummary(today: string, now: Date): Promise<PersonDaySummary[]> {
-  const board = await getTeamBoard(today);
+  // Posted to #office and emailed to the whole team, so private tasks stay out.
+  const board = await getTeamBoard(today, null);
   return board.members.map((member) => {
     const own = board.tasks.filter((t) => t.ownerId === member.id);
     const byId = new Map(board.tasks.map((t) => [t.id, t]));

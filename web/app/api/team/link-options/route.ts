@@ -18,5 +18,5 @@ export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get("q") ?? "";
   const from = request.nextUrl.searchParams.get("from");
   const fromTaskId = from && z.uuid().safeParse(from).success ? from : null;
-  return NextResponse.json(await findTeamLinkOptions(query, fromTaskId));
+  return NextResponse.json(await findTeamLinkOptions(query, fromTaskId, user.personnelId ?? null));
 }
