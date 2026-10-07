@@ -1,6 +1,7 @@
 import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
+import { canAddAssets } from "@/lib/auth/rbac";
 import { uploadReferenceFile, isConfigured } from "@/lib/assets/drive-upload";
 
 export const dynamic = "force-dynamic";
@@ -17,15 +18,15 @@ const MAX_BYTES = 8 * 1024 * 1024;
  * an artist reference isn't always a picture. The client appends the link to the reference-links
  * textarea itself, nothing about assets.reference_images changes.
  *
- * Gated the same as creating/editing an asset (canAssignArtists) — uploading a reference is part
- * of the same production-management action, not a separate capability.
+ * Gated the same as adding an asset (canAddAssets): the team and curators. A curator adding an
+ * asset for sign-off uploads its concept images too.
  */
 export async function POST(request: NextRequest) {
   const user = await getAuthedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!user.caps.canAssignArtists) {
+  if (!canAddAssets(user.caps)) {
     return NextResponse.json({ error: "You don't have permission to upload reference files" }, { status: 403 });
   }
 
