@@ -285,7 +285,6 @@ export function getEffectiveCapabilities(
 // read-only board.
 const ADMIN_SUBSECTION_CAPABILITY: Array<[string, keyof CapabilitySet]> = [
   ["/admin/personnel", "canManagePersonnel"],
-  ["/admin/settings", "canManageSystemConfig"],
   ["/admin/forms", "canManageSystemConfig"],
   ["/admin/curation-fields", "canManageSystemConfig"],
   ["/admin/marketing", "canAccessMarketingTools"],
@@ -321,6 +320,9 @@ export function isRouteAllowedForRoles(
   if (pathname.startsWith("/admin")) {
     // Assets waiting for Arjun's sign-off: whoever can add assets sees where theirs stand.
     if (pathname.startsWith("/admin/signoff")) return canAddAssets(caps);
+    // Settings: admins see everything; the team who assign artists see the Trial run there, to learn
+    // the pipeline. Each admin section and route still checks canManageSystemConfig itself.
+    if (pathname.startsWith("/admin/settings")) return caps.canManageSystemConfig || caps.canAssignArtists;
     const subsection = ADMIN_SUBSECTION_CAPABILITY.find(([prefix]) => pathname.startsWith(prefix));
     if (subsection) return caps[subsection[1]];
     return caps.canViewAllAssets || caps.canManageSystemConfig;

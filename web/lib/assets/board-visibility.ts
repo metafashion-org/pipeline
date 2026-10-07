@@ -25,6 +25,8 @@ export interface HiddenAsset {
   artistName: string | null;
   hiddenAt: Date;
   hiddenByName: string | null;
+  /** Why it was archived, or null for a card hidden before reasons were recorded. */
+  hiddenReason: string | null;
 }
 
 /** Every hidden card, most recently hidden first. */
@@ -39,6 +41,7 @@ export async function listHiddenAssets(): Promise<HiddenAsset[]> {
       artistName: artist.name,
       hiddenAt: assets.boardHiddenAt,
       hiddenByName: hider.name,
+      hiddenReason: assets.boardHiddenReason,
     })
     .from(assets)
     .leftJoin(artist, eq(artist.id, assets.currentArtistId))
@@ -50,11 +53,15 @@ export async function listHiddenAssets(): Promise<HiddenAsset[]> {
 }
 
 // Sets or clears the hidden columns and records the change in audit_log, in one transaction.
-async function writeBoardVisibility(sku: string, hidden: boolean, actorId: string | null): Promise<void> {
+async function writeBoardVisibility(sku: string, hidden: boolean, actorId: string | null, reason: string | null = null): Promise<void> {
   await db.transaction(async (tx) => {
     const [asset] = await tx
       .update(assets)
-      .set(hidden ? { boardHiddenAt: new Date(), boardHiddenBy: actorId } : { boardHiddenAt: null, boardHiddenBy: null })
+      .set(
+        hidden
+          ? { boardHiddenAt: new Date(), boardHiddenBy: actorId, boardHiddenReason: reason }
+          : { boardHiddenAt: null, boardHiddenBy: null, boardHiddenReason: null }
+      )
       .where(eq(assets.sku, sku))
       .returning({ id: assets.id });
     if (!asset) throw new AssetNotFoundError(`No asset with SKU ${sku}`);
@@ -63,9 +70,24 @@ async function writeBoardVisibility(sku: string, hidden: boolean, actorId: strin
       entityType: "asset",
       entityId: asset.id,
       actorId,
-      payload: { sku },
+      payload: hidden && reason ? { sku, reason } : { sku },
     });
   });
+}
+
+/**
+ * Archives several cards at once: each is taken off the board with its own reason, and logged.
+ *
+ * Input: the SKUs with their reasons, and who archived them. Output: the SKUs archived. Throws
+ * AssetNotFoundError for an unknown SKU (the ones before it stay archived).
+ */
+export async function archiveAssets(items: { sku: string; reason: string }[], actorId: string | null): Promise<string[]> {
+  const archived: string[] = [];
+  for (const item of items) {
+    await writeBoardVisibility(item.sku, true, actorId, item.reason);
+    archived.push(item.sku);
+  }
+  return archived;
 }
 
 /**

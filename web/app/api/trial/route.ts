@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   if (!user.caps.canAssignArtists) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const parsed = TrialActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Say start or end" }, { status: 400 });
-  if (parsed.data.action === "start") return NextResponse.json({ sku: await startTrialRun(user.personnelId ?? null) });
+  if (parsed.data.action === "start") return NextResponse.json(await startTrialRun(user.personnelId ?? null));
   await endTrialRun(user.personnelId ?? null);
   return NextResponse.json({ success: true });
 }

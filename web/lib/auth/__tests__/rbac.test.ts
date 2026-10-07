@@ -69,7 +69,9 @@ function testRbacSystem() {
   // higher bar, and payment_admin holds canViewAllAssets without being an administrator.
   assert.strictEqual(isRouteAllowedForRoles("/admin", ["operator"]), true, "operator belongs on the admin board");
   assert.strictEqual(isRouteAllowedForRoles("/admin/personnel", ["operator"]), false, "operator must not manage personnel");
-  assert.strictEqual(isRouteAllowedForRoles("/admin/settings", ["operator"]), false, "operator must not edit system config");
+  // An operator opens Settings for the Trial run only; every admin section and route there checks canManageSystemConfig itself.
+  assert.strictEqual(isRouteAllowedForRoles("/admin/settings", ["operator"]), true, "operator opens Settings for the Trial run");
+  assert.strictEqual(getEffectiveCapabilities(["operator"]).canManageSystemConfig, false, "operator must not edit system config");
   assert.strictEqual(isRouteAllowedForRoles("/admin/personnel", ["admin"]), true, "admin manages personnel");
   assert.strictEqual(isRouteAllowedForRoles("/admin", ["payment_admin"]), true, "payment_admin can view all assets");
   assert.strictEqual(isRouteAllowedForRoles("/admin/settings", ["payment_admin"]), false, "payment_admin is not a system administrator");

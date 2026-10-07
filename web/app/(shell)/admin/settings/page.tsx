@@ -9,9 +9,7 @@ import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
 import { CategoriesManager } from "@/components/settings/CategoriesManager";
 import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
 import { TaskSheetManager } from "@/components/settings/TaskSheetManager";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { TrialRunCard } from "@/components/settings/TrialRunCard";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -24,8 +22,20 @@ export default async function SettingsPage() {
   // ever "admin", "operator" or "artist", so someone granted this capability by a per-person
   // override passed proxy.ts (which reads the capability) and was then bounced by this line.
   const caps = getEffectiveCapabilities(session?.user?.roles || [], session?.user?.capabilityOverrides || {});
-  if (!session || !caps.canManageSystemConfig) {
+  if (!session || !(caps.canManageSystemConfig || caps.canAssignArtists)) {
     redirect("/unauthorized");
+  }
+
+  // The team who assign artists come here for the Trial run only; the rest of Settings is for admins.
+  if (!caps.canManageSystemConfig) {
+    return (
+      <div className="flex flex-col h-full bg-background text-foreground">
+        <PageHeader title="Settings" description="Learn the asset pipeline with a trial run." />
+        <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
+          <TrialRunCard />
+        </main>
+      </div>
+    );
   }
 
   await seedDefaultCurationFieldConfig();
@@ -39,6 +49,7 @@ export default async function SettingsPage() {
       />
 
       <main className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
+        <TrialRunCard />
         <BrandGroupsManager />
         <CategoriesManager />
         <TaskSheetManager />
