@@ -34,6 +34,7 @@ export function NewTaskDialog({
   const [dueOn, setDueOn] = useState("");
   const [notes, setNotes] = useState("");
   const [addToToday, setAddToToday] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
   // Shown once when the task goes to someone else without a due date: they're notified the moment
   // it's added, so the date has to be in it before then.
   const [askForDueDate, setAskForDueDate] = useState(false);
@@ -48,6 +49,7 @@ export function NewTaskDialog({
       setDueOn("");
       setNotes("");
       setAddToToday(false);
+      setIsPrivate(false);
       setAskForDueDate(false);
     }
     setOpen(next);
@@ -63,7 +65,7 @@ export function NewTaskDialog({
     }
     setSaving(true);
     try {
-      const id = await createTask({ title, area, ownerId, dueOn: dueOn || null, notes: notes || null, addToToday });
+      const id = await createTask({ title, area, ownerId, dueOn: dueOn || null, notes: notes || null, addToToday, isPrivate });
       if (!id) return;
       toast.success(ownerId === viewerId ? "Task added" : `Task given to ${members.find((m) => m.id === ownerId)?.name ?? "them"}`);
       setOpen(false);
@@ -127,6 +129,10 @@ export function NewTaskDialog({
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={addToToday} onChange={(e) => setAddToToday(e.target.checked)} className="h-4 w-4 accent-primary" />
             Add to the owner&apos;s plan for today
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="h-4 w-4 accent-primary" />
+            Private: only you, the owner and any helpers see it
           </label>
         </div>
         {askForDueDate && (

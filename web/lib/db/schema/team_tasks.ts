@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, date, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, date, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
 import { teamTaskRecurrences } from "./team_task_recurrences";
 
@@ -31,6 +31,8 @@ export const teamTasks = pgTable(
     // The day a recurring task is for.
     occurrenceOn: date("occurrence_on", { mode: "string" }),
     createdBy: uuid("created_by").references(() => personnel.id, { onDelete: "set null" }),
+    // Seen only by its owner, its creator and its helpers (lib/team-tasks/team-board.ts visibleTo).
+    isPrivate: boolean("is_private").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),

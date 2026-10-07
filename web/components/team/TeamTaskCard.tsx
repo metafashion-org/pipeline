@@ -1,7 +1,7 @@
 "use client";
 
 import type { HTMLAttributes, ReactNode } from "react";
-import { AlertTriangle, CheckSquare, Clock, GripVertical, Link2, MessageSquare, Sun, SunDim } from "lucide-react";
+import { AlertTriangle, CheckSquare, Clock, GripVertical, Link2, Lock, MessageSquare, Sun, SunDim } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format-date";
 import { areaLabel, BLOCKED_STATUS, DOING_STATUS, DONE_STATUS, STALE_AFTER_DAYS, taskSignals } from "@/lib/team-tasks/task-rules";
@@ -73,6 +73,7 @@ export function TeamTaskCard({
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
           <span className={cn("block leading-snug", done && "line-through")}>
             {number !== undefined && <span className="mr-1 font-semibold text-primary">{number}.</span>}
+            {task.isPrivate && <Lock className="mr-1 inline h-3 w-3 text-muted-foreground" aria-label="Private" />}
             {task.title}
           </span>
         </button>

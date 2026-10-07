@@ -21,6 +21,7 @@ import {
   TeamTaskInputError,
   updateTeamSubtask,
   updateTeamTask,
+  TeamTaskNotFoundError,
 } from "../team-tasks-service";
 import { getTeamBoard, getTeamTaskDetail, searchTeamTasks } from "../team-board";
 import { createKnowledgeArtifact } from "@/lib/knowledge/artifacts-service";
@@ -91,7 +92,7 @@ async function run() {
   await assert.rejects(() => createTeamTask({ title: "Should fail", area: "nonsense", ownerId: owner.id }, TODAY, owner.id), TeamTaskInputError);
 
   console.log("Verifying the board, today's plan and reordering...");
-  let board = await getTeamBoard(TODAY);
+  let board = await getTeamBoard(TODAY, null);
   assert.deepStrictEqual(
     board.plans.filter((p) => p.personnelId === owner.id).map((p) => p.taskId),
     [second],
@@ -99,7 +100,7 @@ async function run() {
   );
   await setTeamDayPlan(owner.id, TODAY, [first, second], owner.id);
   await reorderTeamQueue(owner.id, [second, first], helper.id);
-  board = await getTeamBoard(TODAY);
+  board = await getTeamBoard(TODAY, null);
   assert.deepStrictEqual(board.plans.filter((p) => p.personnelId === owner.id).map((p) => p.taskId), [first, second], "The plan is replaced, in order");
   const ownerOpen = board.tasks.filter((t) => t.ownerId === owner.id).sort((a, b) => a.position - b.position);
   assert.deepStrictEqual(ownerOpen.map((t) => t.id), [second, first], "Reordering puts the first id at the top");
@@ -107,7 +108,7 @@ async function run() {
 
   console.log("Verifying status changes, helpers, and done tasks leaving the board...");
   await updateTeamTask(first, { status: "blocked", waitingOn: "Arjun's budget", helperIds: [helper.id, outsider.id].slice(0, 1) }, TODAY, owner.id);
-  let detail = await getTeamTaskDetail(first, TODAY);
+  let detail = await getTeamTaskDetail(first, TODAY, null);
   assert.strictEqual(detail.task.waitingOn, "Arjun's budget");
   assert.deepStrictEqual(detail.task.helperIds, [helper.id]);
   await assert.rejects(() => updateTeamTask(first, { helperIds: [outsider.id] }, TODAY, owner.id), TeamTaskInputError, "A freelancer can't help on a team task");
@@ -116,7 +117,7 @@ async function run() {
   assert.ok(doneRow.completedAt, "Done stamps completedAt");
   assert.strictEqual(doneRow.waitingOn, null, "Waiting-on is cleared once the task isn't blocked");
   const tomorrow = "2099-01-01";
-  assert.ok(!(await getTeamBoard(tomorrow)).tasks.some((t) => t.id === first), "A task done before the board's day is off the board");
+  assert.ok(!(await getTeamBoard(tomorrow, null)).tasks.some((t) => t.id === first), "A task done before the board's day is off the board");
   await updateTeamTask(first, { status: "todo" }, TODAY, owner.id);
   const [reopened] = await db.select().from(teamTasks).where(eq(teamTasks.id, first));
   assert.strictEqual(reopened.completedAt, null, "Reopening clears completedAt");
@@ -125,14 +126,14 @@ async function run() {
   await updateTeamTask(second, { ownerId: helper.id }, TODAY, owner.id);
   const helperNotices = await notificationsFor(helper.id);
   assert.ok(helperNotices.some((n) => n.kind === "assigned" && n.taskId === second), "The new owner is told");
-  board = await getTeamBoard(TODAY);
+  board = await getTeamBoard(TODAY, null);
   assert.ok(!board.plans.some((p) => p.personnelId === owner.id && p.taskId === second), "It leaves the old owner's plan for today");
 
   console.log("Verifying subtasks, links and comments with mentions...");
   const subtask = await addTeamSubtask(first, { title: "Shortlist 5 outfit makers", ownerId: helper.id }, owner.id);
   assert.ok((await notificationsFor(helper.id)).some((n) => n.message.includes("Shortlist 5 outfit makers")), "A subtask given to someone tells them");
   await updateTeamSubtask(subtask, { done: true }, helper.id);
-  board = await getTeamBoard(TODAY);
+  board = await getTeamBoard(TODAY, null);
   assert.ok(board.tasks.find((t) => t.id === first)?.subtasks[0].doneAt, "Ticking a subtask stamps doneAt");
 
   const [insightType] = await db.select({ id: artifactTypeConfig.id }).from(artifactTypeConfig).where(eq(artifactTypeConfig.prefix, "INS"));
@@ -140,9 +141,9 @@ async function run() {
   await addTeamTaskLink(first, { kind: "artifact", id: insight.id }, owner.id);
   await addTeamTaskLink(first, { kind: "task", id: second }, owner.id);
   await addTeamTaskLink(second, { kind: "task", id: first }, owner.id);
-  detail = await getTeamTaskDetail(second, TODAY);
+  detail = await getTeamTaskDetail(second, TODAY, null);
   assert.strictEqual(detail.links.filter((l) => l.kind === "task").length, 1, "A task link shows on both tasks, once");
-  detail = await getTeamTaskDetail(first, TODAY);
+  detail = await getTeamTaskDetail(first, TODAY, null);
   const insightLink = detail.links.find((l) => l.kind === "artifact");
   assert.ok(insightLink?.label.includes(ARTIFACT_TITLE), "The Registry link shows the artifact's title");
   await assert.rejects(() => addTeamTaskLink(first, { kind: "task", id: first }, owner.id), TeamTaskInputError);
@@ -151,7 +152,7 @@ async function run() {
   await addTeamTaskComment(first, "@Team Helper can you check the rates? @Freelance Artist too", [helper.id, outsider.id], owner.id);
   assert.ok((await notificationsFor(helper.id)).some((n) => n.kind === "mention"), "A mentioned teammate is notified");
   assert.strictEqual((await notificationsFor(outsider.id)).length, 0, "A mention of someone outside the team is dropped");
-  detail = await getTeamTaskDetail(first, TODAY);
+  detail = await getTeamTaskDetail(first, TODAY, null);
   assert.deepStrictEqual(detail.comments[0].mentionedIds, [helper.id]);
   assert.strictEqual(detail.task.latestUpdate?.body.startsWith("@Team Helper"), true, "The newest comment is the card's latest update");
   await deleteTeamSubtask(subtask, owner.id);
@@ -162,11 +163,26 @@ async function run() {
     assert.ok(actions.includes(action), `The task's history records ${action}`);
   }
   await updateTeamTask(first, { status: "done" }, TODAY, owner.id);
-  const hits = await searchTeamTasks("check the rates");
+  const hits = await searchTeamTasks("check the rates", null);
   assert.ok(hits.some((h) => h.id === first && h.status === "done"), "Search finds a done task by its comment text");
 
   const logged = await db.select().from(auditLog).where(and(eq(auditLog.entityType, "team_task"), eq(auditLog.entityId, owner.id)));
   assert.ok(logged.some((l) => l.action === "setTeamDayPlan"), "Setting a plan is logged");
+
+  console.log("Verifying a private task is seen only by its owner, its maker and its helpers...");
+  const secret = await createTeamTask({ title: "Private salary review", area: "ops", ownerId: owner.id, isPrivate: true }, TODAY, owner.id);
+  const seesSecret = async (viewerId: string | null) => (await getTeamBoard(TODAY, viewerId)).tasks.some((t) => t.id === secret);
+  assert.ok(await seesSecret(owner.id), "Its owner sees it on the board");
+  assert.ok(!(await seesSecret(helper.id)), "A teammate doesn't");
+  assert.ok(!(await seesSecret(null)), "The #office summary doesn't");
+  await assert.rejects(() => getTeamTaskDetail(secret, TODAY, helper.id), TeamTaskNotFoundError, "Opening it by link reads as missing");
+  assert.strictEqual((await searchTeamTasks("salary review", helper.id)).length, 0, "Search hides it from a teammate");
+  assert.strictEqual((await searchTeamTasks("salary review", owner.id)).length, 1, "Search finds it for its owner");
+  await assert.rejects(() => updateTeamTask(secret, { isPrivate: false }, TODAY, helper.id), TeamTaskInputError, "Only its owner or maker changes who sees it");
+  await updateTeamTask(secret, { helperIds: [helper.id] }, TODAY, owner.id);
+  assert.ok(await seesSecret(helper.id), "A helper on it sees it");
+  await updateTeamTask(secret, { isPrivate: false }, TODAY, owner.id);
+  assert.ok(await seesSecret(null), "Made shared, everyone sees it");
 }
 
 run()

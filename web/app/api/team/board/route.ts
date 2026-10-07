@@ -22,7 +22,7 @@ export async function GET() {
   const today = teamDay(new Date());
   await makeRecurringTasksOnce(today);
   const [board, notifications] = await Promise.all([
-    getTeamBoard(today),
+    getTeamBoard(today, user.personnelId ?? null),
     user.personnelId ? listTeamNotifications(user.personnelId) : Promise.resolve({ unread: 0 }),
   ]);
   // Picks up rows Instinct wrote in the task sheet after this response is sent, at most once a

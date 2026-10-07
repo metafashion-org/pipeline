@@ -86,7 +86,7 @@ async function testRecurringCountedWork(curatorId: string) {
   const [monday] = await tasksOn(curatorId, MONDAY);
   assert.strictEqual(monday.focus, "Christmas");
   assert.strictEqual(monday.targetCount, 45);
-  const board = await getTeamBoard(MONDAY);
+  const board = await getTeamBoard(MONDAY, null);
   assert.ok(board.plans.some((p) => p.personnelId === curatorId && p.taskId === monday.id), "The day's task is in the owner's plan");
 
   await updateTeamTask(monday.id, { doneCount: 38 }, MONDAY, curatorId);
@@ -102,7 +102,7 @@ async function testRecurringCountedWork(curatorId: string) {
   await makeRecurringTasksFor(addDays(MONDAY, 2));
   assert.strictEqual((await tasksOn(curatorId, addDays(MONDAY, 2))).length, 0, "A switched-off rule makes nothing");
 
-  const week = await getTeamWeek(MONDAY);
+  const week = await getTeamWeek(MONDAY, null);
   const curatorWeek = week.people.find((p) => p.member.id === curatorId);
   assert.deepStrictEqual(
     curatorWeek?.days[0].counted.map((c) => [c.doneCount, c.targetCount, c.focus]),

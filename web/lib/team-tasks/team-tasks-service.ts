@@ -90,6 +90,8 @@ export interface NewTeamTaskInput {
   artifactIds?: string[];
   /** Assets (by row id) to link it to. */
   assetIds?: string[];
+  /** Only the owner, the creator and helpers see it. */
+  isPrivate?: boolean;
 }
 
 /**
@@ -121,6 +123,7 @@ export async function createTeamTask(input: NewTeamTaskInput, today: string, act
         targetCount: input.targetCount ?? null,
         position: await nextQueuePosition(tx, input.ownerId),
         createdBy: actorId,
+        isPrivate: input.isPrivate ?? false,
       })
       .returning();
     if (helperIds.length > 0) {
@@ -151,6 +154,7 @@ export interface TeamTaskPatch {
   targetCount?: number | null;
   doneCount?: number;
   helperIds?: string[];
+  isPrivate?: boolean;
 }
 
 /**
@@ -202,6 +206,12 @@ export async function updateTeamTask(taskId: string, patch: TeamTaskPatch, today
     note("dueOn", task.dueOn, set.dueOn);
   }
   if (patch.targetCount !== undefined) set.targetCount = patch.targetCount;
+  if (patch.isPrivate !== undefined) {
+    // Only the people who can see a private task decide whether it's private.
+    if (actorId !== task.ownerId && actorId !== task.createdBy) throw new TeamTaskInputError("Only the owner or whoever made the task can change who sees it");
+    set.isPrivate = patch.isPrivate;
+    note("isPrivate", task.isPrivate, patch.isPrivate);
+  }
   if (patch.doneCount !== undefined) {
     set.doneCount = Math.max(0, Math.floor(patch.doneCount));
     note("doneCount", task.doneCount, set.doneCount);

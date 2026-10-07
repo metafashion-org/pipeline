@@ -24,6 +24,7 @@ const TaskPatchSchema = z.object({
   targetCount: z.number().int().positive().nullable().optional(),
   doneCount: z.number().int().min(0).optional(),
   helperIds: z.array(z.uuid()).optional(),
+  isPrivate: z.boolean().optional(),
 });
 
 /** One task in full: checklist, links, comments, history, and who planned it for today. */
@@ -34,7 +35,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tas
   if (!TaskIdSchema.safeParse(taskId).success) return NextResponse.json({ error: "Unknown task" }, { status: 404 });
 
   try {
-    return NextResponse.json(await getTeamTaskDetail(taskId, teamDay(new Date())));
+    return NextResponse.json(await getTeamTaskDetail(taskId, teamDay(new Date()), user.personnelId ?? null));
   } catch (error) {
     return teamTaskErrorResponse(error);
   }

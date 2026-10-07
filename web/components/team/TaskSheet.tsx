@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { BookOpen, KanbanSquare, ListChecks, Minus, Plus, Sun, SunDim, Trash2, X } from "lucide-react";
+import { BookOpen, KanbanSquare, ListChecks, Lock, Minus, Plus, Sun, SunDim, Trash2, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,6 +205,11 @@ export function TaskSheet({
             {task.createdByName ? ` by ${task.createdByName}` : ""}
             {task.focus ? ` · focus: ${task.focus}` : ""}
           </SheetDescription>
+          {/* Only the owner or whoever made it can change this; the server refuses anyone else. */}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={task.isPrivate} onChange={(e) => patch({ isPrivate: e.target.checked })} className="h-3.5 w-3.5 accent-primary" />
+            <Lock className="h-3 w-3" /> Private: only the owner, whoever made it and helpers see it
+          </label>
         </SheetHeader>
 
         <div className="grid grid-cols-2 gap-3">
