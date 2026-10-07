@@ -17,6 +17,7 @@ import { nextFinalFilesVersion, submitFinalFiles } from "@/lib/deliverables/deli
 import { FINAL_ZIP_KIND } from "@/lib/deliverables/final-zip";
 import { uploadFinalFilesZip, isConfigured as isDriveConfigured } from "@/lib/assets/drive-upload";
 import { hideAssetFromBoard } from "@/lib/assets/board-visibility";
+import { TRIAL_SKU_PREFIX } from "./trial-sku";
 import { discordFetch, isConfigured as isDiscordConfigured } from "@/lib/discord/discord-service";
 import { notifyReviewersOfReview, notifyUploadersOfReadyAsset } from "@/lib/notifications/pipeline-notices";
 
@@ -28,11 +29,13 @@ export function trialArtistEmailFor(runnerEmail: string): string {
   const [local, domain] = runnerEmail.toLowerCase().split("@");
   return `${local}+trial@${domain}`;
 }
-export const TRIAL_SKU_PREFIX = "TRIAL-";
 const TRIAL_ITEM_NAME = "TRIAL - End-to-end test hat";
 // The bot waits this long before each move, so the notices arrive in the order a real artist's would.
 // Short, because it runs after the team's request inside that request's time limit (maxDuration in the assign and status routes).
 const BOT_PAUSE_MS = 1_500;
+// How long the bot "works" in In Production before sending it for review, so the runner sees the card
+// there: the board re-reads every 3 seconds while the bot has a move (components/kanban/Board.tsx).
+const BOT_WORK_MS = 6_000;
 // The smallest valid .zip: an empty archive (just the end-of-central-directory record).
 const EMPTY_ZIP = Buffer.from([0x50, 0x4b, 0x05, 0x06, ...new Array(18).fill(0)]);
 
@@ -140,7 +143,7 @@ function botActor(artistId: string) {
 // Sends the work for review the way an artist does: In Production, then In Review, then the reviewers hear.
 async function sendForReview(sku: string, artistId: string, note: string): Promise<void> {
   await updateAssetStatusInKanban(sku, "in_progress", botActor(artistId), note);
-  await sleep(BOT_PAUSE_MS);
+  await sleep(BOT_WORK_MS);
   await updateAssetStatusInKanban(sku, "in_review", botActor(artistId), "Trial bot: done, sending it for review");
   await notifyReviewersOfReview(sku);
 }

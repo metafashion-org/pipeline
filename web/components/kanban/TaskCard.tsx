@@ -12,7 +12,8 @@ import type { KanbanAssetCard, KanbanAssetCardClient } from "@/lib/kanban/kanban
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { DriveImage } from "./drive-image";
 import { TONE_STYLES, toMoveCard, useBoardRules } from "./board-rules";
-import { describeNextStep } from "@/lib/kanban/move-rules";
+import { describeNextStep, type NextStepSummary } from "@/lib/kanban/move-rules";
+import { isTrialBotTurn } from "@/lib/trial/trial-sku";
 
 interface TaskCardProps {
     task: KanbanAssetCardClient;
@@ -90,10 +91,13 @@ function DiscordIcon({ className }: { className?: string }) {
  * green when it's the viewer's move, grey for someone else's, blue when it moves on its own, amber
  * when it's waiting on something (an unanswered offer, a missing receipt).
  */
+// The trial bot answers on its own a few seconds after the team moves (lib/trial/trial-run.ts).
+const TRIAL_BOT_STEP: NextStepSummary = { tone: "auto", text: "The trial bot moves it on in a few seconds" };
+
 function NextStepLine({ task }: { task: KanbanAssetCardClient }) {
     const board = useBoardRules();
     if (!board) return null;
-    const step = describeNextStep(board.actor, toMoveCard(task), board.statuses, board.rules, task.artistName);
+    const step = isTrialBotTurn(task) ? TRIAL_BOT_STEP : describeNextStep(board.actor, toMoveCard(task), board.statuses, board.rules, task.artistName);
     if (step.tone === "done") return null;
     const tone = TONE_STYLES[step.tone];
     return (

@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/format-date";
+import { Input } from "@/components/ui/input";
+import { DriveImage } from "./drive-image";
 
 // The board's own data (Board.tsx); refreshed so a hidden card leaves it and a restored one returns.
 const BOARD_DATA_URL = "/api/assets";
@@ -29,6 +31,8 @@ interface HiddenCard {
   sku: string;
   itemName: string;
   currentStatus: string;
+  statusLabel: string;
+  coverFileId: string | null;
   artistName: string | null;
   hiddenAt: string;
   hiddenByName: string | null;
@@ -91,14 +95,19 @@ export function HideCardButton({ sku, itemName }: { sku: string; itemName: strin
   );
 }
 
-/** The board toolbar's Archived list: cards taken off the board, why and when, each with a button that puts it back. */
+/**
+ * The board toolbar's Archived list: a grid of the cards taken off the board, each with its picture,
+ * SKU, status, why and when it was archived, and a button that puts it back.
+ */
 export function HiddenCardsButton() {
   const { mutate } = useSWRConfig();
   const [open, setOpen] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
   // Loaded only while the list is open.
   const { data, mutate: reloadHidden } = useSWR<{ hidden: HiddenCard[] }>(open ? HIDDEN_CARDS_URL : null, jsonFetcher);
-  const hidden = data?.hidden ?? [];
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const hidden = (data?.hidden ?? []).filter((card) => !needle || `${card.sku} ${card.itemName}`.toLowerCase().includes(needle));
 
   async function putBack(card: HiddenCard) {
     setRestoring(card.sku);
@@ -118,32 +127,51 @@ export function HiddenCardsButton() {
           <EyeOff className="h-3.5 w-3.5" /> Archived
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Archived cards</DialogTitle>
           <DialogDescription>
             Cards taken off the board. Their status, files, history and payments are unchanged. Put one back to see it on the board again.
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto divide-y divide-border rounded-md border">
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by SKU or name" className="h-8" autoComplete="off" />
+        <div className="max-h-[65vh] overflow-y-auto">
           {!data && <p className="p-4 text-sm text-muted-foreground">Loading...</p>}
-          {data && hidden.length === 0 && <p className="p-4 text-sm text-muted-foreground">No archived cards.</p>}
-          {hidden.map((card) => (
-            <div key={card.sku} className="flex items-center justify-between gap-3 p-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{card.itemName}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  <span className="font-mono">{card.sku}</span> · {card.currentStatus.replace(/_/g, " ")}
-                  {card.artistName ? ` · ${card.artistName}` : ""} · archived {formatDateTime(card.hiddenAt)}
-                  {card.hiddenByName ? ` by ${card.hiddenByName}` : ""}
-                </p>
-                {card.hiddenReason && <p className="text-xs">Why: {card.hiddenReason}</p>}
+          {data && hidden.length === 0 && <p className="p-4 text-sm text-muted-foreground">{needle ? "Nothing matches." : "No archived cards."}</p>}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {hidden.map((card) => (
+              <div key={card.sku} className="flex flex-col overflow-hidden rounded-lg border bg-card">
+                <div className="relative aspect-square bg-muted">
+                  {card.coverFileId ? (
+                    <DriveImage fileId={card.coverFileId} alt={card.itemName} sizes="240px" className="object-cover" />
+                  ) : (
+                    <span className="flex h-full items-center justify-center text-xs text-muted-foreground">No image</span>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col gap-1 p-2.5">
+                  <p className="font-mono text-[11px] text-muted-foreground">{card.sku}</p>
+                  <p className="line-clamp-2 text-sm font-medium leading-snug">{card.itemName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {card.statusLabel}
+                    {card.artistName ? ` · ${card.artistName}` : ""}
+                  </p>
+                  {card.hiddenReason && (
+                    <p className="text-xs">
+                      <span className="text-muted-foreground">Why: </span>
+                      {card.hiddenReason}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Archived {formatDateTime(card.hiddenAt)}
+                    {card.hiddenByName ? ` by ${card.hiddenByName}` : ""}
+                  </p>
+                  <Button size="sm" variant="outline" className="mt-auto w-full" disabled={restoring === card.sku} onClick={() => putBack(card)}>
+                    <Undo2 className="h-3.5 w-3.5" /> {restoring === card.sku ? "Putting back..." : "Put back"}
+                  </Button>
+                </div>
               </div>
-              <Button size="sm" variant="outline" className="shrink-0" disabled={restoring === card.sku} onClick={() => putBack(card)}>
-                <Undo2 className="h-3.5 w-3.5" /> {restoring === card.sku ? "Putting back..." : "Put back"}
-              </Button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

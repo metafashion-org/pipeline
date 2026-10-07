@@ -42,7 +42,15 @@ function testDriveLinkParsing() {
   // Empty / absent / wrong-typed column values must not throw.
   assert.deepStrictEqual(parseDriveRefs([]), [], "Empty array must yield no refs");
   assert.deepStrictEqual(parseDriveRefs(null), [], "Null column must yield no refs");
-  assert.deepStrictEqual(parseDriveRefs("not an array"), [], "Non-array column must yield no refs");
+  assert.deepStrictEqual(parseDriveRefs("not an array"), [], "Text with no links must yield no refs");
+
+  // The New Asset and Edit forms pass their text of links, one per line, and show a thumbnail per link.
+  const formText = parseDriveRefs("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUv/view\nhttps://drive.google.com/open?id=1uxOojyuNuRWkewqbO4xSMg5tZdimpMxh");
+  assert.deepStrictEqual(
+    formText.map((r) => r.fileId),
+    ["1AbCdEfGhIjKlMnOpQrStUv", "1uxOojyuNuRWkewqbO4xSMg5tZdimpMxh"],
+    "The forms' text of links must yield one ref per line, in order"
+  );
 
   // A folder link is a real link but not a previewable file: it must survive with fileId null.
   const folder = parseDriveRefs([

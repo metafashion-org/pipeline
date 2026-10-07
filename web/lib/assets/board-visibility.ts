@@ -4,6 +4,8 @@ import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
+import { statuses } from "@/lib/db/schema/statuses";
+import { parseDriveRefs } from "./drive-links";
 
 /**
  * The condition every view of open work adds: the board, My Tasks, the calendar, the uploader queue,
@@ -22,6 +24,10 @@ export interface HiddenAsset {
   sku: string;
   itemName: string;
   currentStatus: string;
+  /** The status as the board names it, e.g. "In Production". */
+  statusLabel: string;
+  /** The Drive file of its first reference image, shown as the card picture. Null when it has none. */
+  coverFileId: string | null;
   artistName: string | null;
   hiddenAt: Date;
   hiddenByName: string | null;
@@ -38,6 +44,8 @@ export async function listHiddenAssets(): Promise<HiddenAsset[]> {
       sku: assets.sku,
       itemName: assets.itemName,
       currentStatus: assets.currentStatus,
+      statusLabel: statuses.label,
+      referenceImages: assets.referenceImages,
       artistName: artist.name,
       hiddenAt: assets.boardHiddenAt,
       hiddenByName: hider.name,
@@ -46,10 +54,16 @@ export async function listHiddenAssets(): Promise<HiddenAsset[]> {
     .from(assets)
     .leftJoin(artist, eq(artist.id, assets.currentArtistId))
     .leftJoin(hider, eq(hider.id, assets.boardHiddenBy))
+    .leftJoin(statuses, eq(statuses.key, assets.currentStatus))
     .where(isNotNull(assets.boardHiddenAt))
     .orderBy(desc(assets.boardHiddenAt), assets.sku);
   // isNotNull above guarantees hiddenAt; the select's type can't express that.
-  return rows.map((row) => ({ ...row, hiddenAt: row.hiddenAt as Date }));
+  return rows.map(({ referenceImages, ...row }) => ({
+    ...row,
+    statusLabel: row.statusLabel ?? row.currentStatus,
+    coverFileId: parseDriveRefs(referenceImages).find((ref) => ref.fileId)?.fileId ?? null,
+    hiddenAt: row.hiddenAt as Date,
+  }));
 }
 
 // Sets or clears the hidden columns and records the change in audit_log, in one transaction.
