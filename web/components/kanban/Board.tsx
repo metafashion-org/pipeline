@@ -28,6 +28,7 @@ import { toast } from "sonner";
 // server render and ISO strings when SWR refetched it.
 import type { KanbanColumnDataClient, KanbanAssetCardClient } from "@/lib/kanban/kanban-service";
 import { jsonFetcher } from "@/lib/fetcher";
+import { isTrialBotTurn } from "@/lib/trial/trial-sku";
 import { apiCall } from "@/lib/api-client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,9 @@ interface MoveRefusalBody {
 
 // Long enough to read a reason and a next step; the default toast lifetime is too short for that.
 const MOVE_REFUSED_TOAST_MS = 10_000;
+// How often the board re-reads itself, and how often while the trial bot is about to move.
+const BOARD_REFRESH_MS = 20_000;
+const TRIAL_REFRESH_MS = 3_000;
 
 interface StoredFilters {
     artistFilter: string[];
@@ -168,7 +172,10 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
         // Focus revalidation and the polling interval still keep it current after that.
         revalidateOnMount: false,
         revalidateOnFocus: true,
-        refreshInterval: 20000,
+        // Every few seconds while the trial bot has a move to make, so the trial card visibly goes
+        // through each column instead of seeming stuck for up to 20 seconds.
+        refreshInterval: (latest) =>
+            latest?.data.some((column) => column.assets.some(isTrialBotTurn)) ? TRIAL_REFRESH_MS : BOARD_REFRESH_MS,
     });
 
     // Memoised so the rule summaries below are only rebuilt when the board data actually changes.

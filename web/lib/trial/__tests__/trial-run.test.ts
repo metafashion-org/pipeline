@@ -10,7 +10,8 @@ import { assetOffers } from "@/lib/db/schema/asset_offers";
 import { assignments } from "@/lib/db/schema/assignments";
 import { assignArtistToAsset } from "@/lib/kanban/assignment-service";
 import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
-import { endTrialRun, startTrialRun, trialBotAnswerMove, trialBotAnswerOffer, trialProgress, TRIAL_SKU_PREFIX } from "../trial-run";
+import { endTrialRun, startTrialRun, trialBotAnswerMove, trialBotAnswerOffer, trialProgress } from "../trial-run";
+import { TRIAL_SKU_PREFIX } from "../trial-sku";
 
 const RUNNER_EMAIL = "test-trial-runner@example.com";
 // The bot's notices go to a +trial address on whoever started the trial.

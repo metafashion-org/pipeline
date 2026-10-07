@@ -16,6 +16,13 @@ import { ReferenceUploadButton } from "./reference-upload-button";
 import { ReferenceDropzone } from "./reference-dropzone";
 import { DriveThumbnail } from "./drive-thumbnail";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
+import {
+    addSecondaryConceptImages,
+    joinConceptImages,
+    removeSecondaryConceptImage,
+    setMainConceptImage,
+    splitConceptImages,
+} from "@/lib/assets/concept-images";
 import { jsonFetcher } from "@/lib/fetcher";
 import { BriefFieldsSection } from "./BriefFieldsSection";
 
@@ -98,24 +105,27 @@ export function AssetFormFields({
     // field itself is hidden there). Create mode never writes to values.sku — the SKU field is
     // display-only — so it falls back to the previewed one instead.
     const uploadSku = values.sku || skuPreview || "";
-    const appendLinks = (field: "referenceImages" | "recolorReferenceImages", urls: string[]) =>
+    const appendLinks = (field: "recolorReferenceImages", urls: string[]) =>
         set({ [field]: [values[field], ...urls].filter(Boolean).join("\n") });
     // Drops whichever line is exactly this URL. Line-exact rather than a substring replace, so a
     // legacy row that packs a URL alongside other text or other links on the same line (see
     // lib/assets/drive-links.ts's own comment on that shape) is left untouched instead of mangled
     // — its thumbnail just won't offer a working remove button, which beats corrupting the row.
-    const removeLink = (field: "referenceImages" | "recolorReferenceImages", url: string) =>
+    const removeLink = (field: "recolorReferenceImages", url: string) =>
         set({ [field]: values[field].split("\n").filter((line) => line.trim() !== url).join("\n") });
 
-    const referenceRefs = parseDriveRefs(values.referenceImages);
+    // Reference files are the concept images: the first line is the main one (lib/assets/concept-images.ts).
+    const concept = splitConceptImages(values.referenceImages);
+    const mainRefs = parseDriveRefs(concept.main);
+    const secondaryRefs = parseDriveRefs(concept.secondaryText);
+    const setReferences = (referenceImages: string) => set({ referenceImages });
     const recolorRefs = parseDriveRefs(values.recolorReferenceImages);
     // The raw link textarea stays out of sight until asked for — someone uploading files only
     // ever needs to look at the thumbnails, never at a Drive URL. Starts open if the field
     // already holds a link with no matching thumbnail (an unparsed/legacy value), so existing
     // text is never hidden out from under whoever's editing it.
-    const [showRefLinks, setShowRefLinks] = useState(
-        values.referenceImages.trim() !== "" && referenceRefs.length === 0
-    );
+    const [showMainLink, setShowMainLink] = useState(concept.main.trim() !== "" && mainRefs.length === 0);
+    const [showSecondaryLinks, setShowSecondaryLinks] = useState(concept.secondaryText.trim() !== "" && secondaryRefs.length === 0);
     const [showRecolorLinks, setShowRecolorLinks] = useState(
         values.recolorReferenceImages.trim() !== "" && recolorRefs.length === 0
     );
@@ -256,46 +266,116 @@ export function AssetFormFields({
             <ReferenceDropzone
                 sku={uploadSku}
                 disabled={!uploadSku}
-                onUploaded={(urls) => appendLinks("referenceImages", urls)}
+                onUploaded={(urls) => {
+                    if (urls.length === 0) return;
+                    // There's one main image: the first file is it, and any others join the secondary images.
+                    const [first, ...others] = urls;
+                    setReferences(addSecondaryConceptImages(setMainConceptImage(values.referenceImages, first), others));
+                }}
             >
                 {({ uploading, uploadFiles }) => (
                     <>
                         <div className="flex items-center justify-between">
-                            <Label>Reference files</Label>
+                            <Label>Main concept image</Label>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground">or drop a file here</span>
+                                <ReferenceUploadButton disabled={!uploadSku} uploading={uploading} onFiles={uploadFiles} />
+                            </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            The image the site shows first and the card&apos;s cover. Saved as the first reference file.
+                        </p>
+                        {mainRefs.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {mainRefs.map((ref) => (
+                                    <DriveThumbnail
+                                        key={ref.url}
+                                        driveRef={ref}
+                                        size={96}
+                                        onRemove={() => setReferences(joinConceptImages("", concept.secondaryText))}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            secondaryRefs.length > 0 && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400">
+                                    No main image yet. Saved without one, the first secondary image becomes the main one.
+                                </p>
+                            )
+                        )}
+                        {showMainLink ? (
+                            <Input
+                                id={id("main-concept")}
+                                autoFocus
+                                className="h-8 text-xs"
+                                placeholder="Paste the main image's Drive link"
+                                value={concept.main}
+                                onChange={(e) => setReferences(joinConceptImages(e.target.value, concept.secondaryText))}
+                            />
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setShowMainLink(true)}
+                                className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+                            >
+                                Have a link instead of a file?
+                            </button>
+                        )}
+                    </>
+                )}
+            </ReferenceDropzone>
+
+            <ReferenceDropzone
+                sku={uploadSku}
+                disabled={!uploadSku}
+                onUploaded={(urls) => setReferences(addSecondaryConceptImages(values.referenceImages, urls))}
+            >
+                {({ uploading, uploadFiles }) => (
+                    <>
+                        <div className="flex items-center justify-between">
+                            <Label>Secondary concept images</Label>
                             <div className="flex items-center gap-1.5">
                                 <span className="text-xs text-muted-foreground">or drop files here</span>
                                 <ReferenceUploadButton disabled={!uploadSku} uploading={uploading} onFiles={uploadFiles} />
                             </div>
                         </div>
-                        {referenceRefs.length > 0 && (
+                        {secondaryRefs.length > 0 && (
                             <div className="flex flex-wrap gap-2">
-                                {referenceRefs.map((ref) => (
-                                    <DriveThumbnail
-                                        key={ref.url}
-                                        driveRef={ref}
-                                        size={64}
-                                        onRemove={() => removeLink("referenceImages", ref.url)}
-                                    />
+                                {secondaryRefs.map((ref) => (
+                                    <div key={ref.url} className="flex flex-col items-center gap-1">
+                                        <DriveThumbnail
+                                            driveRef={ref}
+                                            size={64}
+                                            onRemove={() => setReferences(removeSecondaryConceptImage(values.referenceImages, ref.url))}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setReferences(setMainConceptImage(values.referenceImages, ref.url))}
+                                            className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                                        >
+                                            Make main
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
-                        {showRefLinks ? (
+                        {showSecondaryLinks ? (
                             <Textarea
                                 id={id("refs")}
                                 rows={2}
                                 autoFocus
                                 className="text-xs"
                                 placeholder="Paste Drive links, one per line"
-                                value={values.referenceImages}
-                                onChange={(e) => set({ referenceImages: e.target.value })}
+                                value={concept.secondaryText}
+                                onChange={(e) => setReferences(joinConceptImages(concept.main, e.target.value))}
                             />
                         ) : (
                             <button
                                 type="button"
-                                onClick={() => setShowRefLinks(true)}
+                                onClick={() => setShowSecondaryLinks(true)}
                                 className="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
                             >
-                                Have a link instead of a file?
+                                Have links instead of files?
                             </button>
                         )}
                     </>

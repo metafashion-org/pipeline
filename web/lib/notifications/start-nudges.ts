@@ -12,7 +12,7 @@ import { appSettings } from "@/lib/db/schema/app_settings";
 import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
 import { EMAIL_TONE, renderEmailLayout, type EmailDetailRow } from "@/lib/email/templates/email-layout";
 import { appUrl } from "@/lib/app-url";
-import { TRIAL_SKU_PREFIX } from "@/lib/trial/trial-run";
+import { TRIAL_SKU_PREFIX } from "@/lib/trial/trial-sku";
 
 const ASSIGNED_STATUS = "assigned";
 // 'pending': the artist hasn't answered. 'accepted': they said yes but haven't moved it to In

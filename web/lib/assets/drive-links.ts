@@ -3,7 +3,7 @@
  *
  * Those columns hold `[{ provider, externalId }]`, but `externalId` is not a clean single value: the Google Sheet import (lib/db/import-sheet-data.ts) copied whole spreadsheet cells verbatim, so in the live database one `externalId` can be a single Drive URL, several Drive URLs joined by commas, or free text that is not a link at all ("Will share as we work!").
  *
- * Input: the raw JSONB value, of unknown shape.
+ * Input: the raw JSONB value, of unknown shape, or the New Asset / Edit form's newline-separated text of links.
  * Output: one DriveRef per usable URL found, in order, deduplicated by URL. `fileId` is set when a Drive file id could be extracted, meaning the file can be shown as an image; it is null for anything else (a Drive folder, a non-Drive link), which the UI should render as a plain link instead. Free text yields no refs at all.
  */
 export interface DriveRef {
@@ -27,6 +27,9 @@ export function extractDriveFileId(url: string): string | null {
 }
 
 export function parseDriveRefs(rawValue: unknown): DriveRef[] {
+  // The forms pass their text of links, which the loop below splits like one multi-link cell.
+  // Without this the forms showed no thumbnails, since a string isn't an array.
+  if (typeof rawValue === "string") return parseDriveRefs([rawValue]);
   if (!Array.isArray(rawValue)) return [];
 
   const refs: DriveRef[] = [];

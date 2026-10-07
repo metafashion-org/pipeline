@@ -182,7 +182,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           <div className="bg-muted/30 p-3 rounded-md text-sm space-y-3">
             {hasReferences ? (
               <>
-                <ReferenceGallery label="Reference images" refs={references} />
+                {/* The first reference file is the main concept image (lib/assets/concept-images.ts). */}
+                <ReferenceGallery label="Main concept image" refs={references.slice(0, 1)} />
+                <ReferenceGallery label="Secondary concept images" refs={references.slice(1)} />
                 {/* Everyone who can open the card sees the recolours, the artist included: they make
                     them. Showing them to curators, operators and admins only left artists without them. */}
                 <ReferenceGallery label="Recolour references" refs={recolorReferences} />
