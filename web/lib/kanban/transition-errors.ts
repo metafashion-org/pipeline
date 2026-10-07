@@ -18,7 +18,8 @@ export type TransitionErrorCode =
   | "ROLE_NOT_ALLOWED"
   | "ARTIST_REQUIRED"
   | "OFFER_NOT_ACCEPTED"
-  | "RECEIPT_REQUIRED";
+  | "RECEIPT_REQUIRED"
+  | "AUTOMATIC_STEP";
 
 export interface TransitionErrorDetails {
   code: TransitionErrorCode;
@@ -236,6 +237,24 @@ export function offerNotAccepted(ctx: MoveContext): TransitionErrorDetails {
     title: `This card can't leave ${ctx.from.label} until the artist accepts the offer.`,
     reason: "The offer is still waiting on the artist, or on the team's answer to a deadline request.",
     hint: "The artist answers on My Tasks. The team answers a deadline request on the asset's card.",
+  };
+}
+
+// What moves a card into each automatic column, for the refusal when someone drags it there.
+const AUTOMATIC_STEP_HINTS: Record<string, string> = {
+  assigned: "Pick an artist on the card; that sends the offer and moves it.",
+  final_files_received: "The artist hands in the final files on Submit final files, which moves it. The team can use \"Hand in for another artist\".",
+  ready_for_upload: "It moves on its own once the final files are in.",
+  uploaded_to_roblox: "The uploader adds the Roblox links on the Uploader Queue, which moves it.",
+};
+
+export function automaticStep(ctx: MoveContext): TransitionErrorDetails {
+  return {
+    code: "AUTOMATIC_STEP",
+    httpStatus: 403,
+    title: `Cards can't be dragged to ${ctx.to.label}.`,
+    reason: `${ctx.to.label} is reached by doing the step, not by moving the card.`,
+    hint: AUTOMATIC_STEP_HINTS[ctx.to.key] ?? "It moves on its own when the step behind it is done.",
   };
 }
 

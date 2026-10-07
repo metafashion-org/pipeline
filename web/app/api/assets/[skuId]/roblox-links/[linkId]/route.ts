@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { canPutOnSale, OnSaleError, setLinkOnSale } from "@/lib/publisher/on-sale-service";
+import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
 const OnSaleSchema = z.object({ onSale: z.boolean() });
 
@@ -14,6 +15,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!body.success) return NextResponse.json({ error: "Say whether it's on sale" }, { status: 400 });
   try {
     await setLinkOnSale(skuId, linkId, body.data.onSale, user.personnelId ?? null);
+    // The Marketing page lists an asset for marketing once a recolour is on sale.
+    revalidateViews(CACHE_TAGS.marketing);
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof OnSaleError) return NextResponse.json({ error: error.message }, { status: 400 });

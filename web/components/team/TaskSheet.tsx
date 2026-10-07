@@ -18,6 +18,7 @@ import { MentionInput } from "./MentionInput";
 import { addComment, addLink, addSubtask, deleteSubtask, removeLink, setTodayPlan, updateSubtask, updateTask } from "./team-actions";
 import { detailWithSubtask, detailWithTask } from "./optimistic";
 import { taskDetailUrl, type BoardView, type LinkOptionsView, type TaskDetailView } from "./team-types";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 // A Select can't hold an empty value, so "nobody" has its own.
 const NOBODY = "__nobody__";
@@ -477,7 +478,7 @@ export function TaskSheet({
                 <p className="text-xs text-muted-foreground">
                   {comment.authorName ?? "Someone"} · {formatDateTime(comment.createdAt)}
                 </p>
-                <p className="whitespace-pre-wrap">{comment.body}</p>
+                <p className="whitespace-pre-wrap break-words"><LinkifiedText text={comment.body} /></p>
               </li>
             ))}
           </ul>

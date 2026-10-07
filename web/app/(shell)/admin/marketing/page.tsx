@@ -1,6 +1,7 @@
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { getMarketingViewSafe } from "@/lib/dashboard/views";
 import { MarketingTracker } from "@/components/marketing/MarketingTracker";
+import { NotOnSaleList } from "@/components/marketing/NotOnSaleList";
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -25,6 +26,7 @@ export default async function AdminMarketingPage() {
       />
 
       <main className="flex-1 overflow-hidden p-6">
+        <NotOnSaleList />
         <MarketingTracker
           statusColumns={kanbanData.statusColumns}
           initialUpdates={kanbanData.updates}

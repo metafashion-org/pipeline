@@ -21,6 +21,9 @@ import { apiCall } from "@/lib/api-client";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CURATION_NOTE_KEY, CURATION_NOTE_PROMPT } from "@/lib/assets/curation-note";
+import { LinkedArtifacts } from "./LinkedArtifacts";
+import { useViewerCapabilities } from "@/components/providers/ViewerProvider";
+import { canManageKnowledge } from "@/lib/auth/rbac";
 
 /**
  * Corrects the fields of an existing asset.
@@ -31,6 +34,8 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const { mutate } = useSWRConfig();
+    // A curator editing her asset while it waits for sign-off attaches Registry items here too.
+    const canManageLinks = canManageKnowledge(useViewerCapabilities());
 
     const buildForm = (): AssetFormValues => ({
         sku: asset.sku,
@@ -106,8 +111,10 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                 </DialogHeader>
 
                 <AssetFormFields values={form} onChange={setForm} idPrefix="edit" />
+                {/* Attaching or removing a Registry item saves at once, apart from Save below. */}
+                <LinkedArtifacts sku={asset.sku} assetId={asset.id} enabled={open} canManage={canManageLinks} />
                 {/* How the asset's Registry links come together, asked for on New Asset (RegistryLinksPicker). */}
-                {(asset.linkedArtifacts.length > 0 || form.briefFields[CURATION_NOTE_KEY]) && (
+                {(canManageLinks || asset.linkedArtifacts.length > 0 || form.briefFields[CURATION_NOTE_KEY]) && (
                     <div className="space-y-1">
                         <Label htmlFor="edit-registry-note">How do its Registry links come together?</Label>
                         <Textarea

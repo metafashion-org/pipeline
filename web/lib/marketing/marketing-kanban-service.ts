@@ -3,7 +3,8 @@ import { assets } from "@/lib/db/schema/assets";
 import { marketingUpdates } from "@/lib/db/schema/marketing_updates";
 import { marketingStatusConfig } from "@/lib/db/schema/marketing_status_config";
 import { personnel } from "@/lib/db/schema/personnel";
-import { eq, desc, isNull, or } from "drizzle-orm";
+import { eq, desc, isNotNull, isNull, or } from "drizzle-orm";
+import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 export interface MarketingFilterOptions {
@@ -103,8 +104,11 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
       )
     );
 
-  const allowedStatuses = LIVE_ON_ROBLOX_STATUSES;
-  const eligibleUnmarketed = unmarketedAssets.filter((a) => allowedStatuses.includes(a.currentStatus));
+  // Marketing starts once at least one recolour is on sale (upload_records.on_sale_at); a live asset
+  // with nothing on sale is on the "Not on sale yet" list above it instead.
+  const onSale = await db.selectDistinct({ assetId: uploadRecords.assetId }).from(uploadRecords).where(isNotNull(uploadRecords.onSaleAt));
+  const onSaleIds = new Set(onSale.map((r) => r.assetId));
+  const eligibleUnmarketed = unmarketedAssets.filter((a) => LIVE_ON_ROBLOX_STATUSES.includes(a.currentStatus) && onSaleIds.has(a.id));
 
   return {
     statusColumns: statusConfigs,

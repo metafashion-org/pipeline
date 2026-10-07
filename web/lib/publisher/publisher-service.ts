@@ -34,6 +34,11 @@ export interface ReadyForUploadItem {
 // can see and act on" (see notifyUploader's design note in
 // deliverables-service.ts). No route or query for this existed anywhere;
 // the /publisher page needs it to show what's actually waiting.
+/** How many assets wait on the uploader: Ready for Upload and on the board. For the sidebar badge. */
+export async function countReadyForUpload(): Promise<number> {
+  return db.$count(assets, and(eq(assets.currentStatus, "ready_for_upload"), shownOnBoard()));
+}
+
 export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
   const rows = await db
     .select({

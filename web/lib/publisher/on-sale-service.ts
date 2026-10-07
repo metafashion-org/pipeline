@@ -1,20 +1,16 @@
 // An asset's Roblox links, one per uploaded recolour, and putting them on sale. The uploader adds
 // links on the Upload queue (publisher-service.ts) and can add one for a new recolour at any time
-// after that. Arjun ticks which links are on sale, and Done moves the card from Payment Done to Put
-// on Sale. A recolour can stay off sale, and links can still be ticked after Done.
+// after that. Arjun ticks which links are on sale, on the card or on the Marketing page. Being on
+// sale is a property of each recolour, not a board column: an uploaded recolour can stay off sale.
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
-import type { TransitionActor } from "@/lib/kanban/move-rules";
 import { parseRobloxCatalogLink } from "./roblox-links";
 
-export const PUT_ON_SALE_STATUS = "put_on_sale";
-const PAYMENT_DONE_STATUS = "payment_done";
 const MAX_VARIANT_LABEL_CHARS = 80;
 
 export class OnSaleError extends Error {}
@@ -102,16 +98,39 @@ export async function setLinkOnSale(sku: string, linkId: string, onSale: boolean
   await db.insert(auditLog).values({ action: onSale ? "putLinkOnSale" : "takeLinkOffSale", entityType: "asset", entityId: asset.id, actorId, payload: { sku, linkId, url: updated[0].url } });
 }
 
+export interface NotOnSaleAsset {
+  sku: string;
+  itemName: string;
+  links: RobloxLinkView[];
+}
+
 /**
- * Done on Payment Done: moves the card to Put on Sale, whichever links are ticked.
+ * The Marketing page's "Not on sale yet" list: live assets with Roblox links, none of them on sale.
  *
- * Input: the SKU and the admin doing it. Output: nothing. Throws OnSaleError when the card isn't in
- * Payment Done; the move itself goes through updateAssetStatusInKanban and its rules.
+ * Output: those assets, by SKU, each with all its links.
  */
-export async function finishPutOnSale(sku: string, actor: TransitionActor): Promise<void> {
-  const asset = await findAsset(sku);
-  if (asset.currentStatus !== PAYMENT_DONE_STATUS) throw new OnSaleError("Only a card in Payment Done moves to Put on Sale");
-  const links = await listRobloxLinks(sku);
-  const onSale = links.filter((link) => link.onSaleAt).length;
-  await updateAssetStatusInKanban(sku, PUT_ON_SALE_STATUS, actor, `${onSale} of ${links.length} Roblox link${links.length === 1 ? "" : "s"} on sale`);
+export async function listNotOnSale(): Promise<NotOnSaleAsset[]> {
+  const rows = await db
+    .select({
+      sku: assets.sku,
+      itemName: assets.itemName,
+      id: uploadRecords.id,
+      url: uploadRecords.robloxItemUrl,
+      robloxAssetId: uploadRecords.robloxAssetId,
+      variantLabel: uploadRecords.variantLabel,
+      onSaleAt: uploadRecords.onSaleAt,
+      createdAt: uploadRecords.createdAt,
+    })
+    .from(uploadRecords)
+    .innerJoin(assets, eq(assets.id, uploadRecords.assetId))
+    .where(and(inArray(assets.currentStatus, LIVE_ON_ROBLOX_STATUSES), isNull(assets.boardHiddenAt)))
+    .orderBy(asc(assets.sku), asc(uploadRecords.createdAt), asc(uploadRecords.id));
+
+  const bySku = new Map<string, NotOnSaleAsset>();
+  for (const { sku, itemName, ...link } of rows) {
+    const entry = bySku.get(sku) ?? { sku, itemName, links: [] };
+    entry.links.push(link);
+    bySku.set(sku, entry);
+  }
+  return [...bySku.values()].filter((asset) => asset.links.every((link) => !link.onSaleAt));
 }

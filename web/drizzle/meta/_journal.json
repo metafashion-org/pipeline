@@ -344,6 +344,13 @@
       "when": 1791358133645,
       "tag": "0048_put_on_sale",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1791368005968,
+      "tag": "0049_remove_put_on_sale",
+      "breakpoints": true
     }
   ]
 }

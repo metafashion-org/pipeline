@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { errorMessage } from "@/lib/errors";
+import { seesBusinessDetails } from "@/lib/auth/rbac";
 import { addRobloxLink, canPutOnSale, listRobloxLinks, OnSaleError } from "@/lib/publisher/on-sale-service";
 
 export const dynamic = "force-dynamic";
@@ -11,12 +12,13 @@ const AddLinkSchema = z.object({
   variantLabel: z.string().max(200).nullable().optional(),
 });
 
-// An asset's Roblox links, one per uploaded recolour, for the card's Roblox links section. Anyone
-// signed in can read them: they are public Roblox catalog links. `canPutOnSale` tells the card
-// whether to show the on-sale ticks and Done.
+// An asset's Roblox links, one per uploaded recolour, for the card's Roblox links section. Not for
+// artists (seesBusinessDetails): where and how we sell is ours. `canPutOnSale` tells the card
+// whether to show the on-sale ticks.
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ skuId: string }> }) {
   const [user, { skuId }] = await Promise.all([getAuthedUser(), params]);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!seesBusinessDetails(user.caps)) return NextResponse.json({ error: "Not available" }, { status: 403 });
   try {
     return NextResponse.json({ links: await listRobloxLinks(skuId), canPutOnSale: canPutOnSale(user.roles), canAddLinks: user.caps.canPublishToRoblox });
   } catch (error) {

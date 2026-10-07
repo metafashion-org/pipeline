@@ -21,6 +21,7 @@ import {
   offerNotAccepted,
   paymentOrder,
   receiptRequired,
+  automaticStep,
   roleNotAllowed,
   statusNotFound,
   type MoveContext,
@@ -214,13 +215,17 @@ export async function getKanbanBoardData(
   // Maps the raw query row (which selected the artist's discordChannelId, an
   // internal id) into the public KanbanAssetCard shape (a full deep-link URL,
   // built here so the client never needs the guild id as a public env var).
+  // An artist's own board (artistEmail set) leaves out the business side: the Roblox group it
+  // uploads to and the Registry research behind it (see seesBusinessDetails in lib/auth/rbac.ts).
+  const forArtist = Boolean(artistEmail);
   const allAssets: KanbanAssetCard[] = fetchedAssets.map(({ artistDiscordChannelId, ...rest }) => ({
     ...rest,
+    ...(forArtist ? { brandGroupId: null, brandGroupName: null, brandGroupUrl: null } : {}),
     curatorId: ideaByAsset.get(rest.id)?.submittedBy ?? null,
     // A sent-back idea is back in its curator's drafts while its card waits in Curated.
     curationSentBack: ideaByAsset.get(rest.id)?.status === "draft",
     artistDiscordUrl: artistDiscordChannelId && guildId ? `https://discord.com/channels/${guildId}/${artistDiscordChannelId}` : null,
-    linkedArtifacts: linksByAsset.get(rest.id) ?? [],
+    linkedArtifacts: forArtist ? [] : linksByAsset.get(rest.id) ?? [],
     offerStatus: offerStatusByAsset.get(rest.id) ?? null,
   }));
 
@@ -310,6 +315,8 @@ function refusalDetails(refusal: MoveRefusal, ctx: MoveContext): TransitionError
       return offerNotAccepted(ctx);
     case "receipt-required":
       return receiptRequired(ctx);
+    case "automatic-step":
+      return automaticStep(ctx);
   }
 }
 

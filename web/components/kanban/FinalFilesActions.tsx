@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { apiCall } from "@/lib/api-client";
 import { formatFileSize } from "@/components/deliverables/drive-upload-client";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 /**
  * "Hand in final files" for an Approved asset: opens the Submit final files page with this asset
@@ -69,7 +70,7 @@ export function FinalFilesList({ sku, enabled }: { sku: string; enabled: boolean
               Open folder
             </a>
           </div>
-          {submission.comments && <p className="text-muted-foreground whitespace-pre-line">&ldquo;{submission.comments}&rdquo;</p>}
+          {submission.comments && <p className="text-muted-foreground whitespace-pre-line">&ldquo;<LinkifiedText text={submission.comments} />&rdquo;</p>}
           <ul className="space-y-0.5">
             {submission.files.map((file) => (
               <li key={file.id} className="flex justify-between gap-2">

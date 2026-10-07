@@ -113,6 +113,13 @@ function testCheckMove() {
   // New: a card reaches Assigned only with an artist on it. The Assign dialog moves it as the system.
   const unassigned = card("unassigned", { artistId: null, offerStatus: null });
   assert.deepStrictEqual(checkMove(OPERATOR, unassigned, status("assigned"), ruleFor("unassigned", "assigned")), { kind: "artist-required" });
+
+  // New: automatic steps happen only through their action (final files, Roblox links), never by
+  // dragging, admins included. On 7 Oct cards were dragged through them with no files or links.
+  const approvedCard = card("approved");
+  assert.deepStrictEqual(checkMove(OPERATOR, approvedCard, status("final_files_received"), ruleFor("approved", "final_files_received")), { kind: "automatic-step" });
+  assert.deepStrictEqual(checkMove(ADMIN, card("ready_for_upload"), status("uploaded_to_roblox"), ruleFor("ready_for_upload", "uploaded_to_roblox")), { kind: "automatic-step" });
+  assert.strictEqual(checkMove({ system: true }, approvedCard, status("final_files_received"), ruleFor("approved", "final_files_received")), null);
   assert.strictEqual(checkMove({ system: true }, unassigned, status("assigned"), ruleFor("unassigned", "assigned")), null);
 
   console.log("✓ checkMove keeps the old checks and adds the offer and artist gates");

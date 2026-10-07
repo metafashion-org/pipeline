@@ -16,6 +16,7 @@ import { apiCall } from "@/lib/api-client";
 import { MAX_FINAL_ZIP_BYTES, checkFinalZip, formatMegabytes } from "@/lib/deliverables/final-zip";
 import type { ZipGuidance } from "@/lib/deliverables/zip-guidance";
 import { formatFileSize, uploadToDrive } from "./drive-upload-client";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 /** An asset waiting for its final files, as the page lists it. */
 export interface SubmittableAsset {
@@ -77,7 +78,7 @@ function ZipChecklist({ asset }: { asset: SubmittableAsset }) {
                       {note.value}
                     </a>
                   ) : (
-                    note.value
+                    <LinkifiedText text={note.value} />
                   )}
                 </dd>
               </div>

@@ -5,11 +5,10 @@ import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
-import { addRobloxLink, canPutOnSale, finishPutOnSale, listRobloxLinks, OnSaleError, PUT_ON_SALE_STATUS, setLinkOnSale } from "../on-sale-service";
+import { addRobloxLink, canPutOnSale, listNotOnSale, listRobloxLinks, OnSaleError, setLinkOnSale } from "../on-sale-service";
 
 const SKU_PREFIX = "TEST-ONSALE-";
 const SKU = `${SKU_PREFIX}HAT`;
-const ADMIN = { roles: ["admin"] };
 
 async function cleanup() {
   const rows = await db.select({ id: assets.id }).from(assets).where(like(assets.sku, `${SKU_PREFIX}%`));
@@ -23,7 +22,7 @@ async function cleanup() {
 }
 
 async function testOnSale() {
-  console.log("Verifying recolours go on sale one by one, and Done moves a paid card to Put on Sale...");
+  console.log("Verifying recolours go on sale one by one, and the Marketing list shows what is not on sale yet...");
   await cleanup();
   assert.ok(canPutOnSale(["admin"]) && !canPutOnSale(["operator", "publisher"]), "Only an admin puts things on sale");
 
@@ -40,20 +39,18 @@ async function testOnSale() {
 
   const [first, second] = await listRobloxLinks(SKU);
   assert.strictEqual(first.robloxAssetId, "111", "Oldest link first");
+  const waiting = (await listNotOnSale()).find((a) => a.sku === SKU);
+  assert.strictEqual(waiting?.links.length, 2, "A live asset with nothing on sale is on the Marketing list, with all its links");
+
   await setLinkOnSale(SKU, second.id, true, null);
   const ticked = await listRobloxLinks(SKU);
   assert.ok(ticked[1].onSaleAt && !ticked[0].onSaleAt, "Only the ticked recolour is on sale");
+  assert.ok(!(await listNotOnSale()).some((a) => a.sku === SKU), "One recolour on sale takes it off the list");
 
-  await assert.rejects(finishPutOnSale(SKU, ADMIN), OnSaleError, "Done is only for a Payment Done card");
-  await db.update(assets).set({ currentStatus: "payment_done" }).where(eq(assets.id, asset.id));
-  await finishPutOnSale(SKU, ADMIN);
-  const [moved] = await db.select().from(assets).where(eq(assets.id, asset.id));
-  assert.strictEqual(moved.currentStatus, PUT_ON_SALE_STATUS);
-  const [history] = await db.select().from(statusHistory).where(eq(statusHistory.assetId, asset.id));
-  assert.strictEqual(history.note, "1 of 2 Roblox links on sale");
-
-  await setLinkOnSale(SKU, first.id, true, null);
-  assert.ok((await listRobloxLinks(SKU)).every((l) => l.onSaleAt), "Recolours can still go on sale after Done");
+  await setLinkOnSale(SKU, second.id, false, null);
+  assert.ok((await listNotOnSale()).some((a) => a.sku === SKU), "Taking it off sale puts it back on the list");
+  const [still] = await db.select().from(assets).where(eq(assets.id, asset.id));
+  assert.strictEqual(still.currentStatus, "uploaded_to_roblox", "Putting on sale never moves the card");
   console.log("Confirmed putting on sale");
 }
 
