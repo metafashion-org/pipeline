@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { toFileStoreEntries, toLinkText } from "./file-store";
 
+const MAX_BRIEF_FIELD_CHARS = 5_000;
+
+/** Brief fields with the empty ones dropped and values trimmed, so "" never lingers in the JSON. */
+export function cleanBriefFields(fields: Record<string, string> | undefined | null): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(fields ?? {})
+      .map(([key, value]) => [key, value.trim()] as const)
+      .filter(([, value]) => value !== "")
+  );
+}
+
 export const UpdateAssetSchema = z.object({
   itemName: z.string().trim().min(1).optional(),
   category: z.string().nullable().optional(),
@@ -34,6 +45,8 @@ export const UpdateAssetSchema = z.object({
   // Pasted blocks of links, the same form the create dialog takes.
   referenceImages: z.string().nullable().optional(),
   recolorReferenceImages: z.string().nullable().optional(),
+  // The brief fields, keyed by curation field key. An empty value removes that field.
+  briefFields: z.record(z.string().max(100), z.string().max(MAX_BRIEF_FIELD_CHARS)).optional(),
 });
 
 export type AssetUpdatePatch = z.infer<typeof UpdateAssetSchema>;
@@ -49,6 +62,7 @@ export interface AssetCurrentValues {
   paymentReceiptUrl: string | null;
   referenceImages: unknown;
   recolorReferenceImages: unknown;
+  briefFields?: Record<string, string> | null;
 }
 
 export interface AssetChange {
@@ -136,6 +150,18 @@ export function computeAssetChanges(current: AssetCurrentValues, patch: AssetUpd
       to: nextUrls.length ? `${nextUrls.length} link(s)` : "empty",
     };
     updates[field] = nextEntries;
+  }
+
+  // Brief fields are compared key by key after dropping empties, and logged by field key.
+  if (patch.briefFields !== undefined) {
+    const before = cleanBriefFields(current.briefFields);
+    const after = cleanBriefFields(patch.briefFields);
+    const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const changedKeys = [...keys].filter((key) => before[key] !== after[key]);
+    if (changedKeys.length > 0) {
+      changes.briefFields = { from: Object.fromEntries(changedKeys.map((k) => [k, before[k] ?? null])), to: Object.fromEntries(changedKeys.map((k) => [k, after[k] ?? null])) };
+      updates.briefFields = after;
+    }
   }
 
   return { changes, updates };

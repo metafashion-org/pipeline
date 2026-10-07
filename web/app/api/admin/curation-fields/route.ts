@@ -1,7 +1,8 @@
 import { errorMessage } from "@/lib/errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
-import { getCurationFieldConfigs, updateCurationFieldConfig } from "@/lib/curation/curation-service";
+import { getCurationFieldConfigs, getCurationFormFields, updateCurationFieldConfig } from "@/lib/curation/curation-service";
+import { canAddAssets } from "@/lib/auth/rbac";
 import { z } from "zod";
 import { revalidateViews, CACHE_TAGS } from "@/lib/cache/tags";
 
@@ -18,12 +19,14 @@ const UpdateCurationFieldSchema = z.object({
 export async function GET() {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.caps.canAssignArtists && !user.caps.canManageSystemConfig) {
+  // Curators read it too: New Asset shows the brief fields (canAddAssets).
+  if (!canAddAssets(user.caps) && !user.caps.canManageSystemConfig) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const rows = await getCurationFieldConfigs();
-  return NextResponse.json({ fields: rows });
+  const [rows, formFields] = await Promise.all([getCurationFieldConfigs(), getCurationFormFields()]);
+  // formFields: the active ones New Asset asks for, minus those backed by an asset column (deadline, budget, recolours).
+  return NextResponse.json({ fields: rows, formFields });
 }
 
 export async function POST(request: NextRequest) {

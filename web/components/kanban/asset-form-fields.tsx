@@ -17,6 +17,7 @@ import { ReferenceDropzone } from "./reference-dropzone";
 import { DriveThumbnail } from "./drive-thumbnail";
 import { parseDriveRefs } from "@/lib/assets/drive-links";
 import { jsonFetcher } from "@/lib/fetcher";
+import { BriefFieldsSection } from "./BriefFieldsSection";
 
 interface BrandGroup {
     id: string;
@@ -53,6 +54,8 @@ export interface AssetFormValues {
     plannedUploadDate: string;
     referenceImages: string;
     recolorReferenceImages: string;
+    // The brief fields from Settings > Curation fields, keyed by field key (BriefFieldsSection).
+    briefFields: Record<string, string>;
 }
 
 export const EMPTY_ASSET_FORM: AssetFormValues = {
@@ -66,6 +69,7 @@ export const EMPTY_ASSET_FORM: AssetFormValues = {
     plannedUploadDate: "",
     referenceImages: "",
     recolorReferenceImages: "",
+    briefFields: {},
 };
 
 export function AssetFormFields({
@@ -346,6 +350,12 @@ export function AssetFormFields({
                     </>
                 )}
             </ReferenceDropzone>
+            <BriefFieldsSection
+                values={values.briefFields}
+                onChange={(briefFields) => set({ briefFields })}
+                category={values.category}
+                idPrefix={idPrefix}
+            />
         </div>
     );
 }

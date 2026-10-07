@@ -9,6 +9,10 @@ import { auditLog } from "@/lib/db/schema/audit_log";
 import { nextSequentialSku } from "@/lib/assets/sku";
 import { toFileStoreEntries } from "@/lib/assets/file-store";
 import { recordSignoffRequest } from "@/lib/signoff/signoff-service";
+import { cleanBriefFields } from "@/lib/assets/asset-update";
+import { linkArtifactToSku } from "@/lib/knowledge/artifact-links-service";
+
+const MAX_LINKED_ARTIFACTS = 20;
 import { SIGNOFF_STATUS, signsOff } from "@/lib/signoff/signoff-rules";
 import { z } from "zod";
 
@@ -26,6 +30,10 @@ const CreateAssetSchema = z.object({
   // Free text holding one or more links, the same shape the reference columns already hold in the database.
   referenceImages: z.string().optional(),
   recolorReferenceImages: z.string().optional(),
+  // The brief fields from Settings > Curation fields, keyed by field key.
+  briefFields: z.record(z.string().max(100), z.string().max(5_000)).optional(),
+  // Registry artifacts (insights, trend briefs, moodboards) this asset comes from.
+  artifactIds: z.array(z.uuid()).max(MAX_LINKED_ARTIFACTS).optional(),
 });
 
 
@@ -117,6 +125,7 @@ export async function POST(request: NextRequest) {
         brandGroupId: brandGroupId || null,
         referenceImages: toFileStoreEntries(parseResult.data.referenceImages),
         recolorReferenceImages: toFileStoreEntries(parseResult.data.recolorReferenceImages),
+        briefFields: cleanBriefFields(parseResult.data.briefFields),
       })
       .returning();
 
@@ -128,6 +137,9 @@ export async function POST(request: NextRequest) {
       payload: { sku, itemName, category: category || null, needsSignoff },
     });
     if (needsSignoff) await recordSignoffRequest(created.id, user.personnelId ?? null);
+    for (const artifactId of parseResult.data.artifactIds ?? []) {
+      await linkArtifactToSku(artifactId, created.id, user.personnelId ?? undefined);
+    }
 
     return NextResponse.json({ success: true, asset: created, needsSignoff });
   } catch (error: unknown) {

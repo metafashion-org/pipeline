@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AssetFormFields, EMPTY_ASSET_FORM } from "./asset-form-fields";
+import { RegistryLinksPicker } from "./RegistryLinksPicker";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -31,6 +32,7 @@ export function NewAssetDialog() {
     const [open, setOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState(EMPTY_ASSET_FORM);
+    const [artifactIds, setArtifactIds] = useState<string[]>([]);
     const { mutate } = useSWRConfig();
     const needsSignoff = !signsOff(useViewerRoles());
 
@@ -46,7 +48,10 @@ export function NewAssetDialog() {
     const skuPreview = skuPreviewData?.sku ?? null;
 
     const handleOpenChange = (next: boolean) => {
-        if (!next) setForm(EMPTY_ASSET_FORM);
+        if (!next) {
+            setForm(EMPTY_ASSET_FORM);
+            setArtifactIds([]);
+        }
         setOpen(next);
     };
 
@@ -71,6 +76,8 @@ export function NewAssetDialog() {
                     brandGroupId: form.brandGroupId || undefined,
                     referenceImages: form.referenceImages.trim() || undefined,
                     recolorReferenceImages: form.recolorReferenceImages.trim() || undefined,
+                    briefFields: form.briefFields,
+                    artifactIds,
                 },
             });
 
@@ -120,6 +127,7 @@ export function NewAssetDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
+                <RegistryLinksPicker value={artifactIds} onChange={setArtifactIds} idPrefix="new-asset" />
                 <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku skuPreview={skuPreview} />
 
                 <DialogFooter>

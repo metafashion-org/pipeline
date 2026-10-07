@@ -80,6 +80,8 @@ export interface KanbanAssetCard {
   // Raw JSONB straight from the assets table. Parse with parseDriveRefs (lib/assets/drive-links.ts) before rendering: one cell can hold several comma-joined Drive URLs, or free text that is not a link at all.
   referenceImages: unknown;
   recolorReferenceImages: unknown;
+  // The brief fields from Settings > Curation fields, keyed by field key (assets.brief_fields).
+  briefFields: Record<string, string>;
   // Status of the asset's latest offer to an artist (see lib/offers/offer-service.ts), or null when
   // it has never been offered. The card shows a badge while it's waiting on someone.
   offerStatus: OfferStatus | null;
@@ -148,6 +150,7 @@ export async function getKanbanBoardData(
       plannedUploadDate: assets.plannedUploadDate,
       updatedAt: assets.updatedAt,
       referenceImages: assets.referenceImages,
+      briefFields: assets.briefFields,
       recolorReferenceImages: assets.recolorReferenceImages,
       hasPaymentReceipt: sql<boolean>`${assets.paymentReceiptUrl} IS NOT NULL`,
     })
