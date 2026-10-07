@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { personnel } from "@/lib/db/schema/personnel";
 import { assets } from "@/lib/db/schema/assets";
 import { emailQueue } from "@/lib/db/schema/email_queue";
-import { notifyArtistOfPayment, notifyArtistOfRobloxUpload, notifyReviewersOfReview, notifyUploadersOfReadyAsset } from "../pipeline-notices";
+import { notifyArtistOfPayment, notifyReviewersOfReview, notifyUploadersOfReadyAsset } from "../pipeline-notices";
 
 const ARTIST_EMAIL = "test-notice-artist@example.com";
 const REVIEWER_EMAIL = "test-notice-reviewer@example.com";
@@ -40,12 +40,10 @@ async function testNotices() {
   await notifyUploadersOfReadyAsset(SKU);
   assert.deepStrictEqual(await subjectsFor(UPLOADER_EMAIL), ["Ready to upload: Notice Test Hat (TEST-NOTICE-001)"]);
 
-  await notifyArtistOfRobloxUpload(SKU, ["https://www.roblox.com/catalog/123/Notice-Test-Hat"]);
   await notifyArtistOfPayment([SKU]);
   const artistSubjects = await subjectsFor(ARTIST_EMAIL);
-  assert.ok(artistSubjects.includes("Live on Roblox: Notice Test Hat (TEST-NOTICE-001)"));
   assert.ok(artistSubjects.some((s) => s.startsWith("Paid: 1 asset, ")), `Payment notice missing: ${artistSubjects.join(" | ")}`);
-  assert.strictEqual(artistSubjects.length, 2, "The artist gets only their own two notices");
+  assert.strictEqual(artistSubjects.length, 1, "The artist hears only about their payment, never about Roblox");
   console.log("Confirmed the pipeline notices");
 }
 
