@@ -1,6 +1,7 @@
 // Notices for the asset steps after the artist starts work, so each person hears when it's their
 // turn: the reviewers when an artist sends work for review, the uploaders when final files are in,
-// and the artist when their asset is on Roblox and when it's paid. Every function here is
+// and the artist when it's paid. Artists aren't told when or where an asset goes on Roblox: the
+// Roblox side of the business is ours (see seesBusinessDetails in lib/auth/rbac.ts). Every function here is
 // best-effort and never throws: a notice that fails must not undo the move that caused it.
 
 import { and, eq } from "drizzle-orm";
@@ -20,7 +21,6 @@ import { getFinalFilesForAsset } from "@/lib/deliverables/deliverables-service";
 // Discord embed colours, as the decimal RGB values the API takes.
 const EMBED_COLOR_REVIEW = 0x7c3aed;
 const EMBED_COLOR_UPLOAD = 0x0891b2;
-const EMBED_COLOR_LIVE = 0x16a34a;
 const EMBED_COLOR_PAID = 0x15803d;
 // Roles that upload to Roblox; the Uploader Queue (/publisher) is theirs.
 const UPLOADER_ROLES = ["publisher", "uploader"];
@@ -157,48 +157,6 @@ export async function notifyUploadersOfReadyAsset(sku: string): Promise<void> {
     ]);
   } catch (error) {
     console.error(`[pipeline notice] upload notice for ${sku} failed:`, error);
-  }
-}
-
-/**
- * Tells the artist their asset is on Roblox, by email and in their Discord channel, with the links.
- *
- * Input: the asset's SKU and its Roblox item links. Output: nothing.
- */
-export async function notifyArtistOfRobloxUpload(sku: string, robloxUrls: string[]): Promise<void> {
-  try {
-    const summary = await loadArtistSummary(sku);
-    if (!summary) return;
-    const [paid] = await db.select({ paidOutsideAt: assets.paidOutsideAt }).from(assets).where(eq(assets.sku, sku)).limit(1);
-    // An asset paid before the Kanban tracked payments isn't paid again.
-    const paymentLine = paid?.paidOutsideAt ? "It was already paid." : "It's paid in the next payment run (the 15th or the 30th).";
-    const links = robloxUrls.join("\n");
-    await Promise.all([
-      queueAndSend(
-        summary.assetId,
-        [summary.artistEmail],
-        `Live on Roblox: ${summary.itemName} (${summary.sku})`,
-        renderOfferEmail(summary, {
-          preheader: "Your asset is on the Roblox Marketplace.",
-          eyebrow: "On Roblox",
-          tone: EMAIL_TONE.good,
-          intro: `Hi ${summary.artistName}, ${summary.itemName} is now on Roblox. ${paymentLine}`,
-          details: robloxUrls.map((url) => ({ label: "Roblox", value: url })),
-          button: { label: robloxUrls[0] ? "See it on Roblox" : "Open My Tasks", url: robloxUrls[0] ?? appUrl("/artist") },
-        })
-      ),
-      postToArtistChannel({
-        content: "your asset is live on Roblox.",
-        title: `${summary.itemName} (${summary.sku})`,
-        description: `${links}\n${paymentLine}`,
-        color: EMBED_COLOR_LIVE,
-        summary,
-        withImage: true,
-        url: robloxUrls[0],
-      }),
-    ]);
-  } catch (error) {
-    console.error(`[pipeline notice] Roblox notice for ${sku} failed:`, error);
   }
 }
 
