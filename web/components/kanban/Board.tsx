@@ -21,6 +21,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { BoardRulesProvider, ToneLegend, toMoveCard } from "./board-rules";
 import { HiddenCardsButton } from "./board-visibility-buttons";
 import { ArchiveCardsDialog } from "./ArchiveCardsDialog";
+import { RemindButton } from "./RemindButton";
 import { useViewerAsActor, useViewerCapabilities } from "@/components/providers/ViewerProvider";
 import { allowedTargets, describeColumn, type MoveRule, type MoveStatus } from "@/lib/kanban/move-rules";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ interface MoveRefusalBody {
 
 // Long enough to read a reason and a next step; the default toast lifetime is too short for that.
 const MOVE_REFUSED_TOAST_MS = 10_000;
+const REMIND_ALL_LABELS: Record<string, string> = { approved: "Remind all", ready_for_upload: "Remind uploader" };
 // How often the board re-reads itself, and how often while the trial bot is about to move.
 const BOARD_REFRESH_MS = 20_000;
 const TRIAL_REFRESH_MS = 3_000;
@@ -518,6 +520,9 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                         .map((col) => {
                             const isExpanded = col.key === expandedKey;
                             const canArchive = isExpanded && viewerCapabilities.canAssignArtists;
+                            // Columns that wait on one person get a "Remind all": the artists in Approved,
+                            // the uploader in Ready for Upload.
+                            const remindLabel = viewerCapabilities.canAssignArtists && col.assets.length > 0 ? REMIND_ALL_LABELS[col.key] : undefined;
                             return (
                                 <div key={col.key} className={isExpanded ? "flex-1 min-w-0" : "shrink-0 w-[220px]"}>
                                     <Column
@@ -572,6 +577,8 @@ export function Board({ initialColumns = [], initialRules = [], role }: BoardPro
                                                         </>
                                                     )}
                                                 </>
+                                            ) : remindLabel ? (
+                                                <RemindButton skus={col.assets.map((a) => a.sku)} label={remindLabel} />
                                             ) : undefined
                                         }
                                         selection={

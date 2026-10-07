@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Megaphone,
   Settings,
-  ClipboardList,
   Users,
   BookOpen,
   BadgeCheck,
@@ -73,7 +72,6 @@ const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; on
   { href: "/admin/personnel", icon: Users, label: "Personnel" },
   { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
   { href: "/publisher", icon: PackageCheck, label: "Uploader Queue" },
-  { href: "/admin/forms", icon: ClipboardList, label: "Forms" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
