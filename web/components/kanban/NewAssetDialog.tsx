@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { AssetFormFields, EMPTY_ASSET_FORM } from "./asset-form-fields";
 import { RegistryLinksPicker } from "./RegistryLinksPicker";
+import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -127,7 +128,13 @@ export function NewAssetDialog() {
                     </DialogDescription>
                 </DialogHeader>
 
-                <RegistryLinksPicker value={artifactIds} onChange={setArtifactIds} idPrefix="new-asset" />
+                <RegistryLinksPicker
+                    value={artifactIds}
+                    onChange={setArtifactIds}
+                    note={form.briefFields[CURATION_NOTE_KEY] ?? ""}
+                    onNoteChange={(note) => setForm({ ...form, briefFields: { ...form.briefFields, [CURATION_NOTE_KEY]: note } })}
+                    idPrefix="new-asset"
+                />
                 <AssetFormFields values={form} onChange={setForm} idPrefix="new-asset" showSku skuPreview={skuPreview} />
 
                 <DialogFooter>

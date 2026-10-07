@@ -18,6 +18,9 @@ import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { toLinkText } from "@/lib/assets/file-store";
 import { toast } from "sonner";
 import { apiCall } from "@/lib/api-client";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { CURATION_NOTE_KEY, CURATION_NOTE_PROMPT } from "@/lib/assets/curation-note";
 
 /**
  * Corrects the fields of an existing asset.
@@ -103,6 +106,19 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                 </DialogHeader>
 
                 <AssetFormFields values={form} onChange={setForm} idPrefix="edit" />
+                {/* How the asset's Registry links come together, asked for on New Asset (RegistryLinksPicker). */}
+                {(asset.linkedArtifacts.length > 0 || form.briefFields[CURATION_NOTE_KEY]) && (
+                    <div className="space-y-1">
+                        <Label htmlFor="edit-registry-note">How do its Registry links come together?</Label>
+                        <Textarea
+                            id="edit-registry-note"
+                            rows={3}
+                            value={form.briefFields[CURATION_NOTE_KEY] ?? ""}
+                            onChange={(e) => setForm({ ...form, briefFields: { ...form.briefFields, [CURATION_NOTE_KEY]: e.target.value } })}
+                            placeholder={CURATION_NOTE_PROMPT}
+                        />
+                    </div>
+                )}
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => setOpen(false)}>

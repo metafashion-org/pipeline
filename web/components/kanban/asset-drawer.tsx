@@ -11,6 +11,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
+import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
 import { ExternalLink, Mail, DollarSign, Image as ImageIcon, Calendar, Tag, ShieldCheck, History, UploadCloud } from "lucide-react";
 import { formatDate } from "@/lib/format-date";
@@ -192,6 +193,13 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
         </section>
 
         <LinkedArtifacts sku={asset.sku} assetId={asset.id} enabled={open} canManage={canManageLinks} />
+        {/* Why these Registry links explain the item, written when it was added (Edit changes it). */}
+        {asset.briefFields?.[CURATION_NOTE_KEY] && (
+          <p className="-mt-2 rounded-md border bg-muted/40 px-3 py-2 text-xs whitespace-pre-wrap">
+            <span className="font-medium">How these come together: </span>
+            {asset.briefFields[CURATION_NOTE_KEY]}
+          </p>
+        )}
 
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">

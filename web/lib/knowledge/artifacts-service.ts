@@ -3,7 +3,8 @@ import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { artifactTypeConfig } from "@/lib/db/schema/artifact_type_config";
 import { personnel } from "@/lib/db/schema/personnel";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { eq, asc, and, isNull, type SQL } from "drizzle-orm";
+import { eq, asc, and, isNull, sql, type SQL } from "drizzle-orm";
+import { artifactSkuLinks } from "@/lib/db/schema/artifact_sku_links";
 import { alias } from "drizzle-orm/pg-core";
 import { claimNextArtifactId } from "./artifact-id-service";
 import { TREND_BRIEF_PREFIX } from "./artifact-forms";
@@ -152,6 +153,8 @@ export async function getKnowledgeArtifacts(artifactTypeId?: string) {
       createdAt: knowledgeArtifacts.createdAt,
       typeLabel: artifactTypeConfig.label,
       typePrefix: artifactTypeConfig.prefix,
+      // When it was last linked to an asset, for "recently used" in the New Asset picker. Null if never.
+      lastLinkedAt: sql<string | null>`(select max(${artifactSkuLinks.createdAt}) from ${artifactSkuLinks} where ${artifactSkuLinks.artifactId} = ${knowledgeArtifacts.id})`,
     })
     .from(knowledgeArtifacts)
     .innerJoin(artifactTypeConfig, eq(knowledgeArtifacts.artifactTypeId, artifactTypeConfig.id))
