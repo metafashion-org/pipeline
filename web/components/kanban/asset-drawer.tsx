@@ -24,6 +24,7 @@ import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
 import { HideCardButton } from "./board-visibility-buttons";
+import { RemindButton } from "./RemindButton";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
@@ -248,7 +249,10 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
               {canSubmitFinalFiles && asset.currentStatus === "approved" && (
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <p className="text-xs text-muted-foreground">Approved. Waiting on the artist&apos;s final files.</p>
-                  <HandInFinalFilesLink sku={asset.sku} />
+                  <div className="flex items-center gap-1.5">
+                    {canAssignArtists && <RemindButton skus={[asset.sku]} label="Remind the artist" />}
+                    <HandInFinalFilesLink sku={asset.sku} />
+                  </div>
                 </div>
               )}
               {/* Assets handed in before files went straight to Ready for Upload can still be sitting here. */}
@@ -256,6 +260,12 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <p className="text-xs text-muted-foreground">Final files received. Notify the uploader when ready.</p>
                   <NotifyUploaderButton sku={asset.sku} />
+                </div>
+              )}
+              {canAssignArtists && asset.currentStatus === "ready_for_upload" && (
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground">Final files are in. Waiting on the uploader&apos;s Roblox links.</p>
+                  <RemindButton skus={[asset.sku]} label="Remind the uploader" />
                 </div>
               )}
               <FinalFilesList sku={asset.sku} enabled={open} />
