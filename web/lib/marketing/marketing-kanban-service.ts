@@ -4,6 +4,7 @@ import { marketingUpdates } from "@/lib/db/schema/marketing_updates";
 import { marketingStatusConfig } from "@/lib/db/schema/marketing_status_config";
 import { personnel } from "@/lib/db/schema/personnel";
 import { eq, desc, isNull, or } from "drizzle-orm";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 export interface MarketingFilterOptions {
   statusKey?: string;
@@ -102,7 +103,7 @@ export async function getMarketingKanbanData(filters: MarketingFilterOptions = {
       )
     );
 
-  const allowedStatuses = ["uploaded_to_roblox", "marked_for_payment", "payment_done"];
+  const allowedStatuses = LIVE_ON_ROBLOX_STATUSES;
   const eligibleUnmarketed = unmarketedAssets.filter((a) => allowedStatuses.includes(a.currentStatus));
 
   return {

@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { PAID_STATUSES } from "@/lib/kanban/status-groups";
 
 /**
  * Panel primitives for the admin overview board.
@@ -112,7 +113,7 @@ export function StageColumns({
       {stages.map((s) => {
         // A stage is flagged when work is both present and ageing, not merely present.
         const stuck = s.count > 0 && (s.oldestDays ?? 0) >= 30;
-        const terminal = s.key === "payment_done";
+        const terminal = PAID_STATUSES.includes(s.key);
         return (
           <div key={s.key} className="flex min-w-[3.25rem] flex-1 flex-col justify-end gap-1">
             <span className="text-center font-mono text-xs font-semibold tabular-nums">{s.count}</span>

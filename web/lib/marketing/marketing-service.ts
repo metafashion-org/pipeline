@@ -4,6 +4,7 @@ import { marketingStatusConfig } from "@/lib/db/schema/marketing_status_config";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, desc } from "drizzle-orm";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // The brief's §10 own suggested status list, verbatim — what was seeded
 // before this (Uploaded Not Marketed / Creative in Progress / High
@@ -72,7 +73,7 @@ export async function addMarketingUpdate(options: AddMarketingUpdateOptions) {
   if (assetRecord.length === 0) throw new Error(`Asset with SKU '${sku}' not found`);
 
   const asset = assetRecord[0];
-  const allowedStatuses = ["uploaded_to_roblox", "marked_for_payment", "payment_done"];
+  const allowedStatuses = LIVE_ON_ROBLOX_STATUSES;
 
   // 🔒 RESTRICTION: Marketing updates only allowed for assets at uploaded_to_roblox or later
   if (!allowedStatuses.includes(asset.currentStatus)) {

@@ -5,6 +5,7 @@ import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { statusHistory } from "@/lib/db/schema/status_history";
 import { and, eq, gte, lt, min, inArray } from "drizzle-orm";
 import { shownOnBoard } from "@/lib/assets/board-visibility";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // The three kinds of dates the calendar shows. "deadline": when the artist's work is due.
 // "planned_upload": when the team plans to put it on Roblox. "went_live": when it actually went on
@@ -18,12 +19,11 @@ const PAST_ARTIST_WORK_STATUSES = [
   "final_files_received",
   "ready_for_upload",
   "uploaded_to_roblox",
-  "marked_for_payment",
-  "payment_done",
+  ...LIVE_ON_ROBLOX_STATUSES.filter((s) => s !== "uploaded_to_roblox"),
 ];
 
 // Statuses where the asset is on Roblox.
-const LIVE_STATUSES = ["uploaded_to_roblox", "marked_for_payment", "payment_done"];
+const LIVE_STATUSES = LIVE_ON_ROBLOX_STATUSES;
 
 const UPLOADED_STATUS = "uploaded_to_roblox";
 

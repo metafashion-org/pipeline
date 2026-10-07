@@ -13,7 +13,8 @@ import { orList, roleWords, type RoleRefusal } from "./transition-errors";
 
 // The two payment statuses stay deny-by-default for everyone, admins included (PLAN.md §4/§9):
 // the admin override for a missing rule never reaches them.
-export const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
+// Put on Sale is after payment, so it is reachable only through its own rule too.
+export const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done", "put_on_sale"];
 
 // The Curated column, where curators' ideas wait for the team's review while curation review is
 // switched on (lib/settings/app-settings.ts). Added by drizzle/0035_curation_review.sql.

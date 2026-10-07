@@ -23,6 +23,7 @@ import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
 import { HideCardButton } from "./board-visibility-buttons";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
 // section shows: the hand-in button while Approved, the handed-in versions after.
@@ -30,9 +31,7 @@ const FINAL_FILES_SECTION_STATUSES = [
   "approved",
   "final_files_received",
   "ready_for_upload",
-  "uploaded_to_roblox",
-  "marked_for_payment",
-  "payment_done",
+  ...LIVE_ON_ROBLOX_STATUSES,
 ];
 
 export interface AssetDrawerProps {
