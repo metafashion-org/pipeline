@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiCall } from "@/lib/api-client";
 import { CURATION_NOTE_KEY, CURATION_NOTE_PROMPT } from "@/lib/assets/curation-note";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 const BOARD_DATA_URL = "/api/assets";
 
@@ -26,7 +27,7 @@ export function CurationNoteBox({ sku, briefFields, canEdit }: { sku: string; br
     return (
       <p className="rounded-md border bg-muted/40 px-3 py-2 text-xs whitespace-pre-wrap">
         <span className="font-medium">How these come together: </span>
-        {saved}
+        <LinkifiedText text={saved} />
       </p>
     );
   }

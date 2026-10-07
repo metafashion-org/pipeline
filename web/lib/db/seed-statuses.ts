@@ -98,19 +98,10 @@ export const CANONICAL_STATUSES = [
     key: "payment_done",
     label: "Payment Done",
     sortOrder: 11,
-    description: "The artist has been paid. Arjun then puts the recolours he chooses on sale.",
+    description: "The artist has been paid. This is the last step.",
     whoCanMoveIn: ["payment_admin", "admin"],
-    nextActionHint: "Arjun ticks which recolours are on sale and presses Done, which moves it to Put on Sale.",
-    automationNote: "Needs the payment receipt attached first, for everyone including admins.",
-  },
-  {
-    key: "put_on_sale",
-    label: "Put on Sale",
-    sortOrder: 12,
-    description: "Arjun has put the recolours he chose on sale on Roblox. Uploaded recolours can stay off sale. This is the last step.",
-    whoCanMoveIn: ["admin"],
     nextActionHint: null,
-    automationNote: "Only Arjun moves cards here, from Payment Done, with Done on the card's Roblox links.",
+    automationNote: "Needs the payment receipt attached first, for everyone including admins.",
   },
 ];
 
@@ -124,7 +115,6 @@ export const CANONICAL_TRANSITION_RULES = [
   { fromStatus: "in_review", toStatus: "approved", role: "operator", isAutomatic: false, triggerNote: "The team approves the draft." },
   { fromStatus: "uploaded_to_roblox", toStatus: "marked_for_payment", role: "payment_admin", isAutomatic: false, triggerNote: "The payment admin, or someone allowed to mark payments, marks it for payment." },
   { fromStatus: "marked_for_payment", toStatus: "payment_done", role: "payment_admin", isAutomatic: false, triggerNote: "The payment admin pays the artist and attaches the receipt." },
-  { fromStatus: "payment_done", toStatus: "put_on_sale", role: "admin", isAutomatic: false, triggerNote: "Arjun puts the chosen recolours on sale." },
   
   // Automatic transitions
   { fromStatus: "unassigned", toStatus: "assigned", role: null, isAutomatic: true, triggerNote: "Moves when someone picks an artist, which sends them the offer." },

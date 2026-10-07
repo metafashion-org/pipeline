@@ -10,6 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DriveImage } from "@/components/kanban/drive-image";
 import { EditAssetDialog } from "@/components/kanban/EditAssetDialog";
+import { AssetDrawer } from "@/components/kanban/asset-drawer";
+import { useViewerRoles } from "@/components/providers/ViewerProvider";
+import { LinkifiedText } from "@/components/LinkifiedText";
 import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import { formatDate, formatDateTime } from "@/lib/format-date";
@@ -228,16 +231,37 @@ function AssetRow({
   children?: React.ReactNode;
 }) {
   const { card } = item;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const viewerRoles = useViewerRoles();
   const cover = parseDriveRefs(card.referenceImages).find((ref) => ref.fileId);
   const curationNote = card.briefFields?.[CURATION_NOTE_KEY];
+  // The card arrives over JSON with its dates as strings; the drawer formats them through new Date().
+  const drawerAsset = {
+    ...card,
+    deadline: card.deadline ? new Date(card.deadline) : null,
+    plannedUploadDate: card.plannedUploadDate ? new Date(card.plannedUploadDate) : null,
+    updatedAt: new Date(card.updatedAt),
+  } as KanbanAssetCard;
   return (
     <div className="flex flex-wrap items-start gap-3 rounded-lg border bg-card p-3">
       {checkbox && <input type="checkbox" checked={checkbox.checked} onChange={checkbox.onChange} className="mt-1 h-4 w-4 accent-primary" aria-label={`Select ${card.sku}`} />}
-      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
-        {cover?.fileId && <DriveImage fileId={cover.fileId} alt="" sizes="64px" className="object-cover" />}
-      </div>
+      {/* The design and the name open the full card: every image, brief field and link. */}
+      <button
+        type="button"
+        onClick={() => setDetailsOpen(true)}
+        className="relative h-32 w-32 shrink-0 overflow-hidden rounded-md bg-muted ring-offset-background transition hover:ring-2 hover:ring-primary"
+        aria-label={`Open ${card.itemName}`}
+      >
+        {cover?.fileId ? (
+          <DriveImage fileId={cover.fileId} alt={card.itemName} sizes="128px" className="object-cover" />
+        ) : (
+          <span className="flex h-full items-center justify-center text-xs text-muted-foreground">No image</span>
+        )}
+      </button>
       <div className="min-w-0 flex-1 space-y-1 text-sm">
-        <p className="font-medium">{card.itemName}</p>
+        <button type="button" onClick={() => setDetailsOpen(true)} className="text-left font-medium hover:underline">
+          {card.itemName}
+        </button>
         <p className="text-xs text-muted-foreground">
           {card.sku}
           {card.category ? ` · ${card.category}` : ""}
@@ -260,7 +284,7 @@ function AssetRow({
         {curationNote && (
           <p className="text-xs whitespace-pre-wrap">
             <span className="font-medium">How these come together: </span>
-            {curationNote}
+            <LinkifiedText text={curationNote} />
           </p>
         )}
         {item.state === SENT_BACK && item.feedback && (
@@ -268,7 +292,7 @@ function AssetRow({
             <Badge variant="outline" className="mr-1.5">
               Feedback
             </Badge>
-            {item.feedback}
+            <LinkifiedText text={item.feedback} />
           </p>
         )}
       </div>
@@ -277,6 +301,7 @@ function AssetRow({
         {editable && <EditAssetDialog asset={card as unknown as KanbanAssetCard} onSaved={onEdited} />}
         {children}
       </div>
+      <AssetDrawer asset={drawerAsset} open={detailsOpen} onOpenChange={setDetailsOpen} userRoles={viewerRoles} />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   type ArtistDetailsInput,
   type ArtistDocumentKind,
 } from "@/lib/artist-details/details-rules";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 interface StoredFile {
   id: string;
@@ -172,7 +173,7 @@ export function MyDetailsForm() {
           {editing || !submitted ? (
             <Textarea id="portfolioLinks" rows={2} value={values.portfolioLinks ?? ""} onChange={(e) => set("portfolioLinks", e.target.value)} onFocus={() => !editing && startEditing()} />
           ) : (
-            <p className="text-sm whitespace-pre-wrap break-all">{values.portfolioLinks ?? "—"}</p>
+            <p className="text-sm whitespace-pre-wrap break-all">{values.portfolioLinks ? <LinkifiedText text={values.portfolioLinks} /> : "—"}</p>
           )}
         </div>
       </section>

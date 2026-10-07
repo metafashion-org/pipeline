@@ -5,8 +5,8 @@ import assert from "node:assert";
 function verifySeedDefinitions() {
   console.log("Verifying CANONICAL_STATUSES count and rules...");
   
-  // 1. Must have exactly 12 canonical statuses
-  assert.strictEqual(CANONICAL_STATUSES.length, 12, "Should have exactly 12 canonical statuses");
+  // 1. Must have exactly 11 canonical statuses
+  assert.strictEqual(CANONICAL_STATUSES.length, 11, "Should have exactly 11 canonical statuses");
 
   const keys = CANONICAL_STATUSES.map((s) => s.key);
   const expectedKeys = [
@@ -21,7 +21,6 @@ function verifySeedDefinitions() {
     "uploaded_to_roblox",
     "marked_for_payment",
     "payment_done",
-    "put_on_sale",
   ];
 
   assert.deepStrictEqual(keys, expectedKeys, "Statuses should match canonical keys in order");
@@ -30,10 +29,6 @@ function verifySeedDefinitions() {
   const paymentRules = CANONICAL_TRANSITION_RULES.filter((r) => r.toStatus === "marked_for_payment");
   assert.strictEqual(paymentRules.length, 1, "Should have exactly one rule into marked_for_payment");
   assert.strictEqual(paymentRules[0].fromStatus, "uploaded_to_roblox", "Payment gate must require uploaded_to_roblox");
-
-  // 3. Put on Sale comes only from Payment Done, and only an admin moves it there.
-  const saleRules = CANONICAL_TRANSITION_RULES.filter((r) => r.toStatus === "put_on_sale");
-  assert.deepStrictEqual(saleRules.map((r) => [r.fromStatus, r.role]), [["payment_done", "admin"]], "Only an admin moves a paid card to Put on Sale");
 
   console.log("✓ All status & transition rule assertions passed cleanly!");
 }

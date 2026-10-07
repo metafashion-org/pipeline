@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { KanbanAssetCard } from "@/lib/kanban/kanban-service";
 import { parseDriveRefs, DriveRef } from "@/lib/assets/drive-links";
 import { DriveThumbnail } from "./drive-thumbnail";
-import { getEffectiveCapabilities, canManageKnowledge } from "@/lib/auth/rbac";
+import { getEffectiveCapabilities, canManageKnowledge, seesBusinessDetails } from "@/lib/auth/rbac";
 import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
@@ -82,6 +82,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   // whose registry access comes from a capability override, was shown no Attach control even
   // though the registry API would have accepted the link.
   const canManageLinks = canManageKnowledge(viewerCapabilities);
+  // Artists don't see the Roblox group, Roblox links or Registry research (lib/auth/rbac.ts).
+  const showBusiness = seesBusinessDetails(viewerCapabilities);
 
   const references = parseDriveRefs(asset.referenceImages);
   const recolorReferences = parseDriveRefs(asset.recolorReferenceImages);
@@ -105,8 +107,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
         </SheetHeader>
 
         {/* First once the asset is on Roblox: Arjun puts recolours on sale from here. */}
-        {LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
-          <RobloxLinksSection sku={asset.sku} status={asset.currentStatus} enabled={open} />
+        {showBusiness && LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
+          <RobloxLinksSection sku={asset.sku} enabled={open} />
         )}
 
         {/* 1. Basic Details */}
@@ -119,25 +121,27 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             <div><span className="text-xs text-muted-foreground">Category:</span> <p>{asset.category || "N/A"}</p></div>
             <div><span className="text-xs text-muted-foreground">Status:</span> <p className="capitalize">{asset.currentStatus}</p></div>
             <div><span className="text-xs text-muted-foreground">Deadline:</span> <p>{formatDate(asset.deadline, "Not set")}</p></div>
-            <div>
-              <span className="text-xs text-muted-foreground">Upload Group:</span>{" "}
-              {asset.brandGroupName ? (
-                asset.brandGroupUrl ? (
-                  <a
-                    href={asset.brandGroupUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    {asset.brandGroupName}
-                  </a>
+            {showBusiness && (
+              <div>
+                <span className="text-xs text-muted-foreground">Upload Group:</span>{" "}
+                {asset.brandGroupName ? (
+                  asset.brandGroupUrl ? (
+                    <a
+                      href={asset.brandGroupUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {asset.brandGroupName}
+                    </a>
+                  ) : (
+                    <p>{asset.brandGroupName}</p>
+                  )
                 ) : (
-                  <p>{asset.brandGroupName}</p>
-                )
-              ) : (
-                <p className="text-amber-600 dark:text-amber-400">Not set</p>
-              )}
-            </div>
+                  <p className="text-amber-600 dark:text-amber-400">Not set</p>
+                )}
+              </div>
+            )}
             <div><span className="text-xs text-muted-foreground">Updated:</span> <p>{formatDate(asset.updatedAt)}</p></div>
           </div>
         </section>
@@ -200,6 +204,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           </div>
         </section>
 
+        {showBusiness && (
         <LinkedArtifacts
           sku={asset.sku}
           assetId={asset.id}
@@ -208,6 +213,7 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
           // Keyed by the saved comment so the box starts from the new text after a save or another edit.
           linkedFooter={<CurationNoteBox key={asset.briefFields?.[CURATION_NOTE_KEY] ?? ""} sku={asset.sku} briefFields={asset.briefFields ?? {}} canEdit={canEdit} />}
         />
+        )}
 
         {/* 4. Technical Specs & Mannequin Rig */}
         <section className="space-y-2">

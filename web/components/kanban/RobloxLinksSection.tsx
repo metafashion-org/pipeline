@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { toast } from "sonner";
 import { ExternalLink, Plus, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,6 @@ import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import { formatDate } from "@/lib/format-date";
 
-const BOARD_DATA_URL = "/api/assets";
-const PAYMENT_DONE_STATUS = "payment_done";
 
 interface RobloxLink {
   id: string;
@@ -30,12 +28,10 @@ interface LinksResponse {
 
 /**
  * The top of the card once an asset is on Roblox: its Roblox links, one per uploaded recolour.
- * Arjun ticks which recolours are on sale and, on a Payment Done card, presses Done to move it to
- * Put on Sale. Uploaders add the link of a recolour uploaded later. Everyone else sees the links and
- * which are on sale.
+ * Arjun ticks which recolours are on sale (also on the Marketing page). Uploaders add the link of a
+ * recolour uploaded later. Everyone else sees the links and which are on sale.
  */
-export function RobloxLinksSection({ sku, status, enabled }: { sku: string; status: string; enabled: boolean }) {
-  const { mutate: mutateGlobal } = useSWRConfig();
+export function RobloxLinksSection({ sku, enabled }: { sku: string; enabled: boolean }) {
   const linksUrl = `/api/assets/${encodeURIComponent(sku)}/roblox-links`;
   const { data, mutate } = useSWR<LinksResponse>(enabled ? linksUrl : null, jsonFetcher);
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,21 +50,6 @@ export function RobloxLinksSection({ sku, status, enabled }: { sku: string; stat
       const { ok, data: res } = await apiCall(`${linksUrl}/${link.id}`, { method: "PATCH", body: { onSale: !link.onSaleAt } });
       if (!ok) toast.error(res.error || "Couldn't change it");
       await mutate();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function done() {
-    setBusy("done");
-    try {
-      const { ok, data: res } = await apiCall(`/api/assets/${encodeURIComponent(sku)}/put-on-sale`, { method: "POST" });
-      if (!ok) {
-        toast.error(res.error || "Couldn't move it to Put on Sale");
-        return;
-      }
-      toast.success(`${sku} moved to Put on Sale`);
-      await mutateGlobal(BOARD_DATA_URL);
     } finally {
       setBusy(null);
     }
@@ -130,15 +111,6 @@ export function RobloxLinksSection({ sku, status, enabled }: { sku: string; stat
             )}
           </div>
         ))}
-
-        {canPutOnSale && status === PAYMENT_DONE_STATUS && links.length > 0 && (
-          <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2">
-            <p className="text-xs text-muted-foreground">Tick the recolours that are on sale, then Done. The rest stay off sale.</p>
-            <Button size="sm" className="h-7 shrink-0 text-xs" disabled={busy === "done"} onClick={done}>
-              {busy === "done" ? "Moving..." : "Done"}
-            </Button>
-          </div>
-        )}
 
         {canAddLinks &&
           (adding ? (

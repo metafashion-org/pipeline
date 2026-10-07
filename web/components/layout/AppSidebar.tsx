@@ -33,6 +33,8 @@ import { isRouteAllowedForRoles, getEffectiveCapabilities, ALL_ROLES, type Syste
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDate } from "@/lib/format-date";
 import { whatsNewFor, type WhatsNewEntry } from "./whats-new";
+import useSWR from "swr";
+import { jsonFetcher } from "@/lib/fetcher";
 import {
   Select,
   SelectContent,
@@ -76,6 +78,9 @@ const NAV_ITEMS: { href: string; icon: typeof LayoutDashboard; label: string; on
 ];
 
 const COLLAPSE_KEY = "pipeline_sidebar_collapsed";
+const UPLOADER_QUEUE_HREF = "/publisher";
+const UPLOAD_COUNT_URL = "/api/publisher/count";
+const UPLOAD_COUNT_REFRESH_MS = 60_000;
 
 const ROLE_LABELS: Record<SystemRole, string> = {
   admin: "Admin",
@@ -230,6 +235,12 @@ export function AppSidebar({ viewer, today }: { viewer: SidebarViewer; today: st
   // Only the destinations this person can actually open. Every user was shown all ten, so a
   // curator clicking Personnel, Settings or Forms landed on /unauthorized — the nav advertised
   // work they had no way to do. Same rule proxy.ts enforces, so the list and the gate agree.
+  // A count on the Uploader Queue of assets waiting for their Roblox links, so the uploader sees
+  // there's work without opening the page. Only for people who upload (the route checks too).
+  const canUpload = getEffectiveCapabilities(roles, overrides).canPublishToRoblox;
+  const { data: uploadCount } = useSWR<{ count: number }>(canUpload ? UPLOAD_COUNT_URL : null, jsonFetcher, { refreshInterval: UPLOAD_COUNT_REFRESH_MS });
+  const badgeFor = (href: string) => (href === UPLOADER_QUEUE_HREF && uploadCount?.count ? uploadCount.count : 0);
+
   const visibleItems = NAV_ITEMS.filter(
     (item) => isRouteAllowedForRoles(item.href, navRoles, navOverrides) && (!item.onlyFor || item.onlyFor(navRoles))
   );
@@ -269,6 +280,7 @@ export function AppSidebar({ viewer, today }: { viewer: SidebarViewer; today: st
             // "/admin" and "/artist" are also the start of their section's other pages, so they match exactly.
             const isActive = href === "/admin" || href === "/artist" ? pathname === href : pathname.startsWith(href);
             const whatsNew = whatsNewFor(href, today);
+            const badge = badgeFor(href);
             return (
               <div key={href} className="relative">
                 <Link
@@ -288,9 +300,15 @@ export function AppSidebar({ viewer, today }: { viewer: SidebarViewer; today: st
                     <Icon className="w-[18px] h-[18px]" />
                     {/* Collapsed, the rail has no room for the mark, so a dot says the page is new. */}
                     {whatsNew && collapsed && <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-emerald-400" aria-label="New" />}
+                    {badge > 0 && collapsed && <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full bg-red-500" aria-label={`${badge} waiting`} />}
                   </span>
                   {/* A label beside a New mark wraps rather than being cut off. */}
                   {!collapsed && <span className={whatsNew ? "leading-tight py-1" : "truncate"}>{label}</span>}
+                  {badge > 0 && !collapsed && (
+                    <span className="ml-auto rounded-full bg-red-500 px-1.5 text-[11px] font-semibold leading-5 text-white" title={`${badge} asset${badge === 1 ? "" : "s"} waiting for Roblox links`}>
+                      {badge}
+                    </span>
+                  )}
                 </Link>
                 {whatsNew && !collapsed && <WhatsNewMark label={label} entry={whatsNew} />}
               </div>

@@ -13,8 +13,7 @@ import { orList, roleWords, type RoleRefusal } from "./transition-errors";
 
 // The two payment statuses stay deny-by-default for everyone, admins included (PLAN.md §4/§9):
 // the admin override for a missing rule never reaches them.
-// Put on Sale is after payment, so it is reachable only through its own rule too.
-export const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done", "put_on_sale"];
+export const PAYMENT_GATED_STATUSES = ["marked_for_payment", "payment_done"];
 
 // The Curated column, where curators' ideas wait for the team's review while curation review is
 // switched on (lib/settings/app-settings.ts). Added by drizzle/0035_curation_review.sql.
@@ -74,7 +73,8 @@ export type MoveRefusal =
   | { kind: "role"; refusal: RoleRefusal }
   | { kind: "artist-required" }
   | { kind: "offer-open" }
-  | { kind: "receipt-required" };
+  | { kind: "receipt-required" }
+  | { kind: "automatic-step" };
 
 export function actorRoles(actor: TransitionActor | undefined): Set<string> {
   if (!actor || actor.system) return new Set();
@@ -155,6 +155,11 @@ export function checkMove(
   // A card only reaches Assigned with an artist on it, because picking the artist is what sends
   // them the offer. The Assign dialog picks the artist and then moves the card as the system.
   if (!isSystem && target.key === "assigned" && !card.artistId) return { kind: "artist-required" };
+
+  // An automatic step happens only through the action behind it: the artist handing in final
+  // files, the uploader adding Roblox links, picking an artist. Dragging it by hand, admins
+  // included, moved cards on with no files and no links.
+  if (!isSystem && rule?.isAutomatic) return { kind: "automatic-step" };
 
   // While the offer is unanswered the asset isn't the artist's yet, so nobody moves it on until
   // they accept. Moving it back to Unassigned stays possible.

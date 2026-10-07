@@ -25,6 +25,7 @@ import { formatDate } from "@/lib/format-date";
 import { extractDriveFileId } from "@/lib/assets/drive-links";
 import { formForPrefix, type ArtifactFile, type ArtifactFormField } from "@/lib/knowledge/artifact-forms";
 import type { RegistryArtifactView } from "@/lib/dashboard/views";
+import { LinkifiedText } from "@/components/LinkifiedText";
 
 interface ArtifactLinksResponse {
   links: {
@@ -98,7 +99,7 @@ function FieldValue({ field, value }: { field: ArtifactFormField; value: unknown
         </span>
       );
     default:
-      return <span className="whitespace-pre-wrap">{String(value)}</span>;
+      return <span className="whitespace-pre-wrap"><LinkifiedText text={String(value)} /></span>;
   }
 }
 

@@ -392,6 +392,17 @@ export function canManageKnowledge(caps: CapabilitySet): boolean {
   return caps.canManageSystemConfig || caps.canAssignArtists || caps.canAccessCuratorTools;
 }
 
+/**
+ * Whether someone sees the business side of an asset: which Roblox group it uploads to, its Roblox
+ * links, and the Registry research behind it. Artists don't: it would hand them how we find and
+ * sell items, which they could use to compete.
+ *
+ * Input: their effective capabilities. Output: true for the team, curators and uploaders.
+ */
+export function seesBusinessDetails(caps: CapabilitySet): boolean {
+  return caps.canViewAllAssets || caps.canPublishToRoblox || canManageKnowledge(caps);
+}
+
 // Discord Team Manager's two-tier access, ported from Catalog Intel's own
 // DISCORD_ROLE_RANK (manager: 1, admin: 2). That version needed a
 // Discord-specific role field because it had no real RBAC of its own; this
