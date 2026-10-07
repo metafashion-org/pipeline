@@ -1,0 +1,20 @@
+name: Artist check-ins
+
+# Emails each artist one check-in listing their assets that have waited 12 hours or more between
+# Assigned and In Production: offers to answer, and accepted work not yet moved to In Production.
+# Vercel's Hobby plan runs crons once a day, so the schedule lives here and calls the app's endpoint
+# (web/app/api/cron/artist-nudges/route.ts), which needs no secret and sends nothing when nothing waits.
+
+on:
+  schedule:
+    # 03:30 and 15:30 UTC = 09:00 and 21:00 IST (UTC+5:30).
+    - cron: "30 3,15 * * *"
+  workflow_dispatch:
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send the artist check-ins
+        # --fail-with-body fails the run (and GitHub emails the repo owner) when the app errors.
+        run: curl --fail-with-body --silent --show-error https://kanban.metafashion.in/api/cron/artist-nudges
