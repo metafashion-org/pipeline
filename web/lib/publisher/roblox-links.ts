@@ -114,11 +114,13 @@ export function parseRobloxLinkLines(lines: string[]): ParsedRobloxLinks {
 /**
  * Splits pasted text into candidate lines.
  *
- * Input: text that may use any line ending. Output: one entry per non-empty line, trimmed. Used when someone pastes a whole list into the link box at once instead of adding them one at a time.
+ * Input: text with links separated by line breaks (any line ending), spaces or tabs. Output: one
+ * entry per link, trimmed, blanks dropped. Used when an uploader pastes every recolour's link at once;
+ * a catalog link never contains whitespace, so splitting on it is safe.
  */
 export function splitRobloxLinkText(text: string): string[] {
   return text
-    .split(/\r?\n/)
+    .split(/\s+/)
     .map((l) => l.trim())
     .filter(Boolean);
 }

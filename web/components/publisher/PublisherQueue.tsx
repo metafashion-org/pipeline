@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { DriveImage } from "@/components/kanban/drive-image";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ interface QueueItem {
   deadline: string | null;
   artistName: string | null;
   brandGroupName: string | null;
+  coverFileId: string | null;
   brandGroupUrl: string | null;
   finalFilesFolderUrl: string | null;
   updatedAt: string;
@@ -58,13 +60,14 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
   const validCount = resolved.filter((r) => r.ok).length;
   const invalidCount = resolved.length - validCount;
 
-  // Pasting a block of links adds one entry per line rather than one entry holding the whole block, so per-line validation still applies to a paste.
-  function addDraft() {
-    const lines = splitRobloxLinkText(draft);
+  // Pasting a block of links adds one entry per link rather than one entry holding the whole block, so per-link validation still applies to a paste.
+  function addLinks(text: string) {
+    const lines = splitRobloxLinkText(text);
     if (lines.length === 0) return;
     setEntries((prev) => [...prev, ...lines.map((raw) => ({ key: nextEntryKey(), raw }))]);
     setDraft("");
   }
+  const addDraft = () => addLinks(draft);
 
   function removeEntry(key: string) {
     setEntries((prev) => prev.filter((e) => e.key !== key));
@@ -101,7 +104,15 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        {/* The main concept image, so the uploader sees which item this is. */}
+        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
+          {item.coverFileId ? (
+            <DriveImage fileId={item.coverFileId} alt={item.itemName} sizes="80px" className="object-cover" />
+          ) : (
+            <span className="flex h-full items-center justify-center text-[11px] text-muted-foreground">No image</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
           <p className="font-mono text-xs text-muted-foreground">{item.sku}</p>
           <p className="font-semibold truncate">{item.itemName}</p>
           <p className="text-xs text-muted-foreground">
@@ -152,15 +163,24 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
 
       <div className="grid gap-1">
         <Label htmlFor={`roblox-url-${item.id}`} className="text-xs">
-          Roblox item links — one per line
+          Roblox item links, one per recolour
         </Label>
-        <div className="flex gap-2">
-          <Input
+        <div className="flex items-start gap-2">
+          <Textarea
             id={`roblox-url-${item.id}`}
+            rows={2}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            // A paste of several links (one per line, or separated by spaces) adds them all at once.
+            onPaste={(e) => {
+              const pasted = e.clipboardData.getData("text");
+              if (splitRobloxLinkText(pasted).length > 1) {
+                e.preventDefault();
+                addLinks(`${draft} ${pasted}`);
+              }
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Enter" && !e.shiftKey) {
                 // Otherwise Enter submits the surrounding form and the queue navigates away mid-entry.
                 e.preventDefault();
                 addDraft();
@@ -173,7 +193,7 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Press Enter to add each link, then submit them together.</p>
+        <p className="text-xs text-muted-foreground">Paste every recolour&apos;s link at once, or type one and press Enter. Then submit them together.</p>
       </div>
 
       {resolved.length > 0 && (

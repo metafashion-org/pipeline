@@ -27,6 +27,7 @@ export interface PublisherQueueItemView {
   brandGroupName: string | null;
   brandGroupUrl: string | null;
   finalFilesFolderUrl: string | null;
+  coverFileId: string | null;
   updatedAt: string;
 }
 
