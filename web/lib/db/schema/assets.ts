@@ -40,6 +40,9 @@ export const assets = pgTable("assets", {
   // lib/assets/board-visibility.ts). Null while the card shows.
   boardHiddenAt: timestamp("board_hidden_at", { withTimezone: true }),
   boardHiddenBy: uuid("board_hidden_by").references(() => personnel.id, { onDelete: "set null" }),
+  // The brief fields from Settings > Curation fields (rig, technical specs, notes...), keyed by
+  // field key. The artist's brief email shows the ones marked for it (getBriefFieldsForAsset).
+  briefFields: jsonb("brief_fields").$type<Record<string, string>>().default({}).notNull(),
   // Why it was archived (lib/assets/archive-reasons.ts), shown on the board's Archived list.
   boardHiddenReason: text("board_hidden_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

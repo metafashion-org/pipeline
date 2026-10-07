@@ -330,6 +330,13 @@
       "when": 1791349984629,
       "tag": "0046_archive_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791351005682,
+      "tag": "0047_asset_brief_fields",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,7 @@ function testAssetDrawerRoleGating() {
     updatedAt: new Date(),
     referenceImages: [{ provider: "drive", externalId: "https://drive.google.com/open?id=1uxOojyuNuRWkewqbO4xSMg5tZdimpMxh" }],
     recolorReferenceImages: [],
+    briefFields: {},
     offerStatus: "accepted",
     hasPaymentReceipt: false,
     curatorId: null,

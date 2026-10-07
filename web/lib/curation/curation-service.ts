@@ -156,7 +156,8 @@ export async function getBriefFieldsForAsset(assetId: string): Promise<BriefFiel
   if (!asset) throw new Error(`Asset '${assetId}' not found`);
 
   const [idea] = await db.select().from(curationItemIdeas).where(eq(curationItemIdeas.assetId, assetId)).limit(1);
-  const ideaFieldValues = (idea?.fieldValues as Record<string, unknown>) || {};
+  // The asset's own brief fields (set with New Asset or Edit) win over an old curation idea's.
+  const ideaFieldValues = { ...((idea?.fieldValues as Record<string, unknown>) || {}), ...(asset.briefFields ?? {}) };
 
   const configs = await db
     .select()

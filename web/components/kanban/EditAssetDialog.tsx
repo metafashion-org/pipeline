@@ -40,6 +40,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
         plannedUploadDate: asset.plannedUploadDate ? new Date(asset.plannedUploadDate).toISOString().slice(0, 10) : "",
         referenceImages: toLinkText(asset.referenceImages),
         recolorReferenceImages: toLinkText(asset.recolorReferenceImages),
+        briefFields: { ...(asset.briefFields ?? {}) },
     });
 
     const [form, setForm] = useState(buildForm);
@@ -69,6 +70,7 @@ export function EditAssetDialog({ asset, onSaved }: { asset: KanbanAssetCard; on
                     plannedUploadDate: form.plannedUploadDate || null,
                     referenceImages: form.referenceImages,
                     recolorReferenceImages: form.recolorReferenceImages,
+                    briefFields: form.briefFields,
                 },
             });
             if (!ok) {
