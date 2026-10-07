@@ -337,6 +337,13 @@
       "when": 1791351005682,
       "tag": "0047_asset_brief_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1791358133645,
+      "tag": "0048_put_on_sale",
+      "breakpoints": true
     }
   ]
 }

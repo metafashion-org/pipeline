@@ -1,7 +1,8 @@
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { personnel } from "@/lib/db/schema/personnel";
-import { and, eq, lte, or, ilike, sql, desc, type SQL } from "drizzle-orm";
+import { and, eq, inArray, lte, or, ilike, sql, desc, type SQL } from "drizzle-orm";
+import { PAID_STATUSES } from "@/lib/kanban/status-groups";
 
 /**
  * How many archived rows a single request will ever load.
@@ -52,7 +53,7 @@ function archiveConditions({ q, month }: ArchiveQuery): SQL[] {
   settledBefore.setDate(settledBefore.getDate() - ARCHIVE_SETTLE_DAYS);
 
   const conditions: SQL[] = [
-    eq(assets.currentStatus, "payment_done"),
+    inArray(assets.currentStatus, PAID_STATUSES),
     lte(assets.updatedAt, settledBefore),
   ];
 

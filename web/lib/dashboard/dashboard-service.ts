@@ -1,5 +1,6 @@
 import { db } from "@/lib/db/client";
 import { sql } from "drizzle-orm";
+import { LIVE_ON_ROBLOX_STATUSES, PAID_STATUSES } from "@/lib/kanban/status-groups";
 
 /**
  * Everything the admin overview board renders, gathered in one pass.
@@ -75,6 +76,8 @@ const maybeNum = (v: unknown): number | null => (v === null || v === undefined ?
 export async function getDashboardData(): Promise<DashboardData> {
   const wip = sql.raw(`'${WIP_STATUSES.join("','")}'`);
   const owed = sql.raw(`'${OWED_STATUSES.join("','")}'`);
+  const paid = sql.raw(`'${PAID_STATUSES.join("','")}'`);
+  const live = sql.raw(`'${LIVE_ON_ROBLOX_STATUSES.join("','")}'`);
 
   // Counts of open work (in production, overdue, unassigned, the stages, each artist's WIP) leave
   // out cards the team hid from the board, as the board itself does (lib/assets/board-visibility.ts).
@@ -94,8 +97,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       select
         count(*)::int as assets,
         count(*) filter (where current_status in (${wip}) and board_hidden_at is null)::int as in_production,
-        count(*) filter (where current_status = 'payment_done')::int as paid_count,
-        coalesce(sum(fee_amount) filter (where current_status = 'payment_done'), 0)::float as paid_amount,
+        count(*) filter (where current_status in (${paid}))::int as paid_count,
+        coalesce(sum(fee_amount) filter (where current_status in (${paid})), 0)::float as paid_amount,
         coalesce(sum(fee_amount) filter (where current_status in (${owed})), 0)::float as owed_amount,
         count(*) filter (where current_status in (${owed}))::int as owed_count,
         count(distinct current_artist_id) filter (where current_status in (${wip}) and board_hidden_at is null)::int as artists_working,
@@ -105,21 +108,21 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     db.execute(sql`
       select
-        (select count(*) from assets where deadline is null and current_status <> 'payment_done' and board_hidden_at is null)::int as no_deadline,
+        (select count(*) from assets where deadline is null and current_status not in (${paid}) and board_hidden_at is null)::int as no_deadline,
         (select count(*) from assets where fee_amount is null)::int as no_fee,
-        (select count(*) from assets where current_status = 'payment_done'
-           and (payment_receipt_url is null or payment_receipt_url = ''))::int as paid_no_receipt,
-        (select count(*) from assets where current_status = 'payment_done')::int as paid_total,
+        (select count(*) from assets where current_status in (${paid})
+           and paid_outside_at is null and (payment_receipt_url is null or payment_receipt_url = ''))::int as paid_no_receipt,
+        (select count(*) from assets where current_status in (${paid}))::int as paid_total,
         (select count(*) from assets a join personnel p on p.id = a.current_artist_id
            where p.status <> 'Active' and a.current_status in (${wip}) and a.board_hidden_at is null)::int as locked_out_count,
         (select coalesce(string_agg(distinct p.name, '|'), '') from assets a join personnel p on p.id = a.current_artist_id
            where p.status <> 'Active' and a.current_status in (${wip}) and a.board_hidden_at is null) as locked_out_names,
-        (select count(*) from assets a where a.current_status in ('uploaded_to_roblox','marked_for_payment','payment_done')
+        (select count(*) from assets a where a.current_status in (${live})
            and not exists (select 1 from marketing_updates m where m.asset_id = a.id))::int as unmarketed,
         (select count(*) from marketing_updates)::int as marketing_logged,
         (select count(*) from assets where deadline is not null and deadline < now() and board_hidden_at is null
-           and current_status not in ('payment_done','marked_for_payment','uploaded_to_roblox'))::int as overdue,
-        (select count(*) from assets where current_artist_id is null and current_status <> 'payment_done' and board_hidden_at is null)::int as unassigned,
+           and current_status not in (${live}))::int as overdue,
+        (select count(*) from assets where current_artist_id is null and current_status not in (${paid}) and board_hidden_at is null)::int as unassigned,
         (select count(*) from form_submissions where status = 'pending')::int as pending_access
     `),
 
@@ -140,8 +143,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     db.execute(sql`
       select p.name, p.status,
              count(*) filter (where a.current_status in (${wip}) and a.board_hidden_at is null)::int as wip,
-             count(*) filter (where a.current_status = 'payment_done')::int as delivered,
-             coalesce(sum(a.fee_amount) filter (where a.current_status = 'payment_done'), 0)::float as earned,
+             count(*) filter (where a.current_status in (${paid}))::int as delivered,
+             coalesce(sum(a.fee_amount) filter (where a.current_status in (${paid})), 0)::float as earned,
              round(avg(a.fee_amount), 0)::float as avg_fee
       from assets a
       join personnel p on p.id = a.current_artist_id
@@ -161,7 +164,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     db.execute(sql`
       select coalesce(currency, 'INR') as currency,
              count(*)::int as assets,
-             coalesce(sum(fee_amount) filter (where current_status = 'payment_done'), 0)::float as paid
+             coalesce(sum(fee_amount) filter (where current_status in (${paid})), 0)::float as paid
       from assets group by coalesce(currency, 'INR') order by assets desc
     `),
 

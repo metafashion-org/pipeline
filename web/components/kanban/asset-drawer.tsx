@@ -11,6 +11,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
+import { RobloxLinksSection } from "./RobloxLinksSection";
 import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import { CurationNoteBox } from "./CurationNoteBox";
 import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
@@ -23,6 +24,7 @@ import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
 import { HideCardButton } from "./board-visibility-buttons";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // From Approved onward an asset either waits on its final files or has them, so the Final Files
 // section shows: the hand-in button while Approved, the handed-in versions after.
@@ -30,9 +32,7 @@ const FINAL_FILES_SECTION_STATUSES = [
   "approved",
   "final_files_received",
   "ready_for_upload",
-  "uploaded_to_roblox",
-  "marked_for_payment",
-  "payment_done",
+  ...LIVE_ON_ROBLOX_STATUSES,
 ];
 
 export interface AssetDrawerProps {
@@ -103,6 +103,11 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             {canEdit && <EditAssetDialog asset={asset} />}
           </div>
         </SheetHeader>
+
+        {/* First once the asset is on Roblox: Arjun puts recolours on sale from here. */}
+        {LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
+          <RobloxLinksSection sku={asset.sku} status={asset.currentStatus} enabled={open} />
+        )}
 
         {/* 1. Basic Details */}
         <section className="space-y-2">
