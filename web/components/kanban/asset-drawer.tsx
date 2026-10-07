@@ -11,6 +11,7 @@ import { AssignTaskDialog } from "./AssignTaskDialog";
 import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
+import { RobloxLinksSection } from "./RobloxLinksSection";
 import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import { CurationNoteBox } from "./CurationNoteBox";
 import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
@@ -102,6 +103,11 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             {canEdit && <EditAssetDialog asset={asset} />}
           </div>
         </SheetHeader>
+
+        {/* First once the asset is on Roblox: Arjun puts recolours on sale from here. */}
+        {LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
+          <RobloxLinksSection sku={asset.sku} status={asset.currentStatus} enabled={open} />
+        )}
 
         {/* 1. Basic Details */}
         <section className="space-y-2">
