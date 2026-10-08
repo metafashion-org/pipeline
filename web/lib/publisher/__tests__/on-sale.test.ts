@@ -45,10 +45,14 @@ async function testOnSale() {
   await setLinkOnSale(SKU, second.id, true, null);
   const ticked = await listRobloxLinks(SKU);
   assert.ok(ticked[1].onSaleAt && !ticked[0].onSaleAt, "Only the ticked recolour is on sale");
-  assert.ok(!(await listNotOnSale()).some((a) => a.sku === SKU), "One recolour on sale takes it off the list");
+  const partly = (await listNotOnSale()).find((a) => a.sku === SKU);
+  assert.ok(partly?.links[1].onSaleAt && !partly.links[0].onSaleAt, "One recolour on sale keeps the asset listed, showing which is on sale");
+
+  await setLinkOnSale(SKU, first.id, true, null);
+  assert.ok(!(await listNotOnSale()).some((a) => a.sku === SKU), "Every recolour on sale takes it off the list");
 
   await setLinkOnSale(SKU, second.id, false, null);
-  assert.ok((await listNotOnSale()).some((a) => a.sku === SKU), "Taking it off sale puts it back on the list");
+  assert.ok((await listNotOnSale()).some((a) => a.sku === SKU), "Taking one off sale puts it back on the list");
   const [still] = await db.select().from(assets).where(eq(assets.id, asset.id));
   assert.strictEqual(still.currentStatus, "uploaded_to_roblox", "Putting on sale never moves the card");
   console.log("Confirmed putting on sale");

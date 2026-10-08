@@ -105,9 +105,10 @@ export interface NotOnSaleAsset {
 }
 
 /**
- * The Marketing page's "Not on sale yet" list: live assets with Roblox links, none of them on sale.
+ * The Marketing page's "Variants not on sale" list: live assets with at least one Roblox link off
+ * sale. An asset with some recolours already on sale stays listed until the last one is ticked.
  *
- * Output: those assets, by SKU, each with all its links.
+ * Output: those assets, by SKU, each with all its links and which of them are on sale.
  */
 export async function listNotOnSale(): Promise<NotOnSaleAsset[]> {
   const rows = await db
@@ -132,5 +133,5 @@ export async function listNotOnSale(): Promise<NotOnSaleAsset[]> {
     entry.links.push(link);
     bySku.set(sku, entry);
   }
-  return [...bySku.values()].filter((asset) => asset.links.every((link) => !link.onSaleAt));
+  return [...bySku.values()].filter((asset) => asset.links.some((link) => !link.onSaleAt));
 }

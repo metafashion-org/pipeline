@@ -4,7 +4,7 @@ import { canPutOnSale, listNotOnSale } from "@/lib/publisher/on-sale-service";
 
 export const dynamic = "force-dynamic";
 
-// The Marketing page's "Not on sale yet" list: live assets with no recolour on sale. Only Arjun
+// The Marketing page's "Variants not on sale" list: live assets with a recolour off sale. Only Arjun
 // (admin) puts recolours on sale, so only he gets the list.
 export async function GET() {
   const user = await getAuthedUser();
