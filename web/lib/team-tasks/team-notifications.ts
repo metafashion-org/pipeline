@@ -2,6 +2,7 @@ import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { teamNotifications } from "@/lib/db/schema/team_notifications";
 import { teamTasks } from "@/lib/db/schema/team_tasks";
+import { assets } from "@/lib/db/schema/assets";
 import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
 import { renderEmailLayout, EMAIL_TONE } from "@/lib/email/templates/email-layout";
 import { appUrl } from "@/lib/app-url";
@@ -121,6 +122,8 @@ export interface TeamNotificationRow {
   id: string;
   taskId: string | null;
   taskTitle: string | null;
+  // Set when the mention was in a comment on an asset's card; the bell opens that card.
+  assetSku: string | null;
   kind: string;
   message: string;
   readAt: Date | null;
@@ -135,6 +138,7 @@ export async function listTeamNotifications(personnelId: string): Promise<{ noti
         id: teamNotifications.id,
         taskId: teamNotifications.taskId,
         taskTitle: teamTasks.title,
+        assetSku: assets.sku,
         kind: teamNotifications.kind,
         message: teamNotifications.message,
         readAt: teamNotifications.readAt,
@@ -142,6 +146,7 @@ export async function listTeamNotifications(personnelId: string): Promise<{ noti
       })
       .from(teamNotifications)
       .leftJoin(teamTasks, eq(teamTasks.id, teamNotifications.taskId))
+      .leftJoin(assets, eq(assets.id, teamNotifications.assetId))
       .where(eq(teamNotifications.recipientId, personnelId))
       .orderBy(desc(teamNotifications.createdAt))
       .limit(NOTIFICATIONS_SHOWN),
