@@ -17,12 +17,15 @@ export function DriveImage({
   className,
   sizes = "160px",
   fallback = null,
+  onFailed,
 }: {
   fileId: string;
   alt: string;
   className?: string;
   sizes?: string;
   fallback?: React.ReactNode;
+  /** Called once when Drive can't serve the image. */
+  onFailed?: () => void;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -36,7 +39,10 @@ export function DriveImage({
       sizes={sizes}
       className={className}
       unoptimized={false}
-      onError={() => setFailed(true)}
+      onError={() => {
+        setFailed(true);
+        onFailed?.();
+      }}
     />
   );
 }
