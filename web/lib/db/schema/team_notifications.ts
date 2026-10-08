@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
 import { personnel } from "./personnel";
 import { teamTasks } from "./team_tasks";
+import { assets } from "./assets";
 
 /**
  * Something a person was told about on Team Tasks: an @mention or a task given to them. The same
@@ -12,6 +13,8 @@ export const teamNotifications = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     recipientId: uuid("recipient_id").references(() => personnel.id, { onDelete: "cascade" }).notNull(),
     taskId: uuid("task_id").references(() => teamTasks.id, { onDelete: "cascade" }),
+    // Set instead of taskId when the mention was in a comment on an asset's card.
+    assetId: uuid("asset_id").references(() => assets.id, { onDelete: "cascade" }),
     // A key of TEAM_NOTIFICATION_KINDS in lib/team-tasks/task-rules.ts.
     kind: text("kind").notNull(),
     actorId: uuid("actor_id").references(() => personnel.id, { onDelete: "set null" }),

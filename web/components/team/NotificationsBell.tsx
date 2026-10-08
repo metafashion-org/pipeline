@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -13,11 +14,17 @@ import type { NotificationView } from "./team-types";
 const NOTIFICATIONS_URL = "/api/team/notifications";
 
 /**
- * The caller's Team Tasks notifications: mentions and tasks given to them. Opening the list marks
- * them read. The same notices also went out by email and in the office Discord channel.
+ * The caller's Team Tasks notifications: mentions and tasks given to them, and mentions in comments
+ * on an asset's card, which open that card on the Board. Opening the list marks them read. The same notices also went out by email and in the office Discord channel.
  */
 export function NotificationsBell({ unread, onOpenTask, onRead }: { unread: number; onOpenTask: (taskId: string) => void; onRead: () => void }) {
+  const router = useRouter();
   const { data, mutate } = useSWR<{ notifications: NotificationView[] }>(NOTIFICATIONS_URL, jsonFetcher);
+
+  function open(n: NotificationView) {
+    if (n.taskId) onOpenTask(n.taskId);
+    else if (n.assetSku) router.push(`/admin/board?asset=${encodeURIComponent(n.assetSku)}`);
+  }
 
   async function handleOpenChange(open: boolean) {
     if (!open || unread === 0) return;
@@ -48,8 +55,8 @@ export function NotificationsBell({ unread, onOpenTask, onRead }: { unread: numb
             <li key={n.id}>
               <button
                 type="button"
-                disabled={!n.taskId}
-                onClick={() => n.taskId && onOpenTask(n.taskId)}
+                disabled={!n.taskId && !n.assetSku}
+                onClick={() => open(n)}
                 className={cn("block w-full border-b px-3 py-2 text-left text-sm last:border-0 hover:bg-muted", !n.readAt && "bg-primary/5")}
               >
                 <span className="block">{n.message}</span>

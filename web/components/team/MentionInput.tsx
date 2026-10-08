@@ -5,28 +5,34 @@ import { AtSign, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { TeamMember } from "@/lib/team-tasks/team-members";
 
 // The text between an "@" and the caret, while someone is picking a person: no line breaks, and
 // short enough to be a name being typed.
 const MENTION_QUERY_PATTERN = /@([^@\n]{0,30})$/;
 
+/** Someone who can be picked from the @ list. `note` is shown beside the name, e.g. "Freelancer". */
+export interface MentionOption {
+  id: string;
+  name: string;
+  note?: string;
+}
+
 /**
- * A comment box where typing "@" lists the team to mention. Everyone picked is notified by email,
- * in the office Discord channel and on the page.
+ * A comment box where typing "@" lists the people to mention. Everyone picked is notified; the
+ * caller's onPost decides how.
  *
- * Input: the team, and what to do with the text and the mentioned people's ids on Post.
+ * Input: the people, and what to do with the text and the mentioned people's ids on Post.
  * Output: the box. It clears itself after a successful post.
  */
 export function MentionInput({
   members,
   onPost,
 }: {
-  members: TeamMember[];
+  members: MentionOption[];
   onPost: (body: string, mentionedIds: string[]) => Promise<boolean>;
 }) {
   const [text, setText] = useState("");
-  const [picked, setPicked] = useState<TeamMember[]>([]);
+  const [picked, setPicked] = useState<MentionOption[]>([]);
   const [query, setQuery] = useState<string | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [posting, setPosting] = useState(false);
@@ -40,7 +46,7 @@ export function MentionInput({
     setHighlight(0);
   }
 
-  function choose(member: TeamMember) {
+  function choose(member: MentionOption) {
     const el = ref.current;
     const caret = el?.selectionStart ?? text.length;
     const before = text.slice(0, caret).replace(MENTION_QUERY_PATTERN, `@${member.name} `);
@@ -128,6 +134,7 @@ export function MentionInput({
                 className={cn("w-full px-3 py-1.5 text-left text-sm", index === highlight ? "bg-accent" : "hover:bg-muted")}
               >
                 {member.name}
+                {member.note && <span className="ml-1.5 text-xs text-muted-foreground">{member.note}</span>}
               </button>
             </li>
           ))}

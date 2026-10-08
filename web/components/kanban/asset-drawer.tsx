@@ -12,6 +12,7 @@ import { EditAssetDialog } from "./EditAssetDialog";
 import { AssetHistory } from "./AssetHistory";
 import { LinkedArtifacts } from "./LinkedArtifacts";
 import { RobloxLinksSection } from "./RobloxLinksSection";
+import { AssetComments } from "./AssetComments";
 import { CURATION_NOTE_KEY } from "@/lib/assets/curation-note";
 import { CurationNoteBox } from "./CurationNoteBox";
 import { HandInFinalFilesLink, NotifyUploaderButton, FinalFilesList } from "./FinalFilesActions";
@@ -111,6 +112,9 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
         {showBusiness && LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
           <RobloxLinksSection sku={asset.sku} enabled={open} />
         )}
+
+        {/* Near the top so open issues on the card are seen first. */}
+        {viewerCapabilities.canViewAllAssets && <AssetComments sku={asset.sku} enabled={open} />}
 
         {/* 1. Basic Details */}
         <section className="space-y-2">
