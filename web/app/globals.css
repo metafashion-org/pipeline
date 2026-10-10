@@ -260,3 +260,16 @@
   scrollbar-width: thin;
   scrollbar-color: var(--input) transparent;
 }
+
+/* The shadcn textarea sizes itself to its content (field-sizing: content), so a long unbroken URL
+   made its minimum width the whole URL. Dialogs lay out as a grid whose column grows to fit that, so
+   the form widened past the dialog and Save went off-screen to the right. Breaking long words inside
+   textareas, and letting dialog and sheet children shrink, keeps every form inside its panel. */
+textarea[data-slot="textarea"] {
+  overflow-wrap: anywhere;
+}
+
+[data-slot="dialog-content"] > *,
+[data-slot="sheet-content"] > * {
+  min-width: 0;
+}
