@@ -9,6 +9,7 @@ import { BrandGroupsManager } from "@/components/settings/BrandGroupsManager";
 import { CategoriesManager } from "@/components/settings/CategoriesManager";
 import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
 import { TaskSheetManager } from "@/components/settings/TaskSheetManager";
+import { TeamRhythmCard } from "@/components/settings/TeamRhythmCard";
 import { TrialRunCard } from "@/components/settings/TrialRunCard";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -52,6 +53,7 @@ export default async function SettingsPage() {
         <TrialRunCard />
         <BrandGroupsManager />
         <CategoriesManager />
+        <TeamRhythmCard />
         <TaskSheetManager />
         <ApiKeysManager />
         <SettingsManager initialStatuses={statuses} initialRules={rules} initialCurationFields={curationFields} />

@@ -25,6 +25,7 @@ export function TeamTaskCard({
   onOpen,
   onToggleDone,
   onToggleToday,
+  planName = "today",
   dragHandle,
   className,
 }: {
@@ -39,6 +40,8 @@ export function TeamTaskCard({
   onOpen: () => void;
   onToggleDone: () => void;
   onToggleToday?: () => void;
+  /** The day the sun button plans for: "today", "tomorrow" or e.g. "Mon 12 Oct". */
+  planName?: string;
   /** The drag handle's listeners, when the card can be reordered. */
   dragHandle?: HTMLAttributes<HTMLButtonElement>;
   className?: string;
@@ -82,8 +85,8 @@ export function TeamTaskCard({
             type="button"
             onClick={onToggleToday}
             className={cn("shrink-0 rounded p-0.5", inToday ? "text-amber-400" : "text-muted-foreground/50 opacity-0 group-hover:opacity-100 focus:opacity-100")}
-            title={inToday ? "Take off today's plan" : "Add to today's plan"}
-            aria-label={inToday ? `Take ${task.title} off today's plan` : `Add ${task.title} to today's plan`}
+            title={inToday ? `Take off the plan for ${planName}` : `Add to the plan for ${planName}`}
+            aria-label={inToday ? `Take ${task.title} off the plan for ${planName}` : `Add ${task.title} to the plan for ${planName}`}
           >
             {inToday ? <Sun className="h-3.5 w-3.5" /> : <SunDim className="h-3.5 w-3.5" />}
           </button>

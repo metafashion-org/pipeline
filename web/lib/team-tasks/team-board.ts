@@ -79,9 +79,11 @@ export interface BoardTask {
 
 export interface TeamBoard {
   today: string;
+  /** The day the plans are for: today, or a later day someone is planning ahead. */
+  planDay: string;
   members: TeamMember[];
   tasks: BoardTask[];
-  /** Today's plans: each person's picks, in order. */
+  /** The plans for planDay: each person's picks, in order. */
   plans: { personnelId: string; taskId: string; position: number }[];
 }
 
@@ -153,11 +155,12 @@ async function decorateTasks(rows: (typeof teamTasks.$inferSelect)[]): Promise<B
 
 /**
  * Everything the Team Tasks board shows: the full-time team, every open task, the tasks finished
- * today, and today's plans. Tasks finished before today are left off; search still finds them.
+ * today, and the plans for one day (today unless someone is planning ahead). Tasks finished before
+ * today are left off; search still finds them.
  *
- * Input: today's day. Output: the board.
+ * Input: today's day, who is looking, and the day to show plans for. Output: the board.
  */
-export async function getTeamBoard(today: string, viewerId: string | null): Promise<TeamBoard> {
+export async function getTeamBoard(today: string, viewerId: string | null, planDay: string = today): Promise<TeamBoard> {
   const { start } = teamDayBounds(today);
   const [members, rows, plans] = await Promise.all([
     listTeamMembers(),
@@ -169,10 +172,10 @@ export async function getTeamBoard(today: string, viewerId: string | null): Prom
     db
       .select({ personnelId: teamTaskDayPlans.personnelId, taskId: teamTaskDayPlans.taskId, position: teamTaskDayPlans.position })
       .from(teamTaskDayPlans)
-      .where(eq(teamTaskDayPlans.planOn, today))
+      .where(eq(teamTaskDayPlans.planOn, planDay))
       .orderBy(asc(teamTaskDayPlans.position)),
   ]);
-  return { today, members, tasks: await decorateTasks(rows), plans };
+  return { today, planDay, members, tasks: await decorateTasks(rows), plans };
 }
 
 export interface TeamTaskLinkView {
@@ -475,4 +478,40 @@ export async function listTasksLinkedToArtifact(artifactId: string, viewerId: st
     .innerJoin(personnel, eq(personnel.id, teamTasks.ownerId))
     .where(and(eq(teamTaskLinks.artifactId, artifactId), visibleTo(viewerId)))
     .orderBy(desc(teamTasks.createdAt));
+}
+
+export interface TaskCalendarEntry {
+  /** "plan": on someone's plan that day. "due": the task's deadline. */
+  kind: "plan" | "due";
+  day: string;
+  taskId: string;
+  title: string;
+  personnelId: string;
+  done: boolean;
+}
+
+/**
+ * The Team Tasks calendar for a range of days: every planned day of every task, and every due
+ * date, so the plan (the day someone will work on it) and the deadline (the day it must be in by)
+ * sit side by side without being mixed up. Private tasks show only to the people who can see them.
+ *
+ * Input: the first and last day, "YYYY-MM-DD", inclusive, and who is looking. Output: the entries.
+ */
+export async function getTaskCalendar(from: string, to: string, viewerId: string | null): Promise<TaskCalendarEntry[]> {
+  const [plans, dues] = await Promise.all([
+    db
+      .select({ day: teamTaskDayPlans.planOn, taskId: teamTasks.id, title: teamTasks.title, personnelId: teamTaskDayPlans.personnelId, status: teamTasks.status })
+      .from(teamTaskDayPlans)
+      .innerJoin(teamTasks, eq(teamTasks.id, teamTaskDayPlans.taskId))
+      .where(and(gte(teamTaskDayPlans.planOn, from), sql`${teamTaskDayPlans.planOn} <= ${to}`, visibleTo(viewerId)))
+      .orderBy(asc(teamTaskDayPlans.position)),
+    db
+      .select({ day: teamTasks.dueOn, taskId: teamTasks.id, title: teamTasks.title, personnelId: teamTasks.ownerId, status: teamTasks.status })
+      .from(teamTasks)
+      .where(and(isNotNull(teamTasks.dueOn), gte(teamTasks.dueOn, from), sql`${teamTasks.dueOn} <= ${to}`, visibleTo(viewerId))),
+  ]);
+  return [
+    ...plans.map((p) => ({ kind: "plan" as const, day: p.day, taskId: p.taskId, title: p.title, personnelId: p.personnelId, done: p.status === DONE_STATUS })),
+    ...dues.map((d) => ({ kind: "due" as const, day: d.day as string, taskId: d.taskId, title: d.title, personnelId: d.personnelId, done: d.status === DONE_STATUS })),
+  ];
 }

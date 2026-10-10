@@ -37,9 +37,9 @@ export function updateTask(taskId: string, patch: Record<string, unknown>): Prom
   return send(`/api/team/tasks/${taskId}`, "PATCH", patch, "Couldn't save that change");
 }
 
-/** Sets a person's plan for today, first to last. */
-export function setTodayPlan(personnelId: string, taskIds: string[]): Promise<boolean> {
-  return send("/api/team/plan", "PUT", { personnelId, taskIds }, "Couldn't save today's plan");
+/** Sets a person's plan for a day ("YYYY-MM-DD"), first to last. */
+export function setDayPlan(personnelId: string, planOn: string, taskIds: string[]): Promise<boolean> {
+  return send("/api/team/plan", "PUT", { personnelId, taskIds, planOn }, "Couldn't save the plan");
 }
 
 /** Sets the order of a person's open tasks, most important first. */
