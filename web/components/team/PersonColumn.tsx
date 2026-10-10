@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { DONE_STATUS } from "@/lib/team-tasks/task-rules";
 import type { TeamMember } from "@/lib/team-tasks/team-members";
 import { TeamTaskCard } from "./TeamTaskCard";
-import type { BoardView, TaskView } from "./team-types";
+import { planDayName, type BoardView, type TaskView } from "./team-types";
 
 // The two lists in a column that cards can be dragged within and between.
 const TODAY_LIST = "today";
@@ -115,6 +115,7 @@ export function PersonColumn({
   // The parent remounts the column (key) whenever the board's lists change.
   const [lists, setLists] = useState<Record<ListKey, string[]>>({ [TODAY_LIST]: computed.todayIds, [NEXT_LIST]: computed.nextIds });
   const byId = new Map(board.tasks.map((t) => [t.id, t]));
+  const dayName = planDayName(board.planDay, board.today);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
   function listOf(id: string): ListKey | null {
@@ -176,6 +177,7 @@ export function PersonColumn({
         onOpen={() => onOpen(task.id)}
         onToggleDone={() => onToggleDone(task)}
         onToggleToday={() => toggleToday(task.id)}
+        planName={dayName}
         dragHandle={handle}
       />
     );
@@ -193,9 +195,9 @@ export function PersonColumn({
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <Section title="Today">
+        <Section title={dayName.charAt(0).toUpperCase() + dayName.slice(1)}>
           <SortableContext id={TODAY_LIST} items={lists[TODAY_LIST]} strategy={verticalListSortingStrategy}>
-            <DropList id={TODAY_LIST} empty={lists[TODAY_LIST].length === 0 ? "Nothing planned yet. Drag tasks here or tap the sun on a card." : ""}>
+            <DropList id={TODAY_LIST} empty={lists[TODAY_LIST].length === 0 ? `Nothing planned for ${dayName} yet. Drag tasks here or tap the sun on a card.` : ""}>
               {lists[TODAY_LIST].map((id, index) => (
                 <SortableTask key={id} id={id}>
                   {(handle) => card(id, TODAY_LIST, handle, index)}
@@ -230,6 +232,7 @@ export function PersonColumn({
               onOpen={() => onOpen(task.id)}
               onToggleDone={() => onToggleDone(task)}
               onToggleToday={() => toggleToday(task.id)}
+              planName={dayName}
             />
           ))}
         </Section>

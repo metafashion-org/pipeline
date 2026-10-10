@@ -3,14 +3,15 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DOING_STATUS, DONE_STATUS } from "@/lib/team-tasks/task-rules";
-import type { BoardView, TaskView } from "./team-types";
+import { planDayName, type BoardView, type TaskView } from "./team-types";
 
 /**
- * The row across the top of Team Tasks: for each person, what they're doing right now and their
- * plan for today in order, with what's finished ticked.
+ * The row across the top of Team Tasks: for each person, what they're doing right now, whether
+ * they've sent today's EOD, and their plan for the picked day in order, with what's finished ticked.
  */
 export function TodayStrip({ board, onOpen }: { board: BoardView; onOpen: (taskId: string) => void }) {
   const byId = new Map(board.tasks.map((t) => [t.id, t]));
+  const dayName = planDayName(board.planDay, board.today);
   return (
     <div className="flex gap-3 overflow-x-auto pb-1">
       {board.members.map((member) => {
@@ -20,7 +21,15 @@ export function TodayStrip({ board, onOpen }: { board: BoardView; onOpen: (taskI
         return (
           <div key={member.id} className="w-[260px] shrink-0 rounded-lg border bg-card p-3">
             <div className="flex items-baseline justify-between gap-2">
-              <p className="truncate text-sm font-semibold">{member.name}</p>
+              <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold">
+                {member.name}
+                <span
+                  className={cn("shrink-0 rounded px-1 text-[10px] font-medium", board.eodSentIds.includes(member.id) ? "bg-emerald-500/15 text-emerald-400" : "bg-muted text-muted-foreground")}
+                  title={board.eodSentIds.includes(member.id) ? "Sent today's EOD" : `EOD due at ${board.eodDueTime}`}
+                >
+                  {board.eodSentIds.includes(member.id) ? "EOD sent" : "No EOD yet"}
+                </span>
+              </p>
               {plan.length > 0 && (
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {doneCount}/{plan.length} done
@@ -39,7 +48,7 @@ export function TodayStrip({ board, onOpen }: { board: BoardView; onOpen: (taskI
               )}
             </p>
             {plan.length === 0 ? (
-              <p className="mt-2 text-xs text-muted-foreground">No plan for today yet.</p>
+              <p className="mt-2 text-xs text-muted-foreground">No plan for {dayName} yet.</p>
             ) : (
               <ol className="mt-2 space-y-0.5">
                 {plan.map((task, index) => (

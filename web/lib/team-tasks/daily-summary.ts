@@ -5,11 +5,13 @@ import { auditLog } from "@/lib/db/schema/audit_log";
 import { enqueueEmail, sendDueEmails } from "@/lib/email/queue-worker";
 import { renderEmailLayout, EMAIL_TONE, type EmailDetailRow } from "@/lib/email/templates/email-layout";
 import { appUrl } from "@/lib/app-url";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 import { postToOfficeChannel } from "@/lib/discord/office-channel";
 import { getTeamBoard } from "./team-board";
 import type { TeamMember } from "./team-members";
 import { BLOCKED_STATUS, DOING_STATUS, DONE_STATUS, STALE_AFTER_DAYS, taskSignals, teamDay } from "./task-rules";
+import { getTeamRhythm } from "./team-rhythm";
+import { isFirstWorkDayOfWeek, isLateEod, lastWeekEodLines, listEods, type EodReport } from "./eod-service";
 
 // The day the summary last went out, so a retried cron run doesn't send it twice.
 const SUMMARY_SENT_SETTING_KEY = "team_summary_last_sent_on";
@@ -28,6 +30,12 @@ export interface PersonDaySummary {
   staleCount: number;
   /** Today's counted work, e.g. curate 38 of 45, focus Christmas. */
   counted: { title: string; focus: string | null; doneCount: number; targetCount: number }[];
+  /** The EOD they wrote today, or null when they didn't send one. */
+  eod: EodReport | null;
+  /** Sent after the EOD due time. */
+  eodLate: boolean;
+  /** On the first work day of a week: last week's EOD record, e.g. "4 of 6 sent, 3 on time". */
+  lastWeek: string | null;
 }
 
 /**
@@ -38,8 +46,10 @@ export interface PersonDaySummary {
  */
 export async function buildDailySummary(today: string, now: Date): Promise<PersonDaySummary[]> {
   // Posted to #office and emailed to the whole team, so private tasks stay out.
-  const board = await getTeamBoard(today, null);
+  const [board, eods, rhythm] = await Promise.all([getTeamBoard(today, null), listEods(today), getTeamRhythm()]);
+  const lastWeek = isFirstWorkDayOfWeek(today, rhythm) ? await lastWeekEodLines(today, board.members, rhythm) : null;
   return board.members.map((member) => {
+    const eod = eods.get(member.id) ?? null;
     const own = board.tasks.filter((t) => t.ownerId === member.id);
     const byId = new Map(board.tasks.map((t) => [t.id, t]));
     const plan = board.plans.filter((p) => p.personnelId === member.id).map((p) => byId.get(p.taskId));
@@ -53,6 +63,9 @@ export async function buildDailySummary(today: string, now: Date): Promise<Perso
       counted: own
         .filter((t) => t.targetCount !== null && t.occurrenceOn === today)
         .map((t) => ({ title: t.title, focus: t.focus, doneCount: t.doneCount, targetCount: t.targetCount as number })),
+      eod,
+      eodLate: eod ? isLateEod(eod, rhythm) : false,
+      lastWeek: lastWeek?.get(member.id) ?? null,
     };
   });
 }
@@ -61,9 +74,26 @@ function countedLine(c: PersonDaySummary["counted"][number]): string {
   return `${c.title}: ${c.doneCount} of ${c.targetCount}${c.focus ? ` (${c.focus})` : ""}`;
 }
 
-// The summary as labelled lines, the same for Discord and email. Empty sections are left out.
+// The person's EOD in their own words, then what the board shows, as labelled lines.
+function eodLines(summary: PersonDaySummary): { label: string; value: string }[] {
+  const { eod } = summary;
+  if (!eod) return [{ label: "EOD", value: "Not sent" }];
+  const sent = `Sent ${formatDateTime(eod.submittedAt)}${summary.eodLate ? " (late)" : ""}`;
+  const fields: [string, string][] = [
+    ["Done", eod.done],
+    ["Slipped", eod.slipped],
+    ["Blockers", eod.blockers],
+    ["Needs", eod.needFromManager],
+    ["Next, tied to", eod.nextOutcome],
+  ];
+  return [{ label: "EOD", value: sent }, ...fields.filter(([, value]) => value).map(([label, value]) => ({ label: `EOD ${label.toLowerCase()}`, value }))];
+}
+
+// The summary as labelled lines, the same for Discord and email: the EOD first, then the board.
+// Empty sections are left out.
 function summaryLines(summary: PersonDaySummary): { label: string; value: string }[] {
-  const lines: { label: string; value: string }[] = [];
+  const lines: { label: string; value: string }[] = [...eodLines(summary)];
+  if (summary.lastWeek) lines.push({ label: "Last week's EODs", value: summary.lastWeek });
   if (summary.counted.length > 0) lines.push({ label: "Counted", value: summary.counted.map(countedLine).join("; ") });
   if (summary.done.length > 0) lines.push({ label: `Done (${summary.done.length})`, value: summary.done.join("; ") });
   if (summary.doing.length > 0) lines.push({ label: "Doing", value: summary.doing.join("; ") });
@@ -73,6 +103,16 @@ function summaryLines(summary: PersonDaySummary): { label: string; value: string
   }
   if (summary.staleCount > 0) lines.push({ label: `Not updated in ${STALE_AFTER_DAYS}+ days`, value: `${summary.staleCount} task${summary.staleCount === 1 ? "" : "s"}` });
   return lines;
+}
+
+// The email's opening line: who didn't send an EOD and whose was late, by name.
+function missingEodIntro(summaries: PersonDaySummary[]): string {
+  const missing = summaries.filter((s) => !s.eod).map((s) => s.member.name);
+  const late = summaries.filter((s) => s.eod && s.eodLate).map((s) => s.member.name);
+  const parts = ["Here is everyone's EOD in their own words, then what the board shows they finished, are on, and are stuck on."];
+  if (missing.length > 0) parts.push(`No EOD from: ${missing.join(", ")}.`);
+  if (late.length > 0) parts.push(`Late: ${late.join(", ")}.`);
+  return parts.join(" ");
 }
 
 function truncate(text: string, maxChars: number): string {
@@ -106,7 +146,7 @@ export async function sendDailySummary(today: string, now: Date): Promise<{ sent
   const memberDiscordIds = summaries.map((s) => s.member.discordUserId).filter((id): id is string => Boolean(id));
 
   await postToOfficeChannel({
-    content: `Team Tasks for ${dayLabel}. Open the board: ${boardUrl}`,
+    content: `Team Tasks for ${dayLabel}. ${missingEodIntro(summaries)} Open the board: ${boardUrl}`,
     embeds: summaries.map((summary) => {
       const lines = summaryLines(summary);
       return {
@@ -136,10 +176,10 @@ export async function sendDailySummary(today: string, now: Date): Promise<{ sent
       { label: "Done today", value: String(summaries.reduce((sum, s) => sum + s.done.length, 0)) },
       { label: "Blocked", value: String(summaries.reduce((sum, s) => sum + s.blocked.length, 0)) },
     ],
-    intro: "Here is what everyone finished today, what they're on, and what's stuck.",
+    intro: missingEodIntro(summaries),
     details,
     button: { label: "Open Team Tasks", url: boardUrl },
-    footer: "Sent at 7 pm by Team Tasks on the Meta Fashion pipeline.",
+    footer: "Sent every evening by Team Tasks on the Meta Fashion pipeline.",
   });
   try {
     for (const summary of summaries) {

@@ -15,9 +15,9 @@ import { formatDate, formatDateTime } from "@/lib/format-date";
 import { areaLabel, statusLabel, BLOCKED_STATUS, DONE_STATUS, TEAM_TASK_AREAS, TEAM_TASK_STATUSES } from "@/lib/team-tasks/task-rules";
 import type { TeamMember } from "@/lib/team-tasks/team-members";
 import { MentionInput } from "./MentionInput";
-import { addComment, addLink, addSubtask, deleteSubtask, removeLink, setTodayPlan, updateSubtask, updateTask } from "./team-actions";
+import { addComment, addLink, addSubtask, deleteSubtask, removeLink, setDayPlan, updateSubtask, updateTask } from "./team-actions";
 import { detailWithSubtask, detailWithTask } from "./optimistic";
-import { taskDetailUrl, type BoardView, type LinkOptionsView, type TaskDetailView } from "./team-types";
+import { planDayName, taskDetailUrl, type BoardView, type LinkOptionsView, type TaskDetailView } from "./team-types";
 import { LinkifiedText } from "@/components/LinkifiedText";
 
 // A Select can't hold an empty value, so "nobody" has its own.
@@ -179,6 +179,8 @@ export function TaskSheet({
   const { task } = data;
   const ownerPlan = board.plans.filter((p) => p.personnelId === task.ownerId).map((p) => p.taskId);
   const inOwnersToday = ownerPlan.includes(task.id);
+  // The board's picked plan day: today, or a later day being planned ahead.
+  const dayName = planDayName(board.planDay, board.today);
   const patch = (fields: Record<string, unknown>) =>
     saveShown(
       () => updateTask(task.id, fields),
@@ -310,10 +312,10 @@ export function TaskSheet({
           <Button
             variant={inOwnersToday ? "secondary" : "outline"}
             size="sm"
-            onClick={() => setTodayPlan(task.ownerId, inOwnersToday ? ownerPlan.filter((id) => id !== task.id) : [...ownerPlan, task.id]).then(after)}
+            onClick={() => setDayPlan(task.ownerId, board.planDay, inOwnersToday ? ownerPlan.filter((id) => id !== task.id) : [...ownerPlan, task.id]).then(after)}
           >
             {inOwnersToday ? <Sun className="h-3.5 w-3.5 text-amber-400" /> : <SunDim className="h-3.5 w-3.5" />}
-            {inOwnersToday ? `In ${names.get(task.ownerId) ?? "the owner"}'s plan today` : `Add to ${names.get(task.ownerId) ?? "the owner"}'s plan today`}
+            {inOwnersToday ? `In ${names.get(task.ownerId) ?? "the owner"}'s plan for ${dayName}` : `Add to ${names.get(task.ownerId) ?? "the owner"}'s plan for ${dayName}`}
           </Button>
         )}
 

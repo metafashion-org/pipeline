@@ -1,0 +1,22 @@
+name: Team rhythm
+
+# Every 15 minutes, asks the app whether the EOD reminder or the evening summary is due
+# (web/app/api/cron/team-rhythm/route.ts). The times live in Settings, so they can change without a
+# deploy; Vercel's Hobby plan runs crons once a day, which is why the schedule lives here. The
+# endpoint needs no secret: each step goes out at most once a day, only after its time.
+# GitHub runs scheduled workflows late when its runners are busy, so a step can land some minutes
+# after its time. Vercel's own 13:30 UTC call to /api/cron/team-summary still sends a 7 pm summary on time.
+
+on:
+  schedule:
+    # 11:30 to 16:45 UTC = 17:00 to 22:15 IST, the only hours either step can be due.
+    - cron: "*/15 11-16 * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send what's due
+        # --fail-with-body fails the run (and GitHub emails the repo owner) when the app errors.
+        run: curl --fail-with-body --silent --show-error https://kanban.metafashion.in/api/cron/team-rhythm

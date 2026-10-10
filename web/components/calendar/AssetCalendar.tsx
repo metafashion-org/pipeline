@@ -42,7 +42,7 @@ const EVENT_STYLES: Record<EventType, { label: string; dot: string; chip: string
 };
 
 const EVENT_TYPES: EventType[] = ["deadline", "planned_upload", "went_live"];
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Every day is placed on its India date, where the team works, whatever the viewer's own timezone.
 const istDayKey = new Intl.DateTimeFormat("en-CA", {
@@ -51,21 +51,21 @@ const istDayKey = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 });
-const monthTitle = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+export const monthTitle = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
 
 // Plain calendar-date arithmetic on YYYY-MM-DD strings, done in UTC so no timezone shifts a day.
-function addDays(dayKey: string, days: number): string {
+export function addDays(dayKey: string, days: number): string {
   const d = new Date(`${dayKey}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
-function todayKey(): string {
+export function todayKey(): string {
   return istDayKey.format(new Date());
 }
 
 /** The days the month grid shows: Monday on or before the 1st, through the Sunday on or after the last day. */
-function gridDays(monthKey: string): string[] {
+export function gridDays(monthKey: string): string[] {
   const first = `${monthKey}-01`;
   const mondayOffset = (new Date(`${first}T00:00:00Z`).getUTCDay() + 6) % 7;
   const start = addDays(first, -mondayOffset);
@@ -80,7 +80,7 @@ function gridDays(monthKey: string): string[] {
   return days;
 }
 
-function shiftMonth(monthKey: string, months: number): string {
+export function shiftMonth(monthKey: string, months: number): string {
   const d = new Date(`${monthKey}-01T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() + months);
   return d.toISOString().slice(0, 7);
