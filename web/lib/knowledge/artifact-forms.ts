@@ -43,6 +43,9 @@ export interface ArtifactFormField {
   help?: string;
   /** "link" only: a file can be uploaded instead of pasting a link. */
   uploadable?: boolean;
+  /** "link" only: the link must be a Google Doc. Registry files are Docs, never PDFs: a Doc can't
+   *  carry malware the way an uploaded file can, and stays readable to the company domain only. */
+  googleDocOnly?: boolean;
   /** "files" only: each file gets a note saying what it is. */
   withNotes?: boolean;
 }
@@ -68,9 +71,10 @@ const DOC_LINK_FIELD: ArtifactFormField = {
   key: "fileUrl",
   column: "fileUrl",
   kind: "link",
-  label: "Doc link",
+  label: "Google Doc link",
   required: true,
-  placeholder: "https://docs.google.com/...",
+  googleDocOnly: true,
+  placeholder: "https://docs.google.com/document/d/...",
 };
 
 /** The forms, in the order the type picker lists them. */
@@ -94,7 +98,7 @@ export const ARTIFACT_FORMS: ArtifactForm[] = [
       { ...TITLE_FIELD, label: "Trend name", placeholder: "e.g. Christmas 2026" },
       { key: "season", column: "details", kind: "text", label: "Season or drop", placeholder: "e.g. November to December" },
       { key: "description", column: "description", kind: "textarea", label: "What the trend is" },
-      { key: "fileUrl", column: "fileUrl", kind: "link", label: "Brief link", uploadable: true, placeholder: "Doc, sheet or deck" },
+      { ...DOC_LINK_FIELD, label: "Brief (Google Doc)", required: false },
     ],
   },
   {
@@ -137,15 +141,15 @@ export const ARTIFACT_FORMS: ArtifactForm[] = [
         withNotes: true,
         help: "Each image or file you gave it, with a note on what it is.",
       },
-      { key: "fileUrl", column: "fileUrl", kind: "link", label: "Output link", uploadable: true },
+      { ...DOC_LINK_FIELD, label: "Output (Google Doc)", required: false },
     ],
   },
   {
     prefix: "ANA",
-    summary: "Findings from a sheet, doc, PDF or AI chat, and when to use them.",
+    summary: "Findings written up in a Google Doc, and when to use them.",
     fields: [
       TITLE_FIELD,
-      { key: "fileUrl", column: "fileUrl", kind: "link", label: "Link or file", required: true, uploadable: true, placeholder: "Sheet, doc, PDF or chat link" },
+      { ...DOC_LINK_FIELD, label: "Findings (Google Doc)" },
       { key: "description", column: "description", kind: "textarea", label: "Key findings" },
       { key: "usageNotes", column: "usageNotes", kind: "textarea", label: "When to use it" },
     ],
@@ -171,7 +175,7 @@ export const ARTIFACT_FORMS: ArtifactForm[] = [
 const FALLBACK_FIELDS: ArtifactFormField[] = [
   TITLE_FIELD,
   { key: "description", column: "description", kind: "textarea", label: "Description" },
-  { key: "fileUrl", column: "fileUrl", kind: "link", label: "Link", uploadable: true },
+  { ...DOC_LINK_FIELD, label: "Google Doc link", required: false },
   { key: "usageNotes", column: "usageNotes", kind: "textarea", label: "Usage notes" },
   { key: "tags", column: "tags", kind: "tags", label: "Tags", placeholder: "comma, separated" },
 ];
@@ -195,6 +199,17 @@ const httpUrl = z
   .max(MAX_URL_CHARS)
   .refine((value) => /^https?:\/\/\S+$/i.test(value), "must be a link starting with http:// or https://");
 
+// A Google Doc's address: docs.google.com/document/... A Drive file link (drive.google.com/file/...),
+// which is how an uploaded PDF is shared, doesn't match.
+const GOOGLE_DOC_PATTERN = /^https:\/\/docs\.google\.com\/document\/(u\/\d+\/)?d\/[A-Za-z0-9_-]+/i;
+
+/** Whether a link is a Google Doc, the only file a Registry item may link to. */
+export function isGoogleDocLink(url: string): boolean {
+  return GOOGLE_DOC_PATTERN.test(url.trim());
+}
+
+const googleDocUrl = httpUrl.refine(isGoogleDocLink, "must be a Google Doc link (docs.google.com/document/...). PDFs and other files aren't accepted");
+
 const fileEntry = z.object({
   url: httpUrl,
   name: z.string().trim().min(1).max(MAX_SHORT_TEXT_CHARS),
@@ -210,6 +225,7 @@ function valueSchema(field: ArtifactFormField): z.ZodType<unknown> {
     case "textarea":
       return z.string().trim().max(MAX_LONG_TEXT_CHARS);
     case "link":
+      return field.googleDocOnly ? googleDocUrl : httpUrl;
     case "recolorFolder":
       return httpUrl;
     case "date":
