@@ -51,7 +51,13 @@ function testRequiredAndInvalidValuesAreRefused() {
   assert.deepStrictEqual(noText, { ok: false, error: "The insight is required" });
 
   const badLink = parseArtifactSubmission(formForPrefix("CD"), { title: "Doc", fileUrl: "docs.google.com/xyz" });
-  assert.ok(!badLink.ok && badLink.error.startsWith("Doc link"), "A link without http(s) is refused");
+  assert.ok(!badLink.ok && badLink.error.startsWith("Google Doc link"), "A link without http(s) is refused");
+  const pdf = parseArtifactSubmission(formForPrefix("PRM"), { title: "Scanner", description: "Prompt", fileUrl: "https://example.com/scan.pdf" });
+  assert.ok(!pdf.ok && pdf.error.includes("Google Doc"), "A PDF can't be a prompt's output");
+  const driveFile = parseArtifactSubmission(formForPrefix("ANA"), { title: "Scan", fileUrl: "https://drive.google.com/file/d/1MYKYWXGtQOZlHdxZPrvA5516Vwj9A5TQ/view" });
+  assert.ok(!driveFile.ok, "A Drive file link (how uploaded PDFs are shared) is refused");
+  const doc = parseArtifactSubmission(formForPrefix("ANA"), { title: "Scan", fileUrl: "https://docs.google.com/document/d/1GCaClArRCTKN_R0nKZGyPlhuKV28eRU31R6rte5tdb4/edit" });
+  assert.ok(doc.ok, "A Google Doc is accepted");
 
   const badDate = parseArtifactSubmission(formForPrefix("INS"), { title: "T", description: "D", seenOn: "2 Sep" });
   assert.ok(!badDate.ok && badDate.error.startsWith("Date seen"), "A date that isn't YYYY-MM-DD is refused");

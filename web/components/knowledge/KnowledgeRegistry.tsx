@@ -154,6 +154,7 @@ export function KnowledgeRegistry({
           setOpenId(null);
           mutate();
         }}
+        onChanged={() => mutate()}
       >
         {openArtifact && <LinkedTeamTasks key={openArtifact.id} artifactId={openArtifact.id} artifactTitle={openArtifact.title} />}
       </ArtifactDetailSheet>

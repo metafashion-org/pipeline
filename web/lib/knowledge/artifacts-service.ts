@@ -7,7 +7,7 @@ import { eq, asc, and, isNull, sql, type SQL } from "drizzle-orm";
 import { artifactSkuLinks } from "@/lib/db/schema/artifact_sku_links";
 import { alias } from "drizzle-orm/pg-core";
 import { claimNextArtifactId } from "./artifact-id-service";
-import { TREND_BRIEF_PREFIX } from "./artifact-forms";
+import { isGoogleDocLink, TREND_BRIEF_PREFIX } from "./artifact-forms";
 
 // Replaces the old hardcoded 4-type prefix map (tech_spec/mannequin_rig/
 // recruiting_faq/style_guide) and the old ID format ("SPEC-0001", found by
@@ -162,4 +162,33 @@ export async function getKnowledgeArtifacts(artifactTypeId?: string) {
     .leftJoin(personnel, eq(personnel.id, knowledgeArtifacts.addedBy))
     .where(and(...conditions))
     .orderBy(asc(knowledgeArtifacts.createdAt));
+}
+
+export class ArtifactLinkError extends Error {}
+
+/**
+ * Changes the Google Doc an artifact links to, e.g. when the old file was deleted or replaced.
+ *
+ * Input: the artifact's row id, the new Doc link, and who changed it. Output: nothing. Throws
+ * ArtifactLinkError for a link that isn't a Google Doc, ArtifactNotFoundError for no such artifact.
+ */
+export async function updateArtifactDocLink(id: string, url: string, actorId: string | null): Promise<void> {
+  const link = url.trim();
+  if (!isGoogleDocLink(link)) throw new ArtifactLinkError("Use a Google Doc link (docs.google.com/document/...). PDFs and other files aren't accepted.");
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ fileUrl: knowledgeArtifacts.fileUrl, artifactId: knowledgeArtifacts.artifactId })
+      .from(knowledgeArtifacts)
+      .where(and(eq(knowledgeArtifacts.id, id), activeArtifact()))
+      .limit(1);
+    if (!before) throw new ArtifactNotFoundError(`No artifact ${id} in the Registry`);
+    await tx.update(knowledgeArtifacts).set({ fileUrl: link, updatedAt: new Date() }).where(eq(knowledgeArtifacts.id, id));
+    await tx.insert(auditLog).values({
+      action: "updateArtifactFileUrl",
+      entityType: "knowledge_artifact",
+      entityId: id,
+      actorId,
+      payload: { artifactId: before.artifactId, from: before.fileUrl, to: link },
+    });
+  });
 }

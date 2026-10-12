@@ -2,7 +2,8 @@
 
 import { useState, type ReactNode } from "react";
 import useSWR from "swr";
-import { Archive, ExternalLink, Link2 } from "lucide-react";
+import { Archive, ExternalLink, FileText, Link2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,7 @@ import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import { formatDate } from "@/lib/format-date";
 import { extractDriveFileId } from "@/lib/assets/drive-links";
-import { formForPrefix, type ArtifactFile, type ArtifactFormField } from "@/lib/knowledge/artifact-forms";
+import { formForPrefix, isGoogleDocLink, type ArtifactFile, type ArtifactFormField } from "@/lib/knowledge/artifact-forms";
 import type { RegistryArtifactView } from "@/lib/dashboard/views";
 import { LinkifiedText } from "@/components/LinkifiedText";
 
@@ -122,6 +123,7 @@ export function ArtifactDetailSheet({
   onOpenChange,
   onManageLinks,
   onArchived,
+  onChanged,
   children,
 }: {
   artifact: RegistryArtifactView | null;
@@ -130,6 +132,8 @@ export function ArtifactDetailSheet({
   onOpenChange: (open: boolean) => void;
   onManageLinks: (artifact: RegistryArtifactView) => void;
   onArchived: () => void;
+  /** Called after an edit in the drawer (e.g. the linked Doc), so the Registry reloads. */
+  onChanged?: () => void;
   /** Extra sections from other features, e.g. the Team Tasks that link to this artifact. */
   children?: ReactNode;
 }) {
@@ -181,11 +185,17 @@ export function ArtifactDetailSheet({
           </SheetDescription>
         </SheetHeader>
 
-        {shownFields.map((field) => (
-          <Row key={field.key} label={field.label}>
-            <FieldValue field={field} value={fieldValue(artifact, field)} />
-          </Row>
-        ))}
+        {shownFields
+          .filter((field) => !field.googleDocOnly)
+          .map((field) => (
+            <Row key={field.key} label={field.label}>
+              <FieldValue field={field} value={fieldValue(artifact, field)} />
+            </Row>
+          ))}
+
+        {form.fields.some((field) => field.googleDocOnly) && (
+          <DocLinkEditor key={`${artifact.id}:${artifact.fileUrl ?? ""}`} artifactId={artifact.id} url={artifact.fileUrl} onSaved={() => onChanged?.()} />
+        )}
 
         {artifact.trendArtifactId && artifact.trendTitle && (
           <Row label="Trend it came from">
@@ -260,5 +270,65 @@ export function ArtifactDetailSheet({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * The Google Doc an artifact links to, with Change to swap it. A link that isn't a Google Doc (an
+ * older PDF or Drive file) is flagged so it gets replaced; only Docs are accepted as the new link.
+ */
+function DocLinkEditor({ artifactId, url, onSaved }: { artifactId: string; url: string | null; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(url ?? "");
+  const [saving, setSaving] = useState(false);
+  const notADoc = Boolean(url) && !isGoogleDocLink(url as string);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const { ok, data } = await apiCall(`/api/admin/knowledge/artifacts/${artifactId}/doc-link`, { method: "PUT", body: { url: value } });
+      if (!ok) {
+        toast.error(data.error || "Couldn't save the link");
+        return;
+      }
+      toast.success("Linked Doc updated");
+      setEditing(false);
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Row label="Linked Google Doc">
+      {editing ? (
+        <span className="flex flex-col gap-2">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://docs.google.com/document/d/..." autoFocus />
+          <span className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs" onClick={save} disabled={saving || !value.trim()}>
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </span>
+        </span>
+      ) : (
+        <span className="flex flex-col gap-1.5">
+          {url ? (
+            <ExternalAnchor href={url}>
+              <FileText className="mr-1 inline h-3.5 w-3.5" />
+              {url}
+            </ExternalAnchor>
+          ) : (
+            <span className="text-muted-foreground">No Doc linked yet.</span>
+          )}
+          {notADoc && <span className="text-xs text-amber-400">This links to a file, not a Google Doc. Replace it with a Doc.</span>}
+          <Button size="sm" variant="outline" className="h-7 w-fit text-xs" onClick={() => setEditing(true)}>
+            {url ? "Change" : "Add Doc link"}
+          </Button>
+        </span>
+      )}
+    </Row>
   );
 }
