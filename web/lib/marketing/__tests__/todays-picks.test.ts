@@ -31,7 +31,7 @@ function listing(overrides: Partial<PreviewListing>): PreviewListing {
 }
 
 function check(name: string, isForSale: boolean, ourOnSale = true) {
-  return { checkedAt: "2026-10-13T00:00:00Z", isForSale, priceRobux: 100, robloxName: name, creatorName: "UGC Items", ourOnSale, error: null };
+  return { checkedAt: "2026-10-13T00:00:00Z", isForSale, priceRobux: 100, robloxName: name, creatorName: "UGC Items", assetTypeId: 46, ourOnSale, error: null };
 }
 
 function testBlockers() {
@@ -40,7 +40,7 @@ function testBlockers() {
   for (const name of ["Red Christmas Reindeer Backpack", "christmas 3.0 snowman body"]) assert.ok(!isPlaceholderName(name), `${name} is a real name`);
 
   const ready = readinessBlockers({
-    artifacts: [{ artifactId: "TR006", title: "Christmas" }],
+    artifacts: [{ artifactId: "TR006", title: "Christmas", description: null, tags: [] }],
     listings: [listing({ id: "a", isMain: true, lastCheck: check("Red Bow Parasol", true) }), listing({ id: "b", variantLabel: "Blue", lastCheck: check("Blue Bow Parasol", true) })],
   });
   assert.deepStrictEqual(ready, [], "A checked, labelled, distinctly named family with a main listing and artifacts has no blockers");
@@ -171,6 +171,10 @@ function fakeGoogle() {
       }
       state.tabs = next;
     },
+    readRows: async (_id, range) => {
+      assert.strictEqual(range, "'Suggestions'!A2:G", "Only Suggestions is read");
+      return state.tabs.find((t) => t.title === "Suggestions")?.cells.slice(1) ?? [];
+    },
     appendRows: async (_id, range, rows) => {
       assert.ok(range.startsWith("'Sync log'"), "Only the log is appended to");
       state.log.push(...rows);
@@ -188,6 +192,7 @@ function previewOf(count: number) {
       status: "uploaded_to_roblox",
       brandGroup: null,
       artifacts: [],
+      trendReasoning: null,
       referenceImageCount: 0,
       listings: [listing({ id: `L${i}`, lastCheck: check(`Item ${i}`, true) })],
       blockers: ["No main listing chosen"],

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { isTodaysPicksOwner, listTodaysPicksPreview } from "@/lib/marketing/todays-picks-service";
 import { getTodaysPicksSheet } from "@/lib/marketing/todays-picks-sheet";
+import { nominationSummaries } from "@/lib/marketing/nomination-service";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,6 @@ export async function GET() {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isTodaysPicksOwner(user.email)) return NextResponse.json({ error: "Today's Picks is Arjun's own workflow" }, { status: 403 });
-  const [items, sheet] = await Promise.all([listTodaysPicksPreview(), getTodaysPicksSheet()]);
-  return NextResponse.json({ items, sheetUrl: sheet?.url ?? null });
+  const [items, sheet, nominations] = await Promise.all([listTodaysPicksPreview(), getTodaysPicksSheet(), nominationSummaries()]);
+  return NextResponse.json({ items, sheetUrl: sheet?.url ?? null, nominations: Object.fromEntries(nominations) });
 }

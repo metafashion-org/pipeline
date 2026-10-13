@@ -13,13 +13,12 @@ import { brandGroups } from "@/lib/db/schema/brand_groups";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 import { fetchListingDetails, fetchThumbnails } from "./roblox-catalog";
+import { MAX_FINAL_NAME_CHARS } from "./nomination-fields";
 
 // One Roblox request per second while checking, well under Roblox's anonymous limits.
 const CHECK_GAP_MS = 1000;
 // HTTP 429: Roblox asks us to slow down, so the check stops and the rest wait for the next one.
 const TOO_MANY_REQUESTS = 429;
-// Roblox names longer than this can't be a final name (Arjun's rule: under 50 characters).
-export const MAX_FINAL_NAME_CHARS = 49;
 // Upload placeholders such as "belt 1", "headband_3", "SantaHat 4": one word, then a number.
 const PLACEHOLDER_NAME_PATTERN = /^[a-z]+[\s_-]*\d+$/i;
 
@@ -39,6 +38,7 @@ export interface ListingCheckView {
   priceRobux: number | null;
   robloxName: string | null;
   creatorName: string | null;
+  assetTypeId: number | null;
   ourOnSale: boolean;
   error: string | null;
 }
@@ -59,7 +59,9 @@ export interface PreviewItem {
   itemName: string;
   status: string;
   brandGroup: string | null;
-  artifacts: { artifactId: string; title: string }[];
+  artifacts: { artifactId: string; title: string; description: string | null; tags: string[] }[];
+  // brief_fields.trendReasoning: where the trend came from, written at curation.
+  trendReasoning: string | null;
   referenceImageCount: number;
   listings: PreviewListing[];
   blockers: string[];
@@ -118,6 +120,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       status: assets.currentStatus,
       brandGroup: brandGroups.name,
       referenceImages: assets.referenceImages,
+      briefFields: assets.briefFields,
       id: uploadRecords.id,
       url: uploadRecords.robloxItemUrl,
       robloxAssetId: uploadRecords.robloxAssetId,
@@ -137,7 +140,13 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
   const [checks, artifactRows, thumbnails] = await Promise.all([
     db.select().from(robloxListingChecks).where(inArray(robloxListingChecks.uploadRecordId, listingIds)).orderBy(desc(robloxListingChecks.checkedAt)),
     db
-      .select({ assetId: artifactSkuLinks.assetId, artifactId: knowledgeArtifacts.artifactId, title: knowledgeArtifacts.title })
+      .select({
+        assetId: artifactSkuLinks.assetId,
+        artifactId: knowledgeArtifacts.artifactId,
+        title: knowledgeArtifacts.title,
+        description: knowledgeArtifacts.description,
+        tags: knowledgeArtifacts.tags,
+      })
       .from(artifactSkuLinks)
       .innerJoin(knowledgeArtifacts, eq(knowledgeArtifacts.id, artifactSkuLinks.artifactId))
       .where(inArray(artifactSkuLinks.assetId, assetIds)),
@@ -154,6 +163,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       priceRobux: c.priceRobux,
       robloxName: c.robloxName,
       creatorName: c.creatorName,
+      assetTypeId: c.assetTypeId,
       ourOnSale: c.ourOnSale,
       error: c.error,
     });
@@ -166,7 +176,10 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       itemName: r.itemName,
       status: r.status,
       brandGroup: r.brandGroup,
-      artifacts: artifactRows.filter((a) => a.assetId === r.assetId).map(({ artifactId, title }) => ({ artifactId, title })),
+      artifacts: artifactRows
+        .filter((a) => a.assetId === r.assetId)
+        .map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
+      trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
       referenceImageCount: Array.isArray(r.referenceImages) ? r.referenceImages.length : 0,
       listings: [],
       blockers: [],

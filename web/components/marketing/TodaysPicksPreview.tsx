@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import type { PreviewItem, PreviewListing } from "@/lib/marketing/todays-picks-service";
+import { NominationPanel } from "./NominationPanel";
 
 const PREVIEW_URL = "/api/admin/marketing/todays-picks";
 const THUMBNAIL_PX = 160;
@@ -16,6 +17,7 @@ const THUMBNAIL_PX = 160;
 interface PreviewResponse {
   items: PreviewItem[];
   sheetUrl: string | null;
+  nominations: Record<string, { state: string; finalName: string; submittedAt: string | null; attemptNo: number }>;
 }
 
 function formatCheckTime(iso: string): string {
@@ -111,6 +113,7 @@ export function TodaysPicksPreview() {
   const [busySku, setBusySku] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [openSku, setOpenSku] = useState<string | null>(null);
 
   async function setMain(sku: string, listing: PreviewListing) {
     setBusySku(sku);
@@ -166,9 +169,9 @@ export function TodaysPicksPreview() {
   async function syncSheet() {
     setSyncing(true);
     try {
-      const { ok, data: res } = await apiCall<{ error?: string; items: number; listings: number }>(`${PREVIEW_URL}/sheet`, { method: "POST" });
+      const { ok, data: res } = await apiCall<{ error?: string; items: number; listings: number; suggestions: { added: number; refused: number } }>(`${PREVIEW_URL}/sheet`, { method: "POST" });
       if (!ok) toast.error(res.error || "Sheet sync failed");
-      else toast.success(`Sheet updated: ${res.items} SKUs, ${res.listings} listings`);
+      else toast.success(`Sheet updated: ${res.items} SKUs, ${res.listings} listings, ${res.suggestions.added} new suggestions${res.suggestions.refused ? `, ${res.suggestions.refused} refused (see Sync log)` : ""}`);
       await mutate();
     } finally {
       setSyncing(false);
@@ -213,10 +216,16 @@ export function TodaysPicksPreview() {
                 {item.artifacts.length > 0 ? item.artifacts.map((a) => a.artifactId).join(", ") : "no artifacts"} · {item.referenceImageCount} reference images
               </p>
             </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!busySku} onClick={() => checkOne(item.sku)}>
-              <RefreshCw className={`mr-1 h-3 w-3 ${busySku === item.sku ? "animate-spin" : ""}`} />
-              Check on Roblox
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="self-center rounded bg-muted px-1.5 py-0.5 text-[11px]">Nomination: {data.nominations[item.sku]?.state ?? "not started"}</span>
+              <Button size="sm" variant={openSku === item.sku ? "default" : "outline"} className="h-7 text-xs" onClick={() => setOpenSku(openSku === item.sku ? null : item.sku)}>
+                {openSku === item.sku ? "Close nomination" : "Nomination"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!busySku} onClick={() => checkOne(item.sku)}>
+                <RefreshCw className={`mr-1 h-3 w-3 ${busySku === item.sku ? "animate-spin" : ""}`} />
+                Check on Roblox
+              </Button>
+            </div>
           </div>
           {item.blockers.length > 0 && (
             <ul className="list-inside list-disc text-xs text-amber-700 dark:text-amber-400">
@@ -225,6 +234,7 @@ export function TodaysPicksPreview() {
               ))}
             </ul>
           )}
+          {openSku === item.sku && <NominationPanel sku={item.sku} onChanged={() => mutate()} />}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             {item.listings.map((listing, index) => (
               <ListingTile key={listing.id} listing={listing} index={index} busy={busySku === item.sku} onMain={() => setMain(item.sku, listing)} />
