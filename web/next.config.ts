@@ -37,6 +37,12 @@ const nextConfig: NextConfig = {
         hostname: "drive.google.com",
         pathname: "/thumbnail",
       },
+      {
+        // Roblox listing thumbnails on the Today's Picks preview (lib/marketing/roblox-catalog.ts).
+        protocol: "https",
+        hostname: "tr.rbxcdn.com",
+        pathname: "**",
+      },
     ],
   },
 };

@@ -1,8 +1,10 @@
 import { getAuthedUser } from "@/lib/auth/authed-user";
+import { isTodaysPicksOwner } from "@/lib/marketing/todays-picks-service";
 import { getMarketingViewSafe } from "@/lib/dashboard/views";
 import { MarketingTracker } from "@/components/marketing/MarketingTracker";
 import { NotOnSaleList } from "@/components/marketing/NotOnSaleList";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -23,6 +25,13 @@ export default async function AdminMarketingPage() {
       <PageHeader
         title="Marketing"
         description="Posts and promotion status for assets that have reached Roblox."
+        actions={
+          isTodaysPicksOwner(user.email) ? (
+            <Link href="/admin/marketing/todays-picks" className="text-sm text-primary hover:underline">
+              Today&apos;s Picks preview
+            </Link>
+          ) : null
+        }
       />
 
       <main className="flex-1 overflow-hidden p-6">
