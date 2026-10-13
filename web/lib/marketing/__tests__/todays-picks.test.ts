@@ -31,7 +31,7 @@ function listing(overrides: Partial<PreviewListing>): PreviewListing {
 }
 
 function check(name: string, isForSale: boolean, ourOnSale = true) {
-  return { checkedAt: "2026-10-13T00:00:00Z", isForSale, priceRobux: 100, robloxName: name, creatorName: "UGC Items", ourOnSale, error: null };
+  return { checkedAt: "2026-10-13T00:00:00Z", isForSale, priceRobux: 100, robloxName: name, creatorName: "UGC Items", assetTypeId: 46, ourOnSale, error: null };
 }
 
 function testBlockers() {
@@ -40,7 +40,7 @@ function testBlockers() {
   for (const name of ["Red Christmas Reindeer Backpack", "christmas 3.0 snowman body"]) assert.ok(!isPlaceholderName(name), `${name} is a real name`);
 
   const ready = readinessBlockers({
-    artifacts: [{ artifactId: "TR006", title: "Christmas" }],
+    artifacts: [{ artifactId: "TR006", title: "Christmas", description: null, tags: [] }],
     listings: [listing({ id: "a", isMain: true, lastCheck: check("Red Bow Parasol", true) }), listing({ id: "b", variantLabel: "Blue", lastCheck: check("Blue Bow Parasol", true) })],
   });
   assert.deepStrictEqual(ready, [], "A checked, labelled, distinctly named family with a main listing and artifacts has no blockers");
@@ -156,7 +156,7 @@ function fakeGoogle() {
       const next = structuredClone(state.tabs);
       const byId = (id: number) => next.find((t) => t.sheetId === id)!;
       for (const req of requests as FakeRequest[]) {
-        if (req.addSheet) next.push({ sheetId: next.length + 100, title: req.addSheet.properties.title, rowCount: 1000, cells: [] });
+        if (req.addSheet) next.push({ sheetId: Math.max(...next.map((t) => t.sheetId)) + 1, title: req.addSheet.properties.title, rowCount: 1000, cells: [] });
         else if (req.appendDimension) byId(req.appendDimension.sheetId).rowCount += req.appendDimension.length;
         else if (req.updateCells?.range) {
           const tab = byId(req.updateCells.range.sheetId);
@@ -170,6 +170,10 @@ function fakeGoogle() {
         }
       }
       state.tabs = next;
+    },
+    readRows: async (_id, range) => {
+      assert.strictEqual(range, "'Suggestions'!A2:G", "Only Suggestions is read");
+      return state.tabs.find((t) => t.title === "Suggestions")?.cells.slice(1) ?? [];
     },
     appendRows: async (_id, range, rows) => {
       assert.ok(range.startsWith("'Sync log'"), "Only the log is appended to");
@@ -188,6 +192,7 @@ function previewOf(count: number) {
       status: "uploaded_to_roblox",
       brandGroup: null,
       artifacts: [],
+      trendReasoning: null,
       referenceImageCount: 0,
       listings: [listing({ id: `L${i}`, lastCheck: check(`Item ${i}`, true) })],
       blockers: ["No main listing chosen"],
@@ -250,6 +255,12 @@ async function testSheet() {
   const refused = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
   assert.match(refused.reason.message, /Another sync is running/);
   assert.strictEqual(g.state.log.length, logBefore + 1, "The run that ran logged once; the refused one never touched the sheet");
+
+  // Tabs deleted by hand come back on the next sync, each with its header, and the rest keep their rows.
+  g.state.tabs = g.state.tabs.filter((t) => t.title !== "Suggestions" && t.title !== "Items");
+  await syncTodaysPicksSheet(null, g.client, previewOf(2));
+  assert.deepStrictEqual(g.tab("Suggestions").cells, [SUGGESTIONS_HEADER], "Suggestions is recreated with only its header");
+  assert.strictEqual(g.tab("Items").cells.length, 3, "Items is recreated and filled");
 
   // A lock left by a run that died is taken over once its lease has passed.
   await db.insert(appSettings).values({ key: "todays_picks_sheet_lock", value: "dead-run", updatedAt: new Date(Date.now() - 10 * 60 * 1000) });

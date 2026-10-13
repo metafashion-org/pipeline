@@ -10,8 +10,9 @@
 // Tabs:
 // - Items, Listings: the Kanban's. Each sync replaces their rows in one spreadsheets.batchUpdate,
 //   which Google applies whole or not at all, so a failed sync leaves the previous rows in place.
-// - Suggestions: for the assistant's suggestions. The Kanban never writes, clears or reads it in
-//   this stage, and nothing in it can change a nomination.
+// - Suggestions: the assistant's suggestions. The Kanban only reads it, never writes or clears it.
+//   Each valid new row is stored as a suggestion Arjun can use or dismiss; none changes a draft or
+//   marks anything submitted by itself (lib/marketing/nomination-service.ts ingestSuggestions).
 // - Sync log: one appended row per sync attempt, ok or failed.
 // One sync runs at a time (a lease in app_settings); a second one at the same moment is refused.
 
@@ -22,6 +23,14 @@ import { appSettings } from "@/lib/db/schema/app_settings";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { GOOGLE_SHEET_CLIENT, type FileAccess, type SheetClient, type SheetRequest, type SheetTab } from "./google-sheet-access";
 import { listTodaysPicksPreview, TODAYS_PICKS_OWNER_EMAIL, TodaysPicksError, type PreviewItem } from "./todays-picks-service";
+import { ingestSuggestions, nominationSummaries } from "./nomination-service";
+
+export interface NominationSummary {
+  state: string;
+  finalName: string;
+  submittedAt: string | null;
+  attemptNo: number;
+}
 
 const SHEET_SETTING_KEY = "todays_picks_sheet";
 const LOCK_SETTING_KEY = "todays_picks_sheet_lock";
@@ -31,7 +40,23 @@ export const ITEMS_TAB = "Items";
 export const LISTINGS_TAB = "Listings";
 export const SUGGESTIONS_TAB = "Suggestions";
 export const LOG_TAB = "Sync log";
-export const ITEMS_HEADER = ["sku", "item_name", "status", "brand_group", "listings", "on_sale", "main_listing_id", "artifacts", "reference_images", "blockers", "synced_at"];
+export const ITEMS_HEADER = [
+  "sku",
+  "item_name",
+  "status",
+  "brand_group",
+  "listings",
+  "on_sale",
+  "main_listing_id",
+  "artifacts",
+  "reference_images",
+  "blockers",
+  "final_name",
+  "nomination_state",
+  "nomination_attempt",
+  "submitted_at",
+  "synced_at",
+];
 export const LISTINGS_HEADER = [
   "sku",
   "listing_id",
@@ -151,7 +176,7 @@ export async function connectTodaysPicksSheet(input: string, actorId: string | n
 }
 
 /** Input: preview items and the sync time. Output: the Items and Listings rows, without headers. */
-export function sheetRows(items: PreviewItem[], syncedAt: string): { items: string[][]; listings: string[][] } {
+export function sheetRows(items: PreviewItem[], syncedAt: string, nominations: Map<string, NominationSummary> = new Map()): { items: string[][]; listings: string[][] } {
   const yesNo = (v: boolean | null | undefined) => (v === null || v === undefined ? "" : v ? "yes" : "no");
   return {
     items: items.map((item) => [
@@ -165,6 +190,10 @@ export function sheetRows(items: PreviewItem[], syncedAt: string): { items: stri
       item.artifacts.map((a) => `${a.artifactId} ${a.title}`).join("; "),
       String(item.referenceImageCount),
       item.blockers.join("; "),
+      nominations.get(item.sku)?.finalName ?? "",
+      nominations.get(item.sku)?.state ?? "not started",
+      nominations.get(item.sku) ? String(nominations.get(item.sku)!.attemptNo) : "",
+      nominations.get(item.sku)?.submittedAt ?? "",
       syncedAt,
     ]),
     listings: items.flatMap((item) =>
@@ -191,16 +220,17 @@ export function sheetRows(items: PreviewItem[], syncedAt: string): { items: stri
 }
 
 /**
- * The requests that replace one Kanban tab's data rows: grow the grid if needed, clear every row
- * under the header, then write the new rows. They go out inside the sync's single batchUpdate.
+ * The requests that replace one Kanban tab: grow the grid if needed, clear the whole tab, then
+ * write the header and the rows. The header is rewritten too, so a column added here reaches a
+ * sheet connected before it existed. They go out inside the sync's single batchUpdate.
  */
-export function replaceRowsRequests(tab: SheetTab, rows: string[][]): SheetRequest[] {
+export function replaceRowsRequests(tab: SheetTab, header: string[], rows: string[][]): SheetRequest[] {
   const neededRows = rows.length + 1;
   const requests: SheetRequest[] = [];
   if (neededRows > tab.rowCount) requests.push({ appendDimension: { sheetId: tab.sheetId, dimension: "ROWS", length: neededRows - tab.rowCount } });
   // updateCells with a range and no rows clears those fields in the range.
-  requests.push({ updateCells: { range: { sheetId: tab.sheetId, startRowIndex: 1 }, fields: "userEnteredValue" } });
-  if (rows.length > 0) requests.push({ updateCells: { start: { sheetId: tab.sheetId, rowIndex: 1, columnIndex: 0 }, rows: rows.map(textRow), fields: "userEnteredValue" } });
+  requests.push({ updateCells: { range: { sheetId: tab.sheetId, startRowIndex: 0 }, fields: "userEnteredValue" } });
+  requests.push({ updateCells: { start: { sheetId: tab.sheetId, rowIndex: 0, columnIndex: 0 }, rows: [header, ...rows].map(textRow), fields: "userEnteredValue" } });
   return requests;
 }
 
@@ -232,7 +262,7 @@ export async function syncTodaysPicksSheet(
   actorId: string | null,
   google: SheetClient = GOOGLE_SHEET_CLIENT,
   loadItems: () => Promise<PreviewItem[]> = listTodaysPicksPreview
-): Promise<{ url: string; items: number; listings: number }> {
+): Promise<{ url: string; items: number; listings: number; suggestions: { added: number; known: number; refused: number } }> {
   const config = await getTodaysPicksSheet();
   if (!config) throw new TodaysPicksError("Connect the sheet first");
   const token = randomUUID();
@@ -246,11 +276,21 @@ export async function syncTodaysPicksSheet(
     isPrivate = true;
     const tabs = await ensureTabs(google, config.sheetId);
     const tab = (title: string) => tabs.find((t) => t.title === title)!;
-    const rows = sheetRows(await loadItems(), syncedAt);
-    await google.batchUpdate(config.sheetId, [...replaceRowsRequests(tab(ITEMS_TAB), rows.items), ...replaceRowsRequests(tab(LISTINGS_TAB), rows.listings)]);
-    await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "ok", String(rows.items.length), String(rows.listings.length), ""]]);
-    await db.insert(auditLog).values({ action: "syncTodaysPicksSheet", entityType: "todays_picks_sheet", entityId: null, actorId, payload: { items: rows.items.length, listings: rows.listings.length } });
-    return { url: config.url, items: rows.items.length, listings: rows.listings.length };
+    const items = await loadItems();
+
+    // Suggestions are read and stored first; the tab itself is never written.
+    const suggestionRows = (await google.readRows(config.sheetId, `'${SUGGESTIONS_TAB}'!A2:G`)).map((r) => {
+      const [sku = "", listingId = "", field = "", value = "", evidence = "", suggestedBy = "", suggestedAt = ""] = r;
+      return { sku, listingId, field, value, evidence, suggestedBy, suggestedAt };
+    });
+    const suggestions = await ingestSuggestions(suggestionRows.filter((r) => r.sku || r.field || r.value), items);
+
+    const rows = sheetRows(items, syncedAt, await nominationSummaries());
+    await google.batchUpdate(config.sheetId, [...replaceRowsRequests(tab(ITEMS_TAB), ITEMS_HEADER, rows.items), ...replaceRowsRequests(tab(LISTINGS_TAB), LISTINGS_HEADER, rows.listings)]);
+    const refusedNote = suggestions.refused.map((r) => `Suggestions row ${r.row}: ${r.reason}`).join("; ");
+    await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "ok", String(rows.items.length), String(rows.listings.length), refusedNote]]);
+    await db.insert(auditLog).values({ action: "syncTodaysPicksSheet", entityType: "todays_picks_sheet", entityId: null, actorId, payload: { items: rows.items.length, listings: rows.listings.length, suggestions } });
+    return { url: config.url, items: rows.items.length, listings: rows.listings.length, suggestions: { added: suggestions.added, known: suggestions.known, refused: suggestions.refused.length } };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
     if (isPrivate) await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "failed", "", "", message]]).catch(() => undefined);

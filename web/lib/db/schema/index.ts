@@ -54,3 +54,5 @@ export * from "./asset_signoffs";
 export * from "./asset_comments";
 export * from "./eod_reports";
 export * from "./roblox_listing_checks";
+export * from "./nomination_drafts";
+export * from "./marketing_suggestions";

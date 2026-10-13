@@ -41,6 +41,8 @@ export interface SheetClient {
   batchUpdate: (sheetId: string, requests: SheetRequest[]) => Promise<void>;
   /** values.append: adds rows after the last row with data, without reading it first. */
   appendRows: (sheetId: string, range: string, rows: string[][]) => Promise<void>;
+  /** values.get: the cells of an A1 range as rows of strings. */
+  readRows: (sheetId: string, range: string) => Promise<string[][]>;
 }
 
 let cachedAuth: JWT | null = null;
@@ -102,6 +104,10 @@ export const GOOGLE_SHEET_CLIENT: SheetClient = {
   },
   async batchUpdate(sheetId, requests) {
     await googleFetch(`${SHEETS_API}/${encodeURIComponent(sheetId)}:batchUpdate`, { method: "POST", body: JSON.stringify({ requests }) });
+  },
+  async readRows(sheetId, range) {
+    const data = await googleFetch(`${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}`);
+    return ((data.values as string[][] | undefined) ?? []).map((row) => row.map((cell) => String(cell ?? "")));
   },
   async appendRows(sheetId, range, rows) {
     await googleFetch(`${SHEETS_API}/${encodeURIComponent(sheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
