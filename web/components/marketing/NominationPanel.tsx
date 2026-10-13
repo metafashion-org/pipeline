@@ -94,7 +94,7 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
     run({ action: "approve", draftId: data.draft!.id, field }, "POST", field === "final_name" ? "Name approved" : "Colour links approved");
   const confirm = async () => {
     if (!data.draft || !window.confirm("Record that you filed this nomination on Roblox's form yourself? The Kanban can't verify it with Roblox.")) return;
-    const ok = await run({ action: "confirm", draftId: data.draft.id, rightsConfirmed: rights, evidence: proof || null }, "POST", "Filing recorded");
+    const ok = await run({ action: "confirm", draftId: data.draft.id, version: data.draft.version, rightsConfirmed: rights, evidence: proof || null }, "POST", "Filing recorded");
     if (ok) {
       setRights(false);
       setProof("");

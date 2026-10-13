@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
@@ -141,6 +141,7 @@ async function seed() {
 
 const events = async (draftId: string, kind: string) => (await db.select().from(nominationEvents).where(and(eq(nominationEvents.draftId, draftId), eq(nominationEvents.kind, kind)))).length;
 const comments = async () => db.select().from(teamTaskComments).where(eq(teamTaskComments.taskId, MARKETING_TASK_ID));
+const version = async (draftId: string) => (await db.select().from(nominationDrafts).where(eq(nominationDrafts.id, draftId)))[0].updatedAt.toISOString();
 const draftState = async (draftId: string) => (await db.select().from(nominationDrafts).where(eq(nominationDrafts.id, draftId)))[0].state;
 
 async function testFlow() {
@@ -159,13 +160,52 @@ async function testFlow() {
   assert.strictEqual(await events(draftId, "saved"), 1, "Saving unchanged answers records nothing");
   assert.ok((await getNomination(SKU)).problems.some((p) => p.message === "Approve the final name"), "Saving never approves");
 
+  // A name word that no artifact or trend origin contains can't be approved.
+  await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol Deluxe" }, owner.id);
+  await assert.rejects(approveField(SKU, draftId, "final_name", owner.id), /aren't in any linked artifact or the trend origin: deluxe/);
+  await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol" }, owner.id);
+
   await approveField(SKU, draftId, "final_name", owner.id);
   await approveField(SKU, draftId, "colour_links", owner.id);
-  await assert.rejects(confirmSubmitted(SKU, { draftId, rightsConfirmed: false, evidence: null }, owner.id), TodaysPicksError, "No confirmation without the rights answer");
+  await assert.rejects(confirmSubmitted(SKU, { draftId, version: await version(draftId), rightsConfirmed: false, evidence: null }, owner.id), TodaysPicksError, "No confirmation without the rights answer");
+
+  // Edited after review: the version Arjun saw is stale, so confirming it records nothing.
+  const reviewed = await version(draftId);
+  await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol", tags: "christmas, parasol, umbrella" }, owner.id);
+  await assert.rejects(confirmSubmitted(SKU, { draftId, version: reviewed, rightsConfirmed: true, evidence: null }, owner.id), /changed after you reviewed it/);
+  assert.strictEqual(await draftState(draftId), "draft");
+  assert.strictEqual(await events(draftId, "owner_confirmed_filed"), 0);
+
+  // An edit racing a confirmation: whichever wins, a filing never records answers other than the
+  // ones it was confirmed with, and the loser fails cleanly.
+  for (let round = 0; round < 5; round++) {
+    const seen = await version(draftId);
+    const tags = `christmas, parasol, round ${round}`;
+    const [edit, confirm] = await Promise.allSettled([
+      saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol", tags }, owner.id),
+      confirmSubmitted(SKU, { draftId, version: seen, rightsConfirmed: true, evidence: null }, owner.id),
+    ]);
+    assert.ok(edit.status === "rejected" || confirm.status === "rejected", "An edit and a confirmation of the old version can't both succeed");
+    const [row] = await db.select().from(nominationDrafts).where(eq(nominationDrafts.id, draftId));
+    if (row.state === "submitted") {
+      const [filedEvent] = await db.select().from(nominationEvents).where(and(eq(nominationEvents.draftId, draftId), eq(nominationEvents.kind, "owner_confirmed_filed"))).orderBy(desc(nominationEvents.createdAt)).limit(1);
+      assert.deepStrictEqual(filedEvent.payload.fields, row.fields, "The filed answers are exactly the stored ones");
+      assert.notStrictEqual((row.fields as Record<string, string>).tags, tags, "The racing edit was not recorded as filed");
+      await undoSubmitted(SKU, draftId, "Test race round reset", owner.id);
+    } else {
+      assert.strictEqual(confirm.status, "rejected", "Still a draft means the confirmation was refused");
+    }
+  }
+  // Put back the reviewed answers and approvals for the rest of the test.
+  await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol" }, owner.id);
+  await approveField(SKU, draftId, "colour_links", owner.id);
+  await db.delete(teamTaskComments).where(eq(teamTaskComments.taskId, MARKETING_TASK_ID));
+  await db.delete(nominationEvents).where(and(eq(nominationEvents.draftId, draftId), inArray(nominationEvents.kind, ["owner_confirmed_filed", "confirmation_undone"])));
+  await db.delete(auditLog).where(eq(auditLog.entityId, asset.id));
 
   // Failure: the task update fails (task missing), so nothing of the confirmation is kept.
   await db.delete(teamTasks).where(eq(teamTasks.id, MARKETING_TASK_ID));
-  await assert.rejects(confirmSubmitted(SKU, { draftId, rightsConfirmed: true, evidence: null }, owner.id));
+  await assert.rejects(confirmSubmitted(SKU, { draftId, version: await version(draftId), rightsConfirmed: true, evidence: null }, owner.id));
   assert.strictEqual(await draftState(draftId), "draft", "Rolled back: still a draft");
   assert.strictEqual(await events(draftId, "owner_confirmed_filed"), 0, "Rolled back: no history event");
   const audits = await db.select().from(auditLog).where(and(eq(auditLog.entityId, asset.id), eq(auditLog.action, "confirmTodaysPicksNomination")));
@@ -173,7 +213,8 @@ async function testFlow() {
   await db.insert(teamTasks).values({ id: MARKETING_TASK_ID, title: "Marketing company function", area: "marketing", ownerId: owner.id, isPrivate: true });
 
   // Two confirmations at once: one filing, one event, one task update.
-  const both = await Promise.all([1, 2].map(() => confirmSubmitted(SKU, { draftId, rightsConfirmed: true, evidence: "Confirmation page seen" }, owner.id)));
+  const current = await version(draftId);
+  const both = await Promise.all([1, 2].map(() => confirmSubmitted(SKU, { draftId, version: current, rightsConfirmed: true, evidence: "Confirmation page seen" }, owner.id)));
   assert.strictEqual(both.filter((r) => !r.alreadyRecorded).length, 1);
   assert.strictEqual(await events(draftId, "owner_confirmed_filed"), 1);
   assert.strictEqual((await comments()).length, 1);
@@ -188,7 +229,7 @@ async function testFlow() {
   assert.strictEqual(await draftState(draftId), "draft");
 
   // Re-confirm keeps both confirmations and the correction in history.
-  await confirmSubmitted(SKU, { draftId, rightsConfirmed: true, evidence: null }, owner.id);
+  await confirmSubmitted(SKU, { draftId, version: await version(draftId), rightsConfirmed: true, evidence: null }, owner.id);
   assert.strictEqual(await events(draftId, "owner_confirmed_filed"), 2, "Both confirmations are kept");
   assert.strictEqual(await events(draftId, "confirmation_undone"), 1);
   const bodies = (await comments()).map((c) => c.body);

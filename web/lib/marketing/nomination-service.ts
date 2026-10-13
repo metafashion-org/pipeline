@@ -85,7 +85,8 @@ export interface DraftProblem {
 export interface NominationView {
   sku: string;
   itemName: string;
-  draft: { id: string; attemptNo: number; state: string; fields: DraftFields; approvals: NominationApprovals; submittedAt: string | null; submissionEvidence: string | null } | null;
+  // version: the draft's updatedAt, sent back on confirmation so only the answers Arjun saw are recorded.
+  draft: { id: string; version: string; attemptNo: number; state: string; fields: DraftFields; approvals: NominationApprovals; submittedAt: string | null; submissionEvidence: string | null } | null;
   history: { attemptNo: number; state: string; submittedAt: string | null }[];
   proposed: DraftFields;
   nameTerms: NameTerm[];
@@ -132,6 +133,25 @@ export function nameTerms(item: PreviewItem): NameTerm[] {
     .map(([term, from]) => ({ term, sources: [...from] }))
     .sort((a, b) => b.sources.length - a.sources.length || a.term.localeCompare(b.term))
     .slice(0, MAX_NAME_TERMS);
+}
+
+// Every word the linked artifacts and the trend origin contain, for checking a name against them.
+function evidenceWords(item: PreviewItem): Set<string> {
+  const texts = item.artifacts.map((a) => [a.title, a.description ?? "", a.tags.join(" ")].join(" "));
+  if (item.trendReasoning) texts.push(item.trendReasoning);
+  return new Set(texts.flatMap(words));
+}
+
+/**
+ * The words of a name that no linked artifact or trend origin contains. A name can be approved
+ * only when this is empty, so every meaningful word is traceable to evidence. Filler words and
+ * words under 3 letters are not checked.
+ *
+ * Input: the name and the SKU's preview. Output: the unsupported words, in name order.
+ */
+export function unsupportedNameWords(name: string, item: PreviewItem): string[] {
+  const known = evidenceWords(item);
+  return words(name).filter((w) => !known.has(w));
 }
 
 /** True when the SKU has artifacts or a trend origin to ground a name in. */
@@ -229,6 +249,7 @@ export function draftProblems(fields: DraftFields, approvals: NominationApproval
   if (!name) problems.push({ field: "final_name", message: "Set a final name from the evidence" });
   else if (name.length > FIELD_LIMITS.final_name) problems.push({ field: "final_name", message: `Final name is ${name.length} characters; the limit is ${FIELD_LIMITS.final_name}` });
   else if (isPlaceholderName(name)) problems.push({ field: "final_name", message: "Final name looks like a placeholder" });
+  else if (unsupportedNameWords(name, item).length) problems.push({ field: "final_name", message: `Not in any artifact or the trend origin: ${unsupportedNameWords(name, item).join(", ")}` });
   else if (approvals.final_name?.value !== name) problems.push({ field: "final_name", message: "Approve the final name" });
 
   const link = parseRobloxCatalogLink(v("item_link"));
@@ -326,6 +347,7 @@ export async function getNomination(sku: string): Promise<NominationView> {
     itemName: item.itemName,
     draft: draft && {
       id: draft.id,
+      version: draft.updatedAt.toISOString(),
       attemptNo: draft.attemptNo,
       state: draft.state,
       fields: draft.fields as DraftFields,
@@ -366,7 +388,9 @@ export async function saveDraft(sku: string, fields: DraftFields, actorId: strin
   if (latest && latest.state !== "draft") throw new TodaysPicksError("This SKU's nomination is recorded as filed. Undo the confirmation first if it was wrong");
   return db.transaction(async (tx) => {
     if (latest) {
-      if (hashOf(latest.fields) === hashOf(clean)) return latest.id;
+      const [locked] = await tx.select().from(nominationDrafts).where(eq(nominationDrafts.id, latest.id)).for("update");
+      if (locked.state !== "draft") throw new TodaysPicksError("This SKU's nomination is recorded as filed. Undo the confirmation first if it was wrong");
+      if (hashOf(locked.fields) === hashOf(clean)) return latest.id;
       const updated = await tx
         .update(nominationDrafts)
         .set({ fields: clean, updatedAt: new Date() })
@@ -402,6 +426,8 @@ export async function approveField(sku: string, draftId: string, field: Approvab
   if (field === "final_name") {
     if (!hasNameEvidence(item)) throw new TodaysPicksError("Link an artifact or add a trend origin before approving a name");
     if (!value || value.length > MAX_FINAL_NAME_CHARS || isPlaceholderName(value)) throw new TodaysPicksError(`Save a real final name of at most ${MAX_FINAL_NAME_CHARS} characters first`);
+    const unsupported = unsupportedNameWords(value, item);
+    if (unsupported.length) throw new TodaysPicksError(`These words aren't in any linked artifact or the trend origin: ${unsupported.join(", ")}`);
   } else {
     const colourProblems = draftProblems(fields, { colour_links: { value, by: null, at: "" } }, item).filter((p) => p.field === "colour_links");
     if (colourProblems.length) throw new TodaysPicksError(colourProblems.map((p) => p.message).join("; "));
@@ -420,45 +446,44 @@ export async function approveField(sku: string, draftId: string, field: Approvab
 
 /**
  * Records Arjun's own confirmation that he filed this nomination on Roblox's form. It is not
- * verified with Roblox, and it covers the form's item page only. Refuses unless every check passes
- * and he confirms he answered the rights question himself. The state change, its history event,
- * the audit row and the private-task comment are one transaction: all are saved or none is.
- * Confirming the same draft twice, even at the same moment, records it once.
+ * verified with Roblox, and it covers the form's item page only.
  *
- * Input: the SKU, the draft id, the rights confirmation, optional proof, who confirmed.
+ * The draft row is locked (SELECT ... FOR UPDATE) for the whole transaction, and its version must
+ * equal the one Arjun's panel loaded, so an edit or approval made after he reviewed it is never
+ * recorded as filed: a save that started first makes the version differ, and a save that starts
+ * later waits for the lock and then finds the draft filed. The answers are re-checked on the locked
+ * row. The state change, history event, audit row and task comment commit together or not at all.
+ *
+ * Input: the SKU, the draft id and version, the rights confirmation, optional proof, who confirmed.
  * Output: when it was recorded, and whether it already was.
  */
 export async function confirmSubmitted(
   sku: string,
-  input: { draftId: string; rightsConfirmed: boolean; evidence: string | null },
+  input: { draftId: string; version: string; rightsConfirmed: boolean; evidence: string | null },
   actorId: string | null
 ): Promise<{ submittedAt: string; alreadyRecorded: boolean }> {
   const { item, assetId } = await findItem(sku);
-  const [draft] = await db.select().from(nominationDrafts).where(and(eq(nominationDrafts.id, input.draftId), eq(nominationDrafts.assetId, assetId)));
-  if (!draft) throw new TodaysPicksError("That draft isn't this SKU's");
-  if (draft.state === "submitted") return { submittedAt: draft.submittedAt!.toISOString(), alreadyRecorded: true };
-  if (draft.state !== "draft") throw new TodaysPicksError("Only an open draft can be confirmed");
   if (input.rightsConfirmed !== true) throw new TodaysPicksError("Confirm you answered the rights question on the form yourself");
-  const problems = draftProblems(draft.fields as DraftFields, draft.approvals as NominationApprovals, item);
-  if (problems.length) throw new TodaysPicksError(`Fix these first: ${problems.map((p) => p.message).join("; ")}`);
-
-  const now = new Date();
-  const fields = draft.fields as DraftFields;
   const evidence = input.evidence?.trim() || null;
   return db.transaction(async (tx) => {
-    // Conditional on still being a draft: of two confirmations at once, the second updates nothing.
-    const updated = await tx
-      .update(nominationDrafts)
-      .set({ state: "submitted", submittedAt: now, submittedBy: actorId, submissionEvidence: evidence, updatedAt: now })
-      .where(and(eq(nominationDrafts.id, draft.id), eq(nominationDrafts.state, "draft")))
-      .returning({ id: nominationDrafts.id });
-    if (updated.length === 0) {
-      const [again] = await tx.select().from(nominationDrafts).where(eq(nominationDrafts.id, draft.id));
-      if (again?.state !== "submitted") throw new TodaysPicksError("The draft changed while confirming. Reload and try again");
-      return { submittedAt: again.submittedAt!.toISOString(), alreadyRecorded: true };
-    }
+    const [draft] = await tx
+      .select()
+      .from(nominationDrafts)
+      .where(and(eq(nominationDrafts.id, input.draftId), eq(nominationDrafts.assetId, assetId)))
+      .for("update");
+    if (!draft) throw new TodaysPicksError("That draft isn't this SKU's");
+    // A second confirmation of the same reviewed version, e.g. a double click, records nothing new.
+    if (draft.state === "submitted") return { submittedAt: draft.submittedAt!.toISOString(), alreadyRecorded: true };
+    if (draft.state !== "draft") throw new TodaysPicksError("Only an open draft can be confirmed");
+    if (draft.updatedAt.toISOString() !== input.version) throw new TodaysPicksError("The draft changed after you reviewed it. Reload, check the answers and confirm again");
+    const fields = draft.fields as DraftFields;
+    const problems = draftProblems(fields, draft.approvals as NominationApprovals, item);
+    if (problems.length) throw new TodaysPicksError(`Fix these first: ${problems.map((p) => p.message).join("; ")}`);
+
+    const now = new Date();
+    await tx.update(nominationDrafts).set({ state: "submitted", submittedAt: now, submittedBy: actorId, submissionEvidence: evidence, updatedAt: now }).where(eq(nominationDrafts.id, draft.id));
     const colours = colourLines(fields.colour_links).length;
-    await addEvent(tx, draft.id, "owner_confirmed_filed", { fields, evidence, formVersion: draft.formVersion, verifiedWithRoblox: false }, actorId);
+    await addEvent(tx, draft.id, "owner_confirmed_filed", { fields, approvals: draft.approvals, version: input.version, evidence, formVersion: draft.formVersion, verifiedWithRoblox: false }, actorId);
     await tx.insert(auditLog).values({ action: "confirmTodaysPicksNomination", entityType: "asset", entityId: assetId, actorId, payload: { sku, draftId: draft.id, attemptNo: draft.attemptNo } });
     await tx.insert(teamTaskComments).values({
       taskId: MARKETING_TASK_ID,

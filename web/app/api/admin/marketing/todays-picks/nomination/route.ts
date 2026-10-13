@@ -11,7 +11,7 @@ const MAX_FIELD_INPUT_CHARS = 2000;
 const FieldsSchema = z.object(Object.fromEntries(DRAFT_FIELDS.map((f) => [f, z.string().max(MAX_FIELD_INPUT_CHARS).optional()])));
 const SaveSchema = z.object({ sku: z.string().min(1), fields: FieldsSchema });
 const ActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("confirm"), sku: z.string().min(1), draftId: z.string().uuid(), rightsConfirmed: z.boolean(), evidence: z.string().max(500).nullable() }),
+  z.object({ action: z.literal("confirm"), sku: z.string().min(1), draftId: z.string().uuid(), version: z.string().min(1), rightsConfirmed: z.boolean(), evidence: z.string().max(500).nullable() }),
   z.object({ action: z.literal("undo"), sku: z.string().min(1), draftId: z.string().uuid(), reason: z.string().max(500) }),
   z.object({ action: z.literal("approve"), sku: z.string().min(1), draftId: z.string().uuid(), field: z.enum(APPROVABLE_FIELDS) }),
   z.object({ action: z.literal("suggestion"), sku: z.string().min(1), suggestionId: z.string().uuid(), status: z.enum(["used", "dismissed"]) }),
