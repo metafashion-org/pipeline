@@ -3,14 +3,15 @@
 -- private sheet's Suggestions tab.
 --
 -- nomination_drafts: one row per nomination attempt of an asset. attempt_no 1 is the first
--- nomination; a later attempt is a re-nomination after a change. At most one attempt per asset is
--- open (not submitted or withdrawn), enforced by the partial unique index.
--- nomination_events: append-only history. (draft_id, event_key) is unique so a retried request
--- can't record the same event twice.
+-- nomination; re-nomination is off until its policy is agreed. At most one attempt per asset is
+-- open, enforced by the partial unique index. 'submitted' means Arjun confirmed he filed it.
+-- nomination_events: append-only history, one row per change, written in the same transaction as
+-- the change itself.
 -- marketing_suggestions: one row per distinct suggestion read from the sheet; row_hash is unique so
 -- re-reading the sheet adds nothing new. A suggestion never changes a draft by itself.
 --
--- Additive only. Written idempotently, like 0019-0053.
+-- Additive only. Written idempotently, like 0019-0053, with one DO block per constraint so an
+-- existing constraint never skips the others.
 
 CREATE TABLE IF NOT EXISTS "nomination_drafts" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS "nomination_drafts" (
   "state" text DEFAULT 'draft' NOT NULL,
   "form_version" text NOT NULL,
   "fields" jsonb DEFAULT '{}'::jsonb NOT NULL,
-  "renomination_reason" text,
+  -- Arjun's explicit approval of the final name and the colour links, each with the exact value approved.
+  "approvals" jsonb DEFAULT '{}'::jsonb NOT NULL,
   "submitted_at" timestamp with time zone,
   "submitted_by" uuid,
   "submission_evidence" text,
@@ -56,18 +58,38 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nomination_drafts_asset_id_fk') THEN
     ALTER TABLE "nomination_drafts" ADD CONSTRAINT "nomination_drafts_asset_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."assets"("id") ON DELETE cascade ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nomination_drafts_submitted_by_fk') THEN
     ALTER TABLE "nomination_drafts" ADD CONSTRAINT "nomination_drafts_submitted_by_fk" FOREIGN KEY ("submitted_by") REFERENCES "public"."personnel"("id") ON DELETE set null ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nomination_drafts_created_by_fk') THEN
     ALTER TABLE "nomination_drafts" ADD CONSTRAINT "nomination_drafts_created_by_fk" FOREIGN KEY ("created_by") REFERENCES "public"."personnel"("id") ON DELETE set null ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nomination_events_draft_id_fk') THEN
     ALTER TABLE "nomination_events" ADD CONSTRAINT "nomination_events_draft_id_fk" FOREIGN KEY ("draft_id") REFERENCES "public"."nomination_drafts"("id") ON DELETE cascade ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'nomination_events_actor_id_fk') THEN
     ALTER TABLE "nomination_events" ADD CONSTRAINT "nomination_events_actor_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."personnel"("id") ON DELETE set null ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'marketing_suggestions_asset_id_fk') THEN
     ALTER TABLE "marketing_suggestions" ADD CONSTRAINT "marketing_suggestions_asset_id_fk" FOREIGN KEY ("asset_id") REFERENCES "public"."assets"("id") ON DELETE cascade ON UPDATE no action;
   END IF;

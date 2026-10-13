@@ -7,7 +7,8 @@
 -- roblox_listing_checks: one row per check of one listing, kept next to our own on-sale tick so a
 -- later difference between the two is visible with the time it was seen. Append-only.
 --
--- Additive only. Written idempotently, like 0019-0052.
+-- Additive only. Written idempotently, like 0019-0052, with one DO block per constraint so an
+-- existing constraint never skips the others.
 
 ALTER TABLE "upload_records" ADD COLUMN IF NOT EXISTS "main_at" timestamp with time zone;
 ALTER TABLE "upload_records" ADD COLUMN IF NOT EXISTS "main_by" uuid;
@@ -42,6 +43,10 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'roblox_listing_checks_upload_record_id_fk') THEN
     ALTER TABLE "roblox_listing_checks" ADD CONSTRAINT "roblox_listing_checks_upload_record_id_fk" FOREIGN KEY ("upload_record_id") REFERENCES "public"."upload_records"("id") ON DELETE cascade ON UPDATE no action;
   END IF;
+EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL;
+END $$;
+
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'roblox_listing_checks_checked_by_personnel_id_fk') THEN
     ALTER TABLE "roblox_listing_checks" ADD CONSTRAINT "roblox_listing_checks_checked_by_personnel_id_fk" FOREIGN KEY ("checked_by") REFERENCES "public"."personnel"("id") ON DELETE set null ON UPDATE no action;
   END IF;

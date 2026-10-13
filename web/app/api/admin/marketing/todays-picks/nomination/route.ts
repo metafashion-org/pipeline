@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { isTodaysPicksOwner, TodaysPicksError } from "@/lib/marketing/todays-picks-service";
-import { confirmSubmitted, DRAFT_FIELDS, getNomination, saveDraft, setSuggestionStatus, startRenomination, undoSubmitted } from "@/lib/marketing/nomination-service";
+import { APPROVABLE_FIELDS, approveField, confirmSubmitted, DRAFT_FIELDS, getNomination, saveDraft, setSuggestionStatus, undoSubmitted } from "@/lib/marketing/nomination-service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ const SaveSchema = z.object({ sku: z.string().min(1), fields: FieldsSchema });
 const ActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("confirm"), sku: z.string().min(1), draftId: z.string().uuid(), rightsConfirmed: z.boolean(), evidence: z.string().max(500).nullable() }),
   z.object({ action: z.literal("undo"), sku: z.string().min(1), draftId: z.string().uuid(), reason: z.string().max(500) }),
-  z.object({ action: z.literal("renominate"), sku: z.string().min(1), reason: z.string().max(500) }),
+  z.object({ action: z.literal("approve"), sku: z.string().min(1), draftId: z.string().uuid(), field: z.enum(APPROVABLE_FIELDS) }),
   z.object({ action: z.literal("suggestion"), sku: z.string().min(1), suggestionId: z.string().uuid(), status: z.enum(["used", "dismissed"]) }),
 ]);
 
@@ -56,7 +56,8 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Confirm a filed nomination, undo a mistaken confirmation, open a re-nomination, or use/dismiss a suggestion.
+// Approve the name or colour links, record Arjun's confirmation that he filed it, undo a mistaken
+// confirmation, or use/dismiss a suggestion. Re-nomination is off until its policy is agreed.
 export async function POST(request: NextRequest) {
   const { user, error } = await owner();
   if (error) return error;
@@ -70,7 +71,10 @@ export async function POST(request: NextRequest) {
       await undoSubmitted(input.sku, input.draftId, input.reason, actor);
       return NextResponse.json({ ok: true });
     }
-    if (input.action === "renominate") return NextResponse.json({ draftId: await startRenomination(input.sku, input.reason, actor) });
+    if (input.action === "approve") {
+      await approveField(input.sku, input.draftId, input.field, actor);
+      return NextResponse.json({ ok: true });
+    }
     await setSuggestionStatus(input.sku, input.suggestionId, input.status);
     return NextResponse.json({ ok: true });
   } catch (e) {
