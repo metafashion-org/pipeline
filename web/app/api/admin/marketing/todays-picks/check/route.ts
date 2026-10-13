@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
-import { canPutOnSale } from "@/lib/publisher/on-sale-service";
-import { checkSkuOnRoblox, TodaysPicksError } from "@/lib/marketing/todays-picks-service";
+import { isTodaysPicksOwner, checkSkuOnRoblox, TodaysPicksError } from "@/lib/marketing/todays-picks-service";
 
 export const dynamic = "force-dynamic";
 // One SKU's listings at one request per second: 7 listings take about 10 seconds.
@@ -15,7 +14,7 @@ const CheckSchema = z.object({ sku: z.string().min(1) });
 export async function POST(request: NextRequest) {
   const user = await getAuthedUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!canPutOnSale(user.roles)) return NextResponse.json({ error: "Only Arjun runs Roblox checks" }, { status: 403 });
+  if (!isTodaysPicksOwner(user.email)) return NextResponse.json({ error: "Today's Picks is Arjun's own workflow" }, { status: 403 });
   const body = CheckSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Give the SKU" }, { status: 400 });
   try {

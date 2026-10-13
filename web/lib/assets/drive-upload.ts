@@ -440,30 +440,10 @@ const SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
 export async function createSharedSheet(name: string, tabs: { title: string; header: string[] }[], editorEmail: string): Promise<{ id: string; url: string }> {
   requireDriveConfigured();
   const folderId = await getOrCreateFolder("Meta Fashion Pipeline — Team Tasks");
-  const sheet = await createSheetWithTabs(name, tabs, folderId);
-  await shareWithDomain(sheet.id);
-  await shareWithUser(sheet.id, editorEmail, true);
-  return sheet;
-}
-
-/**
- * Makes a Google Sheet at the shared drive's root that only shared-drive members and one person
- * can open: no domain-wide grant, unlike createSharedSheet. Google sends no share email.
- *
- * Input: the sheet's name, its tabs, and the one person to share it with. Output: the sheet's id and link.
- */
-export async function createPrivateSheet(name: string, tabs: { title: string; header: string[] }[], editorEmail: string): Promise<{ id: string; url: string }> {
-  requireDriveConfigured();
-  const sheet = await createSheetWithTabs(name, tabs, requireSharedDriveId());
-  await shareWithUser(sheet.id, editorEmail, false);
-  return sheet;
-}
-
-async function createSheetWithTabs(name: string, tabs: { title: string; header: string[] }[], parentId: string): Promise<{ id: string; url: string }> {
   const file = await authedFetch(`${DRIVE_API}/files?supportsAllDrives=true&fields=id`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, mimeType: SHEET_MIME_TYPE, parents: [parentId] }),
+    body: JSON.stringify({ name, mimeType: SHEET_MIME_TYPE, parents: [folderId] }),
   });
   // A new sheet has one tab, id 0: rename it to the first tab, then add the rest.
   await authedFetch(`${SHEETS_API}/${file.id}:batchUpdate`, {
@@ -477,20 +457,13 @@ async function createSheetWithTabs(name: string, tabs: { title: string; header: 
     }),
   });
   for (const tab of tabs) await writeSheetCells(file.id, `'${tab.title}'!A1`, [tab.header]);
-  return { id: file.id, url: `https://docs.google.com/spreadsheets/d/${file.id}/edit` };
-}
-
-async function shareWithUser(fileId: string, email: string, notify: boolean): Promise<void> {
-  await authedFetch(`${DRIVE_API}/files/${fileId}/permissions?supportsAllDrives=true&sendNotificationEmail=${notify}`, {
+  await shareWithDomain(file.id);
+  await authedFetch(`${DRIVE_API}/files/${file.id}/permissions?supportsAllDrives=true&sendNotificationEmail=true`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "user", role: "writer", emailAddress: email }),
+    body: JSON.stringify({ type: "user", role: "writer", emailAddress: editorEmail }),
   });
-}
-
-/** Empties an A1 range of a sheet the service account made, keeping its formatting. */
-export async function clearSheetRange(sheetId: string, range: string): Promise<void> {
-  await authedFetch(`${SHEETS_API}/${sheetId}/values/${encodeURIComponent(range)}:clear`, { method: "POST" });
+  return { id: file.id, url: `https://docs.google.com/spreadsheets/d/${file.id}/edit` };
 }
 
 /** The cell values in an A1 range of a sheet the service account made, as rows of strings. */

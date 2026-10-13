@@ -23,7 +23,15 @@ export const MAX_FINAL_NAME_CHARS = 49;
 // Upload placeholders such as "belt 1", "headband_3", "SantaHat 4": one word, then a number.
 const PLACEHOLDER_NAME_PATTERN = /^[a-z]+[\s_-]*\d+$/i;
 
+// Today's Picks is Arjun's own workflow: only his personnel row opens it, not every admin.
+export const TODAYS_PICKS_OWNER_EMAIL = "arjun@metafashion.in";
+
 export class TodaysPicksError extends Error {}
+
+/** True only for Arjun's account. getAuthedUser() has already refused inactive people. */
+export function isTodaysPicksOwner(email: string | null | undefined): boolean {
+  return (email ?? "").trim().toLowerCase() === TODAYS_PICKS_OWNER_EMAIL;
+}
 
 export interface ListingCheckView {
   checkedAt: string;

@@ -54,6 +54,54 @@ function ListingTile({ listing, index, busy, onMain }: { listing: PreviewListing
 }
 
 /**
+ * Connects Arjun's private sheet: he makes a Google Sheet in his own My Drive, shares it with the
+ * service account only, and pastes its link. The server refuses a sheet anyone else can open.
+ */
+function ConnectSheet({ onConnected }: { onConnected: () => void }) {
+  const { data } = useSWR<{ serviceAccountEmail: string | null }>(`${PREVIEW_URL}/sheet/connect`, jsonFetcher, { revalidateOnFocus: false });
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function connect() {
+    setBusy(true);
+    try {
+      const { ok, data: res } = await apiCall<{ error?: string }>(`${PREVIEW_URL}/sheet/connect`, { method: "POST", body: { url } });
+      if (!ok) toast.error(res.error || "Couldn't connect the sheet");
+      else {
+        toast.success("Sheet connected");
+        onConnected();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="space-y-2 rounded-lg border bg-card p-3 text-sm">
+      <h2 className="font-semibold">Connect your private sheet</h2>
+      <ol className="list-inside list-decimal space-y-0.5 text-xs text-muted-foreground">
+        <li>In arjun@metafashion.in&apos;s My Drive (not a shared drive), make a blank Google Sheet.</li>
+        <li>
+          Share it as Editor with <span className="font-mono text-foreground">{data?.serviceAccountEmail ?? "the Kanban's service account"}</span> and nobody else. Leave general access Restricted.
+        </li>
+        <li>Paste its link here. The Kanban adds the Items, Listings, Suggestions and Sync log tabs.</li>
+      </ol>
+      <div className="flex gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-xs"
+        />
+        <Button size="sm" className="h-8" disabled={busy || !url.trim()} onClick={connect}>
+          {busy ? "Checking…" : "Connect"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/**
  * Today's Picks preview: every live SKU with its listings in a thumbnail grid. Arjun picks each SKU's
  * main listing here, checks listings on Roblox, and writes everything to the private sheet. Nothing
  * on this page drafts or submits a nomination.
@@ -141,16 +189,19 @@ export function TodaysPicksPreview() {
           <RefreshCw className={`mr-1 h-3.5 w-3.5 ${checkingAll ? "animate-spin" : ""}`} />
           Check all on Roblox
         </Button>
-        <Button size="sm" variant="outline" disabled={syncing} onClick={syncSheet}>
-          <Sheet className="mr-1 h-3.5 w-3.5" />
-          {syncing ? "Syncing…" : "Sync private sheet"}
-        </Button>
         {data.sheetUrl && (
-          <a href={data.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-            Open sheet <ExternalLink className="inline h-3 w-3" />
-          </a>
+          <>
+            <Button size="sm" variant="outline" disabled={syncing} onClick={syncSheet}>
+              <Sheet className="mr-1 h-3.5 w-3.5" />
+              {syncing ? "Syncing…" : "Sync private sheet"}
+            </Button>
+            <a href={data.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+              Open sheet <ExternalLink className="inline h-3 w-3" />
+            </a>
+          </>
         )}
       </div>
+      {!data.sheetUrl && <ConnectSheet onConnected={() => mutate()} />}
 
       {data.items.map((item) => (
         <section key={item.sku} className="space-y-2 rounded-lg border bg-card p-3">
