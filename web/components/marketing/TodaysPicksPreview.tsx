@@ -10,6 +10,7 @@ import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import type { PreviewItem, PreviewListing } from "@/lib/marketing/todays-picks-service";
 import { NominationPanel } from "./NominationPanel";
+import { TodaysPicksDaily } from "./TodaysPicksDaily";
 
 const PREVIEW_URL = "/api/admin/marketing/todays-picks";
 const THUMBNAIL_PX = 160;
@@ -205,6 +206,7 @@ export function TodaysPicksPreview() {
         )}
       </div>
       {!data.sheetUrl && <ConnectSheet onConnected={() => mutate()} />}
+      <TodaysPicksDaily />
 
       {data.items.map((item) => (
         <section key={item.sku} className="space-y-2 rounded-lg border bg-card p-3">
