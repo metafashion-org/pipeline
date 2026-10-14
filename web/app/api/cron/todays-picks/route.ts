@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ENV } from "@/lib/env";
 import { getDailySettings, runDailyCheck, sendMarketingSummary } from "@/lib/marketing/todays-picks-daily";
 import { runNaming } from "@/lib/naming/naming-service";
+import { runVariantNaming } from "@/lib/naming/variant-naming";
 
 export const dynamic = "force-dynamic";
 // The check asks Roblox about every live listing at one request per second: about 75 seconds today.
@@ -16,7 +17,10 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   // Naming first, so the evening email can list items waiting for a name decision.
   const naming = (await getDailySettings()).namingEnabled
-    ? await runNaming().catch((error) => ({ failed: true, reason: error instanceof Error ? error.message : "naming failed" }))
+    ? {
+        base: await runNaming().catch((error) => ({ failed: true, reason: error instanceof Error ? error.message : "naming failed" })),
+        variants: await runVariantNaming().catch((error) => ({ failed: true, reason: error instanceof Error ? error.message : "variant naming failed" })),
+      }
     : { ran: false, reason: "daily naming is off" };
   const check = await runDailyCheck(now).catch((error) => ({ ran: false, reason: error instanceof Error ? error.message : "check failed" }));
   const email = await sendMarketingSummary(now).catch((error) => ({ sent: false, reason: error instanceof Error ? error.message : "email failed" }));

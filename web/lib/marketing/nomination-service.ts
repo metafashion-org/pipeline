@@ -375,10 +375,15 @@ export function draftProblems(fields: DraftFields, approvals: NominationApproval
   if (reviewNeeded && approvals.colour_links?.value !== (fields.colour_links ?? "").trim()) problems.push({ field: "colour_links", message: "Review and approve the colour links" });
 
   // The Roblox listings themselves must carry real names before nominating.
+  // Each listing must carry its own approved name on Roblox: the main one its variant name (e.g.
+  // "Red Christmas Bow Parasol") when it has one, otherwise the base name.
   const mainName = main?.lastCheck?.robloxName;
+  const expectedMain = main?.approvedName ?? name;
   if (main && !main.lastCheck) problems.push({ field: "roblox", message: "Check the main listing on Roblox" });
-  else if (main && name && mainName && mainName.trim().toLowerCase() !== name.toLowerCase()) problems.push({ field: "roblox", message: `Rename the main listing on Roblox from "${mainName}" to "${name}", then check it again` });
+  else if (main && expectedMain && mainName && mainName.trim().toLowerCase() !== expectedMain.toLowerCase()) problems.push({ field: "roblox", message: `Rename the main listing on Roblox from "${mainName}" to "${expectedMain}", then check it again` });
   if (main?.lastCheck && main.lastCheck.isForSale === false) problems.push({ field: "roblox", message: "Roblox shows the main listing off sale" });
+  const renames = colourListings.filter((l) => l.approvedName && l.lastCheck?.robloxName && l.lastCheck.robloxName.trim().toLowerCase() !== l.approvedName.toLowerCase());
+  if (renames.length) problems.push({ field: "roblox", message: `Rename these recolours on Roblox: ${renames.map((l) => `"${l.lastCheck!.robloxName}" to "${l.approvedName}"`).join(", ")}` });
   const placeholders = colourListings.filter((l) => l.lastCheck?.robloxName && isPlaceholderName(l.lastCheck.robloxName));
   if (placeholders.length) problems.push({ field: "roblox", message: `Rename recolours with placeholder names on Roblox: ${placeholders.map((l) => l.lastCheck!.robloxName).join(", ")}` });
   return problems;

@@ -32,6 +32,7 @@ import { loadNameEvidence } from "@/lib/marketing/name-evidence";
 import { conflictOnlyNameWords, MARKETING_TASK_ID, unsupportedNameWords } from "@/lib/marketing/nomination-service";
 import { isPlaceholderName, type PreviewItem } from "@/lib/marketing/todays-picks-service";
 import { MAX_FINAL_NAME_CHARS } from "@/lib/marketing/nomination-fields";
+import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
 // Claude Sonnet 5.5, as Arjun chose for naming (Sonnet or Haiku credits). Medium effort: naming is
 // short, and the evidence check catches what a lower effort misses.
@@ -48,7 +49,8 @@ const IMAGE_FETCH_TIMEOUT_MS = 15_000;
 const CANDIDATES_PER_ITEM = 3;
 const GUIDELINES_KEY = "naming_guidelines";
 const MAX_GUIDELINES_CHARS = 8000;
-const NAMING_STATUSES = ["ready_for_upload"];
+// Items waiting to upload, and live items: a live item's base name is what its listing names build on.
+const NAMING_STATUSES = ["ready_for_upload", ...LIVE_ON_ROBLOX_STATUSES];
 const IMAGE_EVIDENCE_SOURCE = "Concept images (AI reading)";
 
 export class NamingError extends Error {}
@@ -69,7 +71,7 @@ const RULES = `You suggest base names for Roblox accessories. Work only from the
 For each item:
 1. image_notes: describe only what the concept images show - item type, shape, motifs, materials, notable details. No guesses about use or origin. Write "No images" if none were given.
 2. candidates: up to ${CANDIDATES_PER_ITEM} base names, best first, following the naming guidelines. Each must be under 50 characters.
-3. For every word of every name, give its source: "artifact:<ID>" for an artifact's text, "trend" for the item's trend note, or "images" for your image_notes. Every meaningful word must appear in that source. If a word can't be sourced, don't use it.
+3. For every word of every name, give its source: "artifact:<ID>" for an artifact's text, "evidence:<label>" for an evidence quote, "trend" for the item's trend note, or "images" for your image_notes. Every meaningful word must appear in that source. If a word can't be sourced, don't use it.
 
 The working title is an internal, exploratory label. Use it to understand which item is meant, never as a source of words.
 Answer for every item you were given, using its exact SKU.`;
@@ -98,6 +100,10 @@ export interface NamingInputItem {
   trendReasoning: string | null;
   artifacts: PreviewItem["artifacts"];
   imageFileIds: string[];
+  // Full-text naming evidence from the sheet's Evidence tab (report lines, workbook rows, image
+  // notes), excluding Claude's own earlier image readings. The artifacts above are only their
+  // Registry summary; these quotes carry the detail from the documents themselves.
+  evidenceQuotes?: { label: string; quote: string }[];
 }
 
 /** One call to the model. Swappable so tests don't call Claude. */
@@ -130,7 +136,7 @@ export function groupKeyOf(item: Pick<NamingInputItem, "artifacts">): string {
 /** A hash of everything sent to Claude for one item, so unchanged inputs aren't named twice. */
 export function inputHashOf(item: NamingInputItem, guidelines: string): string {
   return createHash("sha256")
-    .update(JSON.stringify([NAMING_MODEL, guidelines, item.itemName, item.category, item.trendReasoning, item.artifacts, item.imageFileIds.slice(0, IMAGES_PER_ITEM)]))
+    .update(JSON.stringify([NAMING_MODEL, guidelines, item.itemName, item.category, item.trendReasoning, item.artifacts, item.imageFileIds.slice(0, IMAGES_PER_ITEM), item.evidenceQuotes ?? []]))
     .digest("hex")
     .slice(0, 32);
 }
@@ -147,6 +153,7 @@ async function loadNamingInputs(onlySkus?: string[]): Promise<NamingInputItem[]>
     .from(artifactSkuLinks)
     .innerJoin(knowledgeArtifacts, eq(knowledgeArtifacts.id, artifactSkuLinks.artifactId))
     .where(inArray(artifactSkuLinks.assetId, rows.map((r) => r.id)));
+  const evidence = await loadNameEvidence(rows.map((r) => r.id));
   return rows.map((r) => ({
     assetId: r.id,
     sku: r.sku,
@@ -155,7 +162,13 @@ async function loadNamingInputs(onlySkus?: string[]): Promise<NamingInputItem[]>
     trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
     artifacts: links.filter((l) => l.assetId === r.id).map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
     imageFileIds: ((r.referenceImages as { externalId?: string }[] | null) ?? []).map((f) => f.externalId).filter((id): id is string => !!id),
+    evidenceQuotes: evidenceQuotesOf(evidence.get(r.id) ?? []),
   }));
+}
+
+// Evidence quotes to send: everything except Claude's own earlier image readings and conflicting records.
+function evidenceQuotesOf(records: PreviewItem["nameEvidence"]): { label: string; quote: string }[] {
+  return records.filter((e) => e.enteredBy !== NAMING_MODEL && !e.conflict).map((e) => ({ label: `${e.sourceRef} ${e.location}`, quote: e.quote }));
 }
 
 async function fetchImage(fileId: string): Promise<NamingImage | null> {
@@ -179,7 +192,7 @@ export const CLAUDE_NAMING_CALLER: NamingCaller = async ({ guidelines, groupKey,
   for (const item of items) {
     content.push({
       type: "text",
-      text: `<item sku="${item.sku}">\nworking title (exploratory, not a word source): ${item.itemName}\ncategory: ${item.category ?? "unknown"}\ntrend note: ${item.trendReasoning ?? "none"}\nconcept images attached below: ${item.images.length}\n</item>`,
+      text: `<item sku="${item.sku}">\nworking title (exploratory, not a word source): ${item.itemName}\ncategory: ${item.category ?? "unknown"}\ntrend note: ${item.trendReasoning ?? "none"}\n${(item.evidenceQuotes ?? []).map((e) => `<evidence label="${e.label}">${e.quote}</evidence>`).join("\n") || "no evidence quotes"}\nconcept images attached below: ${item.images.length}\n</item>`,
     });
     for (const image of item.images) content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } });
   }
@@ -202,7 +215,7 @@ export const CLAUDE_NAMING_CALLER: NamingCaller = async ({ guidelines, groupKey,
   return { result: response.parsed_output ?? null, refusal: null, usage };
 };
 
-function asPreviewItem(item: NamingInputItem, evidence: PreviewItem["nameEvidence"]): PreviewItem {
+export function asPreviewItem(item: NamingInputItem, evidence: PreviewItem["nameEvidence"]): PreviewItem {
   return { sku: item.sku, itemName: item.itemName, status: "ready_for_upload", brandGroup: null, artifacts: item.artifacts, trendReasoning: item.trendReasoning, nameEvidence: evidence, approvedName: null, referenceImageCount: item.imageFileIds.length, listings: [], blockers: [] };
 }
 
@@ -224,7 +237,7 @@ export async function runNaming(
   const { text: guidelines } = await getGuidelines();
   const inputs = await loadNamingInputs(options.onlySkus);
   const existing = inputs.length
-    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)))
+    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(and(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)), eq(nameProposals.kind, "base")))
     : [];
   const todo = inputs.filter((i) => !existing.some((e) => e.assetId === i.assetId && e.inputHash === inputHashOf(i, guidelines))).slice(0, MAX_ITEMS_PER_RUN);
   const result = { named: 0, skipped: inputs.length - todo.length, failed: 0, batchId: null as string | null };
@@ -280,7 +293,7 @@ export async function runNaming(
           .map((c) => ({ name: c.name.trim(), why: c.why.trim(), words: c.words }))
           .filter((c) => c.name && c.name.length <= MAX_FINAL_NAME_CHARS && !isPlaceholderName(c.name));
         await db.transaction(async (tx) => {
-          await tx.update(nameProposals).set({ status: "superseded" }).where(and(eq(nameProposals.assetId, item.assetId), eq(nameProposals.status, "pending")));
+          await tx.update(nameProposals).set({ status: "superseded" }).where(and(eq(nameProposals.assetId, item.assetId), eq(nameProposals.kind, "base"), eq(nameProposals.status, "pending")));
           await tx
             .insert(nameProposals)
             .values({ assetId: item.assetId, batchId, groupKey, model: NAMING_MODEL, inputHash, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage })
@@ -310,6 +323,8 @@ export interface NamingView {
   approvedName: string | null;
   imageFileIds: string[];
   evidenceCount: number;
+  // Exactly what Claude is given for this item, for the "What Claude reads" panel.
+  reads: { workingTitle: string; category: string | null; trendNote: string | null; artifacts: PreviewItem["artifacts"]; evidence: { label: string; quote: string }[]; imageCount: number };
   proposal: { id: string; status: string; createdAt: string; imageNotes: string | null; error: string | null; candidates: (NameCandidate & { unsupported: string[]; conflictOnly: string[] })[] } | null;
 }
 
@@ -326,7 +341,7 @@ export async function listNaming(): Promise<NamingView[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((r) => r.id);
   const [proposals, evidence, links] = await Promise.all([
-    db.select().from(nameProposals).where(inArray(nameProposals.assetId, ids)).orderBy(desc(nameProposals.createdAt)),
+    db.select().from(nameProposals).where(and(inArray(nameProposals.assetId, ids), eq(nameProposals.kind, "base"))).orderBy(desc(nameProposals.createdAt)),
     loadNameEvidence(ids),
     db
       .select({ assetId: artifactSkuLinks.assetId, artifactId: knowledgeArtifacts.artifactId, title: knowledgeArtifacts.title, description: knowledgeArtifacts.description, tags: knowledgeArtifacts.tags })
@@ -354,31 +369,41 @@ export async function listNaming(): Promise<NamingView[]> {
       approvedName: r.approvedName,
       imageFileIds: input.imageFileIds.slice(0, IMAGES_PER_ITEM),
       evidenceCount: preview.nameEvidence.length + preview.artifacts.length + (preview.trendReasoning ? 1 : 0),
+      reads: {
+        workingTitle: r.itemName,
+        category: r.category,
+        trendNote: input.trendReasoning,
+        artifacts: input.artifacts,
+        evidence: evidenceQuotesOf(preview.nameEvidence),
+        imageCount: Math.min(input.imageFileIds.length, IMAGES_PER_ITEM),
+      },
       proposal: latest && {
         id: latest.id,
         status: latest.status,
         createdAt: latest.createdAt.toISOString(),
         imageNotes: latest.imageNotes,
         error: latest.error,
-        candidates: latest.candidates.map((c) => ({ ...c, unsupported: unsupportedNameWords(c.name, preview), conflictOnly: conflictOnlyNameWords(c.name, preview) })),
+        candidates: (latest.candidates as NameCandidate[]).map((c) => ({ ...c, unsupported: unsupportedNameWords(c.name, preview), conflictOnly: conflictOnlyNameWords(c.name, preview) })),
       },
     };
   });
 }
 
 /**
- * Approves a name for an item: one of the suggestions, or Arjun's edit of one. Every word must be
- * backed by the item's evidence (none only by conflicting evidence), under 50 characters, and not
- * a placeholder. Saves it as the item's approved Roblox name and closes the proposal.
+ * Approves a base name for an item: one of the suggestions, Arjun's edit of one, or a name he types
+ * with no suggestion (proposalId null), e.g. a name approved in an earlier review. Every word must
+ * be backed by the item's evidence (none only by conflicting evidence), under 50 characters, and
+ * not a placeholder. Saves it as the item's approved base name and closes the proposal if any.
  *
- * Input: the SKU, the proposal id, the name, who approved. Output: nothing.
+ * Input: the SKU, the proposal id or null, the name, who approved. Output: nothing.
  */
-export async function approveName(sku: string, input: { proposalId: string; name: string }, actorId: string | null): Promise<void> {
+export async function approveName(sku: string, input: { proposalId: string | null; name: string }, actorId: string | null): Promise<void> {
   const name = input.name.replace(/\s+/g, " ").trim();
   if (!name || name.length > MAX_FINAL_NAME_CHARS) throw new NamingError(`A name is 1-${MAX_FINAL_NAME_CHARS} characters`);
   if (isPlaceholderName(name)) throw new NamingError("That looks like a placeholder name");
   const item = (await listNaming()).find((v) => v.sku === sku);
-  if (!item?.proposal || item.proposal.id !== input.proposalId) throw new NamingError("That suggestion isn't this item's latest");
+  if (!item) throw new NamingError(`${sku} isn't waiting to upload or live`);
+  if (input.proposalId && item.proposal?.id !== input.proposalId) throw new NamingError("That suggestion isn't this item's latest");
   const [asset] = await db.select({ id: assets.id }).from(assets).where(eq(assets.sku, sku)).limit(1);
   const inputs = await loadNamingInputs([sku]);
   const evidence = (await loadNameEvidence([asset.id])).get(asset.id) ?? [];
@@ -390,7 +415,7 @@ export async function approveName(sku: string, input: { proposalId: string; name
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx.update(assets).set({ approvedName: name, approvedNameAt: now, approvedNameBy: actorId, updatedAt: now }).where(eq(assets.id, asset.id));
-    await tx.update(nameProposals).set({ status: "approved", chosenName: name, decidedBy: actorId, decidedAt: now }).where(eq(nameProposals.id, input.proposalId));
+    if (input.proposalId) await tx.update(nameProposals).set({ status: "approved", chosenName: name, decidedBy: actorId, decidedAt: now }).where(eq(nameProposals.id, input.proposalId));
     await tx.insert(auditLog).values({ action: "approveName", entityType: "asset", entityId: asset.id, actorId, payload: { sku, name, proposalId: input.proposalId } });
   });
 }

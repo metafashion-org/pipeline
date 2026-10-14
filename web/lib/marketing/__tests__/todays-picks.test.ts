@@ -27,7 +27,7 @@ async function cleanup() {
 }
 
 function listing(overrides: Partial<PreviewListing>): PreviewListing {
-  return { id: "x", url: "u", robloxAssetId: "1", variantLabel: "Red", onSaleAt: "2026-10-13T00:00:00Z", isMain: false, thumbnailUrl: null, lastCheck: null, ...overrides };
+  return { id: "x", url: "u", robloxAssetId: "1", variantLabel: "Red", onSaleAt: "2026-10-13T00:00:00Z", isMain: false, approvedName: null, thumbnailUrl: null, lastCheck: null, ...overrides };
 }
 
 function check(name: string, isForSale: boolean, ourOnSale = true) {
