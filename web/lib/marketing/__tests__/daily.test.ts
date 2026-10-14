@@ -51,7 +51,7 @@ async function test() {
   await seed();
 
   console.log("Verifying both jobs stay off until switched on...");
-  assert.deepStrictEqual(await getDailySettings(), { checkEnabled: false, emailEnabled: false, failedCheckRuns: 0, lastCheck: null });
+  assert.deepStrictEqual(await getDailySettings(), { checkEnabled: false, emailEnabled: false, namingEnabled: false, failedCheckRuns: 0, lastCheck: null });
   assert.strictEqual((await runDailyCheck(day("2026-10-14"), ok)).ran, false);
   assert.strictEqual((await sendMarketingSummary(day("2026-10-14"))).sent, false);
   assert.strictEqual((await queued()).length, 0, "No email while off");

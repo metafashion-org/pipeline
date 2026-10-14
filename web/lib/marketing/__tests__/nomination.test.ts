@@ -72,6 +72,7 @@ function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
     artifacts: [{ artifactId: "TR006", title: "Christmas", description: "Christmas assets", tags: ["festive"] }],
     trendReasoning: TREND,
     nameEvidence: [],
+    approvedName: null,
     referenceImageCount: 0,
     blockers: [],
     listings: [listing("main", "111", { isMain: true }), listing("r1", "222", { lastCheck: { ...listing("x", "1").lastCheck!, robloxName: "Green Christmas Bow Parasol" } })],

@@ -17,6 +17,8 @@ export interface ReadyForUploadItem {
   id: string;
   sku: string;
   itemName: string;
+  /** The Roblox name Arjun approved on the Naming page, or null. */
+  approvedName: string | null;
   category: string | null;
   deadline: Date | null;
   artistName: string | null;
@@ -48,6 +50,8 @@ export async function getReadyForUploadQueue(): Promise<ReadyForUploadItem[]> {
       id: assets.id,
       sku: assets.sku,
       itemName: assets.itemName,
+      // The Roblox name Arjun approved on the Naming page; the uploader types this into Roblox.
+      approvedName: assets.approvedName,
       category: assets.category,
       deadline: assets.deadline,
       artistName: personnel.name,

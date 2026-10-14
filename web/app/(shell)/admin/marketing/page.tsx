@@ -27,9 +27,14 @@ export default async function AdminMarketingPage() {
         description="Posts and promotion status for assets that have reached Roblox."
         actions={
           isTodaysPicksOwner(user.email) ? (
-            <Link href="/admin/marketing/todays-picks" className="text-sm text-primary hover:underline">
-              Today&apos;s Picks preview
-            </Link>
+            <span className="flex gap-3">
+              <Link href="/admin/marketing/naming" className="text-sm text-primary hover:underline">
+                Naming
+              </Link>
+              <Link href="/admin/marketing/todays-picks" className="text-sm text-primary hover:underline">
+                Today&apos;s Picks preview
+              </Link>
+            </span>
           ) : null
         }
       />

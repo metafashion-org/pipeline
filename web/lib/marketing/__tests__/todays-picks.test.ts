@@ -194,6 +194,7 @@ function previewOf(count: number) {
       artifacts: [],
       trendReasoning: null,
       nameEvidence: [],
+      approvedName: null,
       referenceImageCount: 0,
       listings: [listing({ id: `L${i}`, lastCheck: check(`Item ${i}`, true) })],
       blockers: ["No main listing chosen"],

@@ -294,7 +294,8 @@ export function proposeDraft(item: PreviewItem, approvedName = ""): { proposed: 
   const terms = nameTerms(item);
   const evidenceText = [approvedName, item.trendReasoning ?? "", ...item.artifacts.map((a) => `${a.title} ${a.description ?? ""} ${a.tags.join(" ")}`)].join(" ");
   const proposed: DraftFields = {
-    final_name: "",
+    // The name approved before upload, if any; otherwise built by Arjun from the evidence.
+    final_name: item.approvedName ?? "",
     item_link: main?.url ?? "",
     item_type: assetTypeId !== null ? (ASSET_TYPE_TO_ITEM_TYPE[assetTypeId] ?? "") : "",
     tags: proposeTags(approvedName, terms.map((t) => t.term), assetTypeId),

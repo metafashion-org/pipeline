@@ -31,6 +31,9 @@ const serverEnvSchema = z.object({
     // tests import the email queue; listed here so the deployment's variables are documented in one
     // place. Unset means emails stay queued, not lost. EMAIL_FROM's domain must be verified in Resend.
     RESEND_API_KEY: z.string().optional(),
+    // AI naming (lib/naming/naming-service.ts). The Anthropic SDK reads it from the environment itself;
+    // listed here so a missing key is visible. Naming stays unavailable without it.
+    ANTHROPIC_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
     EMAIL_REPLY_TO: z.string().optional(),
 });

@@ -35,7 +35,7 @@ function listing(overrides: Partial<PreviewListing> = {}): PreviewListing {
 }
 
 function sku(nameEvidenceRows: NameEvidenceView[], overrides: Partial<PreviewItem> = {}): PreviewItem {
-  return { sku: "X", itemName: "exploratory", status: "uploaded_to_roblox", brandGroup: null, artifacts: [], trendReasoning: null, nameEvidence: nameEvidenceRows, referenceImageCount: 0, listings: [listing()], blockers: [], ...overrides };
+  return { sku: "X", itemName: "exploratory", status: "uploaded_to_roblox", brandGroup: null, artifacts: [], trendReasoning: null, nameEvidence: nameEvidenceRows, approvedName: null, referenceImageCount: 0, listings: [listing()], blockers: [], ...overrides };
 }
 
 function testRegressionCases() {

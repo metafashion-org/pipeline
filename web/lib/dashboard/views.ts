@@ -21,6 +21,7 @@ export interface PublisherQueueItemView {
   id: string;
   sku: string;
   itemName: string;
+  approvedName: string | null;
   category: string | null;
   deadline: string | null;
   artistName: string | null;
