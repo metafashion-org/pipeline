@@ -4,7 +4,9 @@ import { assets } from "./assets";
 import { personnel } from "./personnel";
 
 /** Arjun's explicit approval of a field's exact value. A later edit to the field leaves it stale. */
-export type NominationApprovals = Partial<Record<"final_name" | "colour_links", { value: string; by: string | null; at: string }>>;
+// answers: the item-page answers other than the name and colour links, approved together as one value.
+// reviewRef: where Arjun reviewed the value, e.g. "Instinct review, 14 Oct 2026 10:39 IST".
+export type NominationApprovals = Partial<Record<"final_name" | "colour_links" | "answers", { value: string; by: string | null; at: string; reviewRef?: string | null }>>;
 
 /**
  * One Today's Picks nomination attempt of an asset: Arjun's reviewed form answers and final name,

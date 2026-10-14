@@ -14,6 +14,7 @@ import { auditLog } from "@/lib/db/schema/audit_log";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 import { fetchListingDetails, fetchThumbnails } from "./roblox-catalog";
 import { MAX_FINAL_NAME_CHARS } from "./nomination-fields";
+import { loadNameEvidence, type NameEvidenceView } from "./name-evidence";
 
 // One Roblox request per second while checking, well under Roblox's anonymous limits.
 const CHECK_GAP_MS = 1000;
@@ -62,6 +63,8 @@ export interface PreviewItem {
   artifacts: { artifactId: string; title: string; description: string | null; tags: string[] }[];
   // brief_fields.trendReasoning: where the trend came from, written at curation.
   trendReasoning: string | null;
+  // Active naming evidence (lib/marketing/name-evidence.ts). Separate from artifacts, which are design-origin links.
+  nameEvidence: NameEvidenceView[];
   referenceImageCount: number;
   listings: PreviewListing[];
   blockers: string[];
@@ -137,7 +140,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
 
   const listingIds = rows.map((r) => r.id);
   const assetIds = [...new Set(rows.map((r) => r.assetId))];
-  const [checks, artifactRows, thumbnails] = await Promise.all([
+  const [checks, artifactRows, thumbnails, evidenceByAsset] = await Promise.all([
     db.select().from(robloxListingChecks).where(inArray(robloxListingChecks.uploadRecordId, listingIds)).orderBy(desc(robloxListingChecks.checkedAt)),
     db
       .select({
@@ -151,6 +154,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       .innerJoin(knowledgeArtifacts, eq(knowledgeArtifacts.id, artifactSkuLinks.artifactId))
       .where(inArray(artifactSkuLinks.assetId, assetIds)),
     fetchThumbnails(rows.map((r) => r.robloxAssetId).filter((id): id is string => !!id)),
+    loadNameEvidence(assetIds),
   ]);
 
   // Checks come newest first, so the first one seen per listing is its latest.
@@ -180,6 +184,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
         .filter((a) => a.assetId === r.assetId)
         .map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
       trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
+      nameEvidence: evidenceByAsset.get(r.assetId) ?? [],
       referenceImageCount: Array.isArray(r.referenceImages) ? r.referenceImages.length : 0,
       listings: [],
       blockers: [],

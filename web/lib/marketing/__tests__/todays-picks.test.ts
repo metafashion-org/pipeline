@@ -7,7 +7,7 @@ import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { robloxListingChecks } from "@/lib/db/schema/roblox_listing_checks";
 import { appSettings } from "@/lib/db/schema/app_settings";
 import { checkSkuOnRoblox, isPlaceholderName, isTodaysPicksOwner, readinessBlockers, setMainListing, TodaysPicksError, type PreviewListing } from "../todays-picks-service";
-import { connectTodaysPicksSheet, privacyProblems, sheetRows, SUGGESTIONS_HEADER, syncTodaysPicksSheet } from "../todays-picks-sheet";
+import { connectTodaysPicksSheet, privacyProblems, sheetRows, SUGGESTIONS_HEADER, EVIDENCE_HEADER, syncTodaysPicksSheet } from "../todays-picks-sheet";
 import type { FileAccess, SheetClient } from "../google-sheet-access";
 
 const SKU_PREFIX = "TEST-PICKS-";
@@ -172,8 +172,8 @@ function fakeGoogle() {
       state.tabs = next;
     },
     readRows: async (_id, range) => {
-      assert.strictEqual(range, "'Suggestions'!A2:G", "Only Suggestions is read");
-      return state.tabs.find((t) => t.title === "Suggestions")?.cells.slice(1) ?? [];
+      assert.ok(["'Suggestions'!A2:G", "'Evidence'!A2:J"].includes(range), "Only Suggestions and Evidence are read");
+      return state.tabs.find((t) => t.title === range.split("'")[1])?.cells.slice(1) ?? [];
     },
     appendRows: async (_id, range, rows) => {
       assert.ok(range.startsWith("'Sync log'"), "Only the log is appended to");
@@ -193,6 +193,7 @@ function previewOf(count: number) {
       brandGroup: null,
       artifacts: [],
       trendReasoning: null,
+      nameEvidence: [],
       referenceImageCount: 0,
       listings: [listing({ id: `L${i}`, lastCheck: check(`Item ${i}`, true) })],
       blockers: ["No main listing chosen"],
@@ -229,6 +230,9 @@ async function testSheet() {
   assert.deepStrictEqual(g.tab("Suggestions").cells[0], SUGGESTIONS_HEADER, "Connect adds the Suggestions tab with its header");
   g.tab("Suggestions").cells.push(["X", "L0", "tags", "christmas cozy", "TR006", "Instinct", "2026-10-14"]);
   const suggestionsBefore = structuredClone(g.tab("Suggestions").cells);
+  assert.deepStrictEqual(g.tab("Evidence").cells[0], EVIDENCE_HEADER, "Connect adds the Evidence tab with its header");
+  g.tab("Evidence").cells.push(["X", "report_line", "ANA007", "line 101", "tactical duty belt", "duty", "high", "", "", "instinct"]);
+  const evidenceBefore = structuredClone(g.tab("Evidence").cells);
 
   await syncTodaysPicksSheet(null, g.client, previewOf(3));
   assert.strictEqual(g.tab("Items").cells.length, 4, "Header and 3 items");
@@ -236,6 +240,7 @@ async function testSheet() {
   await syncTodaysPicksSheet(null, g.client, previewOf(1));
   assert.strictEqual(g.tab("Items").cells.length, 2, "A smaller sync leaves no old rows behind");
   assert.deepStrictEqual(g.tab("Suggestions").cells, suggestionsBefore, "Sync never touches Suggestions");
+  assert.deepStrictEqual(g.tab("Evidence").cells, evidenceBefore, "Sync never writes Evidence");
 
   // A failed write leaves the previous rows whole, logs the failure and frees the lock.
   const itemsBefore = structuredClone(g.tab("Items").cells);

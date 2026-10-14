@@ -58,6 +58,8 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
   // Never prefilled: Arjun ticks it each time he confirms a filing.
   const [rights, setRights] = useState(false);
   const [proof, setProof] = useState("");
+  // Where Arjun reviewed what he is approving, e.g. an earlier review of the same values. Optional.
+  const [reviewRef, setReviewRef] = useState("");
   const [busy, setBusy] = useState(false);
 
   // Start from the saved draft, or from the suggestions when nothing is saved.
@@ -71,7 +73,11 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
   const filed = data.draft?.state === "submitted";
   const set = (field: DraftField, value: string) => setFields((f) => ({ ...f, [field]: value }));
   const dirty = JSON.stringify(fields) !== JSON.stringify(data.draft?.fields ?? null);
-  const approved = (field: "final_name" | "colour_links") => !!data.draft && data.draft.approvals[field]?.value === (data.draft.fields[field] ?? "").trim();
+  const approved = (field: "final_name" | "colour_links" | "answers") => data.approvedNow[field].approved;
+  const ApprovedBadge = ({ field }: { field: "final_name" | "colour_links" | "answers" }) =>
+    approved(field) ? (
+      <span className="text-emerald-600">Approved{data.approvedNow[field].reviewRef ? ` (${data.approvedNow[field].reviewRef})` : ""}</span>
+    ) : null;
   const problemsFor = (field: string) => data.problems.filter((p) => p.field === field).map((p) => p.message);
   const newSuggestions = data.suggestions.filter((s) => s.status === "new");
 
@@ -90,8 +96,16 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
   }
 
   const save = () => run({ fields }, "PUT", "Draft saved");
-  const approve = (field: "final_name" | "colour_links") =>
-    run({ action: "approve", draftId: data.draft!.id, field }, "POST", field === "final_name" ? "Name approved" : "Colour links approved");
+  const approve = (field: "final_name" | "colour_links" | "answers") =>
+    run(
+      { action: "approve", draftId: data.draft!.id, version: data.draft!.version, field, reviewRef: reviewRef || null },
+      "POST",
+      field === "final_name" ? "Name approved" : field === "colour_links" ? "Colour links approved" : "Answers approved"
+    );
+  const retire = async (evidenceId: string) => {
+    const reason = window.prompt("Why is this evidence wrong? It stays on record, retired.");
+    if (reason) await run({ action: "retire_evidence", evidenceId, reason }, "POST", "Evidence retired");
+  };
   const confirm = async () => {
     if (!data.draft || !window.confirm("Record that you filed this nomination on Roblox's form yourself? The Kanban can't verify it with Roblox.")) return;
     const ok = await run({ action: "confirm", draftId: data.draft.id, version: data.draft.version, rightsConfirmed: rights, evidence: proof || null }, "POST", "Filing recorded");
@@ -132,31 +146,74 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
         <div className="flex items-center justify-between">
           <label className="font-medium">Final name (rename the Roblox listing to this; not a form field)</label>
           <span className="flex items-center gap-2">
-            {approved("final_name") && <span className="text-emerald-600">Approved</span>}
+            <ApprovedBadge field="final_name" />
             <Counter value={fields.final_name ?? ""} limit={FIELD_LIMITS.final_name} />
           </span>
         </div>
-        {data.hasNameEvidence ? (
-          <>
-            <Input value={fields.final_name ?? ""} disabled={filed} onChange={(e) => set("final_name", e.target.value)} placeholder="Build it from the evidence words below" className="h-8 text-xs" />
-            {!filed && data.nameTerms.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {data.nameTerms.map((t) => (
-                  <button key={t.term} type="button" title={t.sources.join(", ")} onClick={() => addTerm(t.term)} className="rounded border px-1.5 py-0.5 hover:bg-muted">
-                    {t.term} <span className="text-muted-foreground">({t.sources.length})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
+        <Input value={fields.final_name ?? ""} disabled={filed} onChange={(e) => set("final_name", e.target.value)} placeholder="Build it from the evidence words below" className="h-8 text-xs" />
+        {!data.hasNameEvidence && (
           <p className="rounded border border-amber-500/40 bg-amber-500/5 p-2">
-            No linked artifacts and no trend origin, so the final name stays unset. Link an artifact to this SKU or add a grounded name suggestion in the sheet.
+            No naming evidence yet. You can type a name, but it can&apos;t be approved until the sheet&apos;s Evidence tab has rows for this SKU. A design-origin link is not needed.
           </p>
         )}
+        {data.nameWords.length > 0 && (
+          <ul className="space-y-0.5">
+            {data.nameWords.map((w) => (
+              <li key={w.word} className={w.sources.length === 0 || w.conflictOnly ? "text-destructive" : "text-muted-foreground"}>
+                <span className="font-mono">{w.word}</span>: {w.sources.length === 0 ? "no evidence" : `${w.conflictOnly ? "only conflicting evidence: " : ""}${w.sources.join(", ")}`}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!filed && data.nameTerms.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {data.nameTerms.map((t) => (
+              <button key={t.term} type="button" title={t.sources.join(", ")} onClick={() => addTerm(t.term)} className="rounded border px-1.5 py-0.5 hover:bg-muted">
+                {t.term} <span className="text-muted-foreground">({t.sources.length})</span>
+              </button>
+            ))}
+          </div>
+        )}
         <ProblemList messages={problemsFor("final_name")} />
+        {data.nameEvidence.some((e) => e.conflict) && (
+          <div className="space-y-0.5 rounded border border-amber-500/40 bg-amber-500/5 p-2">
+            <p className="font-medium">Conflicting evidence (kept as recorded; designs aren&apos;t blended)</p>
+            {data.nameEvidence
+              .filter((e) => e.conflict)
+              .map((e) => (
+                <p key={e.id}>
+                  {e.sourceRef} {e.location}: {e.conflict}
+                </p>
+              ))}
+          </div>
+        )}
+        <details open={data.nameEvidence.length > 0}>
+          <summary className="cursor-pointer text-muted-foreground">Naming evidence ({data.nameEvidence.length})</summary>
+          <ul className="mt-1 space-y-1">
+            {data.nameEvidence.map((e) => (
+              <li key={e.id} className="rounded border p-1.5">
+                <p>
+                  <span className="font-medium">
+                    {e.sourceRef} · {e.location}
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    ({e.kind.replaceAll("_", " ")}, {e.confidence} confidence{e.enteredBy ? `, entered by ${e.enteredBy}` : ""})
+                  </span>
+                </p>
+                <p className="whitespace-pre-wrap">&ldquo;{e.quote}&rdquo;</p>
+                {e.supports.length > 0 && <p className="text-muted-foreground">Supports: {e.supports.join(", ")}</p>}
+                {e.limits && <p className="text-muted-foreground">Limits: {e.limits}</p>}
+                {!filed && (
+                  <button type="button" className="text-muted-foreground underline" onClick={() => retire(e.id)}>
+                    Retire (wrong evidence)
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
         <details>
-          <summary className="cursor-pointer text-muted-foreground">Evidence ({data.evidence.length})</summary>
+          <summary className="cursor-pointer text-muted-foreground">Other context ({data.evidence.length})</summary>
           <ul className="mt-1 space-y-0.5">
             {data.evidence.map((e) => (
               <li key={e.label + e.value}>
@@ -178,7 +235,7 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
                 {row.required && <span className="text-destructive"> *</span>}
               </label>
               <span className="flex items-center gap-2">
-                {row.field === "colour_links" && approved("colour_links") && <span className="text-emerald-600">Approved</span>}
+                {row.field === "colour_links" && <ApprovedBadge field="colour_links" />}
                 <Counter value={value} limit={limit} />
                 {value && <Copy className="h-3 w-3 cursor-pointer" onClick={() => copy(value)} />}
               </span>
@@ -197,10 +254,17 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
             ) : (
               <Input value={value} disabled={filed} onChange={(e) => set(row.field, e.target.value)} className="h-8 text-xs" />
             )}
+            {row.field === "item_type" && data.robloxType && <p className="text-muted-foreground">Form category above; Roblox&apos;s own type (latest check): {data.robloxType}</p>}
             <ProblemList messages={problemsFor(row.field)} />
           </div>
         );
       })}
+
+      <div className="flex items-center justify-between">
+        <span className="font-medium">Item-page answers above (link, type, tags, audience, season, extra info, theme)</span>
+        <ApprovedBadge field="answers" />
+      </div>
+      <ProblemList messages={problemsFor("answers")} />
 
       {problemsFor("roblox").length > 0 && (
         <div className="space-y-0.5 rounded border border-amber-500/40 bg-amber-500/5 p-2">
@@ -236,8 +300,12 @@ export function NominationPanel({ sku, onChanged }: { sku: string; onChanged: ()
             </Button>
             {data.draft && !dirty && (
               <>
+                <Input value={reviewRef} onChange={(e) => setReviewRef(e.target.value)} placeholder="Reviewed where? (optional)" className="h-7 w-56 text-xs" />
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || approved("final_name") || !data.hasNameEvidence} onClick={() => approve("final_name")}>
                   Approve name
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || approved("answers")} onClick={() => approve("answers")}>
+                  Approve answers
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy || approved("colour_links")} onClick={() => approve("colour_links")}>
                   Approve colour links
