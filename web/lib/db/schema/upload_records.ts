@@ -19,6 +19,10 @@ export const uploadRecords = pgTable("upload_records", {
   // Set when Arjun picks this listing as the asset's main one: the link a Today's Picks nomination
   // uses, with the other on-sale listings as its recolours. At most one per asset (index below).
   mainAt: timestamp("main_at", { withTimezone: true }),
+  // This listing's own approved Roblox name, e.g. "Red Christmas Bow Parasol" (lib/naming/variant-naming.ts).
+  approvedName: text("approved_name"),
+  approvedNameAt: timestamp("approved_name_at", { withTimezone: true }),
+  approvedNameBy: uuid("approved_name_by").references(() => personnel.id, { onDelete: "set null" }),
   mainBy: uuid("main_by").references(() => personnel.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

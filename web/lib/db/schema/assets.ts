@@ -34,6 +34,8 @@ export const assets = pgTable("assets", {
   approvedName: text("approved_name"),
   approvedNameAt: timestamp("approved_name_at", { withTimezone: true }),
   approvedNameBy: uuid("approved_name_by").references(() => personnel.id, { onDelete: "set null" }),
+  // The colourway names Arjun approved before upload; the uploader names each listing from these.
+  approvedColourways: jsonb("approved_colourways").$type<{ colour: string; name: string }[]>().default([]).notNull(),
   marketingStatus: text("marketing_status"),
   lastMarketingUpdate: timestamp("last_marketing_update", { withTimezone: true }),
   gmailThreadId: text("gmail_thread_id"),

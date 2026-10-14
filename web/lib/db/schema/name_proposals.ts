@@ -2,6 +2,16 @@ import { pgTable, uuid, text, jsonb, timestamp, uniqueIndex, index } from "drizz
 import { assets } from "./assets";
 import { personnel } from "./personnel";
 
+/** One colourway (before upload) or one live listing (after upload) and its suggested name. */
+export interface VariantCandidate {
+  // Set for kind 'listings': the upload_records id the name is for.
+  listingId?: string;
+  colour: string;
+  name: string;
+  // What Claude saw in this variant's image, the evidence for the colour words.
+  imageNote: string;
+}
+
 export interface NameCandidate {
   name: string;
   why: string;
@@ -21,8 +31,11 @@ export const nameProposals = pgTable(
     batchId: uuid("batch_id").notNull(),
     groupKey: text("group_key").notNull(),
     model: text("model").notNull(),
+    // 'base' | 'colourways' | 'listings'
+    kind: text("kind").default("base").notNull(),
     inputHash: text("input_hash").notNull(),
-    candidates: jsonb("candidates").$type<NameCandidate[]>().default([]).notNull(),
+    // NameCandidate[] for kind 'base'; VariantCandidate[] for 'colourways' and 'listings'.
+    candidates: jsonb("candidates").$type<NameCandidate[] | VariantCandidate[]>().default([]).notNull(),
     imageNotes: text("image_notes"),
     // 'pending' | 'approved' | 'superseded' | 'failed'
     status: text("status").default("pending").notNull(),

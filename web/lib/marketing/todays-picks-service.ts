@@ -51,6 +51,8 @@ export interface PreviewListing {
   variantLabel: string | null;
   onSaleAt: string | null;
   isMain: boolean;
+  // This listing's own approved Roblox name (lib/naming/variant-naming.ts), if any.
+  approvedName: string | null;
   thumbnailUrl: string | null;
   lastCheck: ListingCheckView | null;
 }
@@ -133,6 +135,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       variantLabel: uploadRecords.variantLabel,
       onSaleAt: uploadRecords.onSaleAt,
       mainAt: uploadRecords.mainAt,
+      listingApprovedName: uploadRecords.approvedName,
     })
     .from(uploadRecords)
     .innerJoin(assets, eq(assets.id, uploadRecords.assetId))
@@ -200,6 +203,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       variantLabel: r.variantLabel,
       onSaleAt: r.onSaleAt?.toISOString() ?? null,
       isMain: !!r.mainAt,
+      approvedName: r.listingApprovedName,
       thumbnailUrl: r.robloxAssetId ? (thumbnails.get(r.robloxAssetId) ?? null) : null,
       lastCheck: latestCheck.get(r.id) ?? null,
     });

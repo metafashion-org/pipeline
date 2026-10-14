@@ -28,6 +28,7 @@ function listing(overrides: Partial<PreviewListing> = {}): PreviewListing {
     variantLabel: null,
     onSaleAt: "2026-10-13T00:00:00Z",
     isMain: true,
+    approvedName: null,
     thumbnailUrl: null,
     lastCheck: { checkedAt: "2026-10-13T00:00:00Z", isForSale: true, priceRobux: 145, robloxName: "x", creatorName: "UGC Items", assetTypeId: 46, ourOnSale: true, error: null },
     ...overrides,

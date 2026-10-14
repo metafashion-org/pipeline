@@ -83,9 +83,9 @@ async function test() {
   const calls: { groupKey: string; skus: string[]; images: number }[] = [];
   const loadImage = async () => PIXEL;
   const first = await runNaming({ onlySkus: [`${PREFIX}HAT`, `${PREFIX}NECK`, `${PREFIX}DONE`, `${PREFIX}LIVE`], caller: fakeCaller(calls), loadImage, actorId: owner.id });
-  assert.strictEqual(first.named, 2, "Only Ready-for-upload items without an approved name are named");
+  assert.strictEqual(first.named, 3, "Items waiting to upload or live, without an approved base name, are named");
   assert.strictEqual(calls.length, 1, "Items with the same artifacts go in one call");
-  assert.deepStrictEqual([...calls[0].skus].sort(), [`${PREFIX}HAT`, `${PREFIX}NECK`]);
+  assert.deepStrictEqual([...calls[0].skus].sort(), [`${PREFIX}HAT`, `${PREFIX}LIVE`, `${PREFIX}NECK`], "The already-named item is skipped");
   assert.strictEqual(calls[0].images, 2, "Concept images are sent");
   const hat = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!;
   assert.deepStrictEqual(hat.proposal!.candidates.map((c) => c.name), ["Santa Reindeer Antler Hat", "Sparkly Glitter Santa Hat"], "Placeholder and over-long names are dropped");

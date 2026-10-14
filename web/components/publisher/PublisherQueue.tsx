@@ -16,6 +16,7 @@ interface QueueItem {
   sku: string;
   itemName: string;
   approvedName: string | null;
+  approvedColourways: { colour: string; name: string }[];
   category: string | null;
   deadline: string | null;
   artistName: string | null;
@@ -122,8 +123,24 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
               <button type="button" className="font-medium text-primary hover:underline" onClick={() => void navigator.clipboard.writeText(item.approvedName!).then(() => toast.success("Name copied"))}>
                 {item.approvedName}
               </button>{" "}
-              <span className="text-muted-foreground">(approved; colour listings are &quot;&lt;Colour&gt; {item.approvedName}&quot;)</span>
+              <span className="text-muted-foreground">(approved base name)</span>
             </p>
+          ) : null}
+          {item.approvedColourways.length > 0 ? (
+            <div className="text-xs">
+              <p className="text-muted-foreground">Name each colour listing (click to copy):</p>
+              <ul className="flex flex-wrap gap-x-3">
+                {item.approvedColourways.map((c) => (
+                  <li key={c.name}>
+                    <button type="button" className="text-primary hover:underline" onClick={() => void navigator.clipboard.writeText(c.name).then(() => toast.success("Name copied"))}>
+                      {c.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : item.approvedName ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">No approved colourway names yet (Marketing → Naming)</p>
           ) : (
             <p className="text-xs text-amber-700 dark:text-amber-400">No approved Roblox name yet (Marketing → Naming)</p>
           )}
