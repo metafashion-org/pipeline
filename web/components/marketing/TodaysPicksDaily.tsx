@@ -18,8 +18,8 @@ export function TodaysPicksDaily() {
   const { data, mutate } = useSWR<DailySettings & { recipients: string[] }>(DAILY_URL, jsonFetcher, { revalidateOnFocus: false });
   if (!data) return null;
 
-  async function flip(key: "checkEnabled" | "emailEnabled", value: boolean) {
-    const label = key === "checkEnabled" ? "daily Roblox check" : "daily marketing email";
+  async function flip(key: "checkEnabled" | "emailEnabled" | "namingEnabled", value: boolean) {
+    const label = key === "checkEnabled" ? "daily Roblox check" : key === "emailEnabled" ? "daily marketing email" : "daily AI naming";
     if (value && !window.confirm(`Turn on the ${label}? It runs every day at 19:00 India time until you turn it off.`)) return;
     const { ok, data: res } = await apiCall<{ error?: string }>(DAILY_URL, { method: "PUT", body: { [key]: value } });
     if (!ok) toast.error(res.error || "Couldn't change it");
@@ -39,6 +39,10 @@ export function TodaysPicksDaily() {
         {last ? `Last run ${last.day}: ${last.checked} checked, ${last.failed} failed${last.stoppedEarly ? ", stopped by Roblox" : ""}.` : "Hasn't run yet."}
         {data.failedCheckRuns > 0 && ` ${data.failedCheckRuns} failed run(s) in a row; it turns itself off after 3.`}
       </p>
+      <label className="flex items-center gap-2">
+        <Switch checked={data.namingEnabled} onCheckedChange={(v) => flip("namingEnabled", v)} />
+        Suggest names with Claude for items at Ready for upload (new or changed inputs only; at most 24 a day).
+      </label>
       <label className="flex items-center gap-2">
         <Switch checked={data.emailEnabled} onCheckedChange={(v) => flip("emailEnabled", v)} />
         Email the day&apos;s marketing summary to {data.recipients.join(", ")}.

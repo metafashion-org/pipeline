@@ -29,6 +29,11 @@ export const assets = pgTable("assets", {
   // never counts it as owed.
   paidOutsideAt: timestamp("paid_outside_at", { withTimezone: true }),
   paidOutsideNote: text("paid_outside_note"),
+  // The Roblox listing name Arjun approved from AI naming (lib/naming/naming-service.ts). The uploader
+  // uses it; Today's Picks starts from it. Null until approved.
+  approvedName: text("approved_name"),
+  approvedNameAt: timestamp("approved_name_at", { withTimezone: true }),
+  approvedNameBy: uuid("approved_name_by").references(() => personnel.id, { onDelete: "set null" }),
   marketingStatus: text("marketing_status"),
   lastMarketingUpdate: timestamp("last_marketing_update", { withTimezone: true }),
   gmailThreadId: text("gmail_thread_id"),

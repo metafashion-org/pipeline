@@ -15,6 +15,7 @@ interface QueueItem {
   id: string;
   sku: string;
   itemName: string;
+  approvedName: string | null;
   category: string | null;
   deadline: string | null;
   artistName: string | null;
@@ -115,6 +116,17 @@ function QueueCard({ item, onPublished }: { item: QueueItem; onPublished: (id: s
         <div className="min-w-0 flex-1">
           <p className="font-mono text-xs text-muted-foreground">{item.sku}</p>
           <p className="font-semibold truncate">{item.itemName}</p>
+          {item.approvedName ? (
+            <p className="text-xs">
+              Roblox name:{" "}
+              <button type="button" className="font-medium text-primary hover:underline" onClick={() => void navigator.clipboard.writeText(item.approvedName!).then(() => toast.success("Name copied"))}>
+                {item.approvedName}
+              </button>{" "}
+              <span className="text-muted-foreground">(approved; colour listings are &quot;&lt;Colour&gt; {item.approvedName}&quot;)</span>
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-400">No approved Roblox name yet (Marketing → Naming)</p>
+          )}
           <p className="text-xs text-muted-foreground">
             {item.category || "Uncategorised"} · Artist: {item.artistName || "-"} · Deadline: {formatDate(item.deadline, "Not set")}
           </p>

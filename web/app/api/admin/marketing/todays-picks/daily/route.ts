@@ -7,7 +7,7 @@ import { teamDay } from "@/lib/team-tasks/task-rules";
 
 export const dynamic = "force-dynamic";
 
-const SwitchSchema = z.object({ checkEnabled: z.boolean().optional(), emailEnabled: z.boolean().optional() });
+const SwitchSchema = z.object({ checkEnabled: z.boolean().optional(), emailEnabled: z.boolean().optional(), namingEnabled: z.boolean().optional() });
 
 async function owner() {
   const user = await getAuthedUser();

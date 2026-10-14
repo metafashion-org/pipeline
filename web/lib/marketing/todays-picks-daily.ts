@@ -34,12 +34,14 @@ const MAX_FAILED_LISTING_SHARE = 0.5;
 
 export interface DailySettings {
   checkEnabled: boolean;
+  // AI naming of items at Ready for upload (lib/naming/naming-service.ts runNaming), once a day.
+  namingEnabled: boolean;
   emailEnabled: boolean;
   failedCheckRuns: number;
   lastCheck: { day: string; checked: number; failed: number; stoppedEarly: boolean } | null;
 }
 
-const DEFAULT_SETTINGS: DailySettings = { checkEnabled: false, emailEnabled: false, failedCheckRuns: 0, lastCheck: null };
+const DEFAULT_SETTINGS: DailySettings = { checkEnabled: false, emailEnabled: false, namingEnabled: false, failedCheckRuns: 0, lastCheck: null };
 
 /** Output: the switches and the last check's result. Both switches are off until Arjun turns them on. */
 export async function getDailySettings(): Promise<DailySettings> {
@@ -55,12 +57,13 @@ async function saveSettings(settings: DailySettings, actorId: string | null): Pr
 }
 
 /** Turns the daily check or email on or off. Turning the check on clears its failure count. */
-export async function setDailySwitches(input: { checkEnabled?: boolean; emailEnabled?: boolean }, actorId: string | null): Promise<DailySettings> {
+export async function setDailySwitches(input: { checkEnabled?: boolean; emailEnabled?: boolean; namingEnabled?: boolean }, actorId: string | null): Promise<DailySettings> {
   const current = await getDailySettings();
   const next: DailySettings = {
     ...current,
     ...(input.checkEnabled !== undefined ? { checkEnabled: input.checkEnabled, failedCheckRuns: input.checkEnabled ? 0 : current.failedCheckRuns } : {}),
     ...(input.emailEnabled !== undefined ? { emailEnabled: input.emailEnabled } : {}),
+    ...(input.namingEnabled !== undefined ? { namingEnabled: input.namingEnabled } : {}),
   };
   await saveSettings(next, actorId);
   await db.insert(auditLog).values({ action: "setTodaysPicksDaily", entityType: "todays_picks_daily", entityId: null, actorId, payload: input });

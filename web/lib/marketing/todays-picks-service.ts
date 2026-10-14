@@ -65,6 +65,8 @@ export interface PreviewItem {
   trendReasoning: string | null;
   // Active naming evidence (lib/marketing/name-evidence.ts). Separate from artifacts, which are design-origin links.
   nameEvidence: NameEvidenceView[];
+  // The Roblox name Arjun approved before upload (lib/naming/naming-service.ts), if any.
+  approvedName: string | null;
   referenceImageCount: number;
   listings: PreviewListing[];
   blockers: string[];
@@ -124,6 +126,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
       brandGroup: brandGroups.name,
       referenceImages: assets.referenceImages,
       briefFields: assets.briefFields,
+      approvedName: assets.approvedName,
       id: uploadRecords.id,
       url: uploadRecords.robloxItemUrl,
       robloxAssetId: uploadRecords.robloxAssetId,
@@ -185,6 +188,7 @@ export async function listTodaysPicksPreview(): Promise<PreviewItem[]> {
         .map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
       trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
       nameEvidence: evidenceByAsset.get(r.assetId) ?? [],
+      approvedName: r.approvedName,
       referenceImageCount: Array.isArray(r.referenceImages) ? r.referenceImages.length : 0,
       listings: [],
       blockers: [],
