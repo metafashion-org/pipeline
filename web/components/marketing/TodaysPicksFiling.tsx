@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Check, Copy, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,6 @@ function asText(f: FilingPackage, owner: OwnerDetails): string {
 export function OwnerDetailsCard({ owner, onChanged }: { owner: OwnerDetails; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(owner);
-  useEffect(() => setDraft(owner), [owner]);
 
   async function save() {
     const { ok, data } = await apiCall<{ error?: string }>(FILING_URL, { method: "PUT", body: draft });
@@ -68,7 +67,14 @@ export function OwnerDetailsCard({ owner, onChanged }: { owner: OwnerDetails; on
           <span>
             · Email <span className="font-mono">{owner.email}</span> <Copy className="inline h-3 w-3 cursor-pointer" onClick={() => copy(owner.email)} />
           </span>
-          <button type="button" className="text-primary hover:underline" onClick={() => setEditing(true)}>
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => {
+              setDraft(owner);
+              setEditing(true);
+            }}
+          >
             Change
           </button>
         </>
@@ -83,7 +89,6 @@ export function FilingCard({ filing, owner, onChanged }: { filing: FilingPackage
   const [fields, setFields] = useState(filing.fields);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => setFields(filing.fields), [filing.fields]);
 
   async function post(body: Record<string, unknown>, success: string) {
     setBusy(true);
@@ -155,7 +160,14 @@ export function FilingCard({ filing, owner, onChanged }: { filing: FilingPackage
               Save answers
             </Button>
           ) : (
-            <button type="button" className="text-muted-foreground hover:underline" onClick={() => setEditing(true)}>
+            <button
+              type="button"
+              className="text-muted-foreground hover:underline"
+              onClick={() => {
+                setFields(filing.fields);
+                setEditing(true);
+              }}
+            >
               Edit answers
             </button>
           )}
