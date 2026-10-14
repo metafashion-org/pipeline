@@ -19,7 +19,7 @@ import { nominationDrafts, nominationEvents } from "@/lib/db/schema/nomination_d
 import { teamTaskComments } from "@/lib/db/schema/team_task_comments";
 import { FIELD_LIMITS, FORM_VERSION, ITEM_TYPES, type DraftFields } from "./nomination-fields";
 import { MARKETING_TASK_ID, NOMINATION_EMAIL, NOMINATION_USERNAME, proposeDraft } from "./nomination-service";
-import { listTodaysPicksPreview, TodaysPicksError, type PreviewItem } from "./todays-picks-service";
+import { isPlaceholderName, listTodaysPicksPreview, TodaysPicksError, type PreviewItem } from "./todays-picks-service";
 
 const OWNER_DETAILS_KEY = "todays_picks_owner_details";
 const MAX_NOTE_CHARS = 300;
@@ -52,6 +52,15 @@ export async function setOwnerDetails(details: OwnerDetails, actorId: string | n
   return clean;
 }
 
+/**
+ * True when a Roblox listing name is already a proper name: at least two words, not a placeholder
+ * like "belt 6", and not all lowercase. Such a name counts without going through the Naming page.
+ */
+export function isProperRobloxName(name: string | null | undefined): boolean {
+  const clean = (name ?? "").trim();
+  return clean.split(/\s+/).length >= 2 && !isPlaceholderName(clean) && clean !== clean.toLowerCase();
+}
+
 export interface FilingPackage {
   sku: string;
   itemName: string;
@@ -71,7 +80,10 @@ export interface FilingPackage {
 export function filingPackage(item: PreviewItem, saved: DraftFields, filed: FilingPackage["filed"]): FilingPackage {
   const { proposed } = proposeDraft(item, item.approvedName ?? "");
   const main = item.listings.find((l) => l.isMain);
-  const name = main?.approvedName ?? item.approvedName ?? null;
+  // An approved name wins. Without one, a proper name already on Roblox counts as the name.
+  const approved = main?.approvedName ?? item.approvedName ?? null;
+  const robloxMainName = main?.lastCheck?.robloxName?.trim() ?? null;
+  const name = approved ?? (isProperRobloxName(robloxMainName) ? robloxMainName : null);
   const pick = (f: keyof DraftFields) => (saved[f] ?? proposed[f] ?? "").trim();
   const fields = {
     item_link: main?.url ?? "",
@@ -85,7 +97,16 @@ export function filingPackage(item: PreviewItem, saved: DraftFields, filed: Fili
   };
   const robloxName = main?.lastCheck?.robloxName?.trim() ?? null;
   const checklist = [
-    { label: name ? `Name approved: ${name}` : "Approve a name on the Naming page", ok: !!name },
+    {
+      label: approved
+        ? `Name approved: ${approved}`
+        : name
+          ? `Named on Roblox: ${name}`
+          : robloxMainName
+            ? `"${robloxMainName}" isn't a proper name yet: rename it on Roblox or approve one on the Naming page`
+            : "Approve a name on the Naming page",
+      ok: !!name,
+    },
     { label: main ? "Main listing chosen" : "Choose a main listing", ok: !!main },
     {
       label: !main?.lastCheck ? "Check the main listing on Roblox" : main.lastCheck.isForSale ? "Main listing on sale" : "Main listing is off sale on Roblox",
