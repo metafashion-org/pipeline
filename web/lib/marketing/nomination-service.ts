@@ -159,20 +159,22 @@ function wordKey(word: string): string {
   return word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word;
 }
 
-// Every word of the SKU's evidence, keyed by wordKey, with the sources it appears in and whether
-// each source is marked as conflicting. Sources: naming evidence records (full quote and the words
-// they list as supported), linked artifacts, and the trend origin.
-function evidenceWordSources(item: PreviewItem): Map<string, { label: string; conflict: boolean }[]> {
-  const sources: { label: string; text: string; conflict: boolean }[] = [
-    ...item.nameEvidence.map((e) => ({ label: evidenceLabel(e), text: `${e.quote} ${e.supports.join(" ")}`, conflict: !!e.conflict })),
-    ...item.artifacts.map((a) => ({ label: `Artifact ${a.artifactId}`, text: [a.title, a.description ?? "", a.tags.join(" ")].join(" "), conflict: false })),
+// Every word of the SKU's evidence, keyed by wordKey, with each source record it appears in. Sources
+// are told apart by their id (an evidence record's id, the artifact id, or "trend"), never by their
+// label: two records can share a label such as "head-ranking row 58", and one of them may be marked
+// as conflicting. Sources: naming evidence records (full quote and the words they list as
+// supported), linked artifacts, and the trend origin.
+function evidenceWordSources(item: PreviewItem): Map<string, { id: string; label: string; conflict: boolean }[]> {
+  const sources: { id: string; label: string; text: string; conflict: boolean }[] = [
+    ...item.nameEvidence.map((e) => ({ id: `evidence:${e.id}`, label: evidenceLabel(e), text: `${e.quote} ${e.supports.join(" ")}`, conflict: !!e.conflict })),
+    ...item.artifacts.map((a) => ({ id: `artifact:${a.artifactId}`, label: `Artifact ${a.artifactId}`, text: [a.title, a.description ?? "", a.tags.join(" ")].join(" "), conflict: false })),
   ];
-  if (item.trendReasoning) sources.push({ label: "Trend origin", text: item.trendReasoning, conflict: false });
-  const found = new Map<string, { label: string; conflict: boolean }[]>();
+  if (item.trendReasoning) sources.push({ id: "trend", label: "Trend origin", text: item.trendReasoning, conflict: false });
+  const found = new Map<string, { id: string; label: string; conflict: boolean }[]>();
   for (const source of sources) {
     for (const word of new Set(words(source.text).map(wordKey))) {
       const list = found.get(word) ?? [];
-      if (!list.some((s) => s.label === source.label)) list.push({ label: source.label, conflict: source.conflict });
+      if (!list.some((s) => s.id === source.id)) list.push({ id: source.id, label: source.label, conflict: source.conflict });
       found.set(word, list);
     }
   }
@@ -181,16 +183,22 @@ function evidenceWordSources(item: PreviewItem): Map<string, { label: string; co
 
 /**
  * Each meaningful word of a name with the evidence sources that contain it. conflictOnly is true
- * when every source for the word is marked as conflicting. Filler words and words under 3 letters
- * are not checked.
+ * when every source record for the word is marked as conflicting. Filler words and words under 3
+ * letters are not checked. A label shared by two records is shown once, marked when one of them
+ * is conflicting.
  *
  * Input: the name and the SKU's preview. Output: one entry per word, in name order.
  */
 export function nameWordSources(name: string, item: PreviewItem): { word: string; sources: string[]; conflictOnly: boolean }[] {
   const known = evidenceWordSources(item);
   return words(name).map((word) => {
-    const sources = known.get(wordKey(word)) ?? [];
-    return { word, sources: sources.map((s) => s.label), conflictOnly: sources.length > 0 && sources.every((s) => s.conflict) };
+    const records = known.get(wordKey(word)) ?? [];
+    const labels: string[] = [];
+    for (const r of records) {
+      const label = r.conflict ? `${r.label} (conflicting)` : r.label;
+      if (!labels.includes(label)) labels.push(label);
+    }
+    return { word, sources: labels, conflictOnly: records.length > 0 && records.every((r) => r.conflict) };
   });
 }
 

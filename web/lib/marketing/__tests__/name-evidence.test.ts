@@ -11,7 +11,7 @@ import { nominationDrafts, nominationEvents } from "@/lib/db/schema/nomination_d
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { robloxListingChecks } from "@/lib/db/schema/roblox_listing_checks";
 import { ingestEvidenceRows, loadNameEvidence, retireEvidence, type NameEvidenceView } from "../name-evidence";
-import { approveField, conflictOnlyNameWords, draftProblems, getNomination, robloxTypeOf, saveDraft, unsupportedNameWords } from "../nomination-service";
+import { approveField, conflictOnlyNameWords, draftProblems, getNomination, nameWordSources, robloxTypeOf, saveDraft, unsupportedNameWords } from "../nomination-service";
 import { listTodaysPicksPreview, TodaysPicksError, type PreviewItem, type PreviewListing } from "../todays-picks-service";
 
 const PREFIX = "TEST-EVID-";
@@ -80,6 +80,23 @@ function testRegressionCases() {
   assert.deepStrictEqual(conflictOnlyNameWords("Reindeer Snowflake Headband", band), ["reindeer"], "Blending in the conflicting design is refused");
   const blended = draftProblems({ final_name: "Reindeer Snowflake Headband" }, {}, band).map((p) => p.message);
   assert.ok(blended.some((m) => m.includes("Only conflicting evidence supports: reindeer")));
+
+  // Two records with the same label: one conflicting, one not. Records are told apart by id, so the
+  // supporting one counts whichever loads first, and the conflict stays visible.
+  const sameLabelSupport = ev({ sourceRef: "head-ranking", location: "row 58", quote: "christmas boppers" });
+  const sameLabelConflict = ev({ sourceRef: "head-ranking", location: "row 58", quote: "reindeer boppers", conflict: "Concept sheet shows snowflake boppers" });
+  for (const order of [
+    [sameLabelSupport, sameLabelConflict],
+    [sameLabelConflict, sameLabelSupport],
+  ]) {
+    const twin = sku(order);
+    assert.deepStrictEqual(conflictOnlyNameWords("Christmas Bopper", twin), [], "bopper has a non-conflicting record, in either load order");
+    assert.deepStrictEqual(conflictOnlyNameWords("Reindeer Bopper", twin), ["reindeer"], "reindeer stays conflict-only, in either load order");
+    const bopper = nameWordSources("Christmas Bopper", twin).find((w) => w.word === "bopper")!;
+    assert.deepStrictEqual([...bopper.sources].sort(), ["head-ranking row 58", "head-ranking row 58 (conflicting)"], "Both records show; neither hides the other");
+  }
+  const bothConflicting = sku([ev({ sourceRef: "refs", location: "img", quote: "reindeer", conflict: "a" }), ev({ sourceRef: "refs", location: "img", quote: "reindeer", conflict: "b" })]);
+  assert.deepStrictEqual(conflictOnlyNameWords("Reindeer", bothConflicting), ["reindeer"]);
 
   // 0083: live metadata governs classification; the form keeps its combined category separately.
   const backpack = sku([ev({ sourceRef: "shoulder-ranking", location: "row 9", quote: "reindeer backpack", limits: "Product-family match; not proof of historical origin" })], {
