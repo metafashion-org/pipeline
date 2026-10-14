@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { apiCall } from "@/lib/api-client";
 import { jsonFetcher } from "@/lib/fetcher";
 import type { PreviewItem, PreviewListing } from "@/lib/marketing/todays-picks-service";
-import { NominationPanel } from "./NominationPanel";
+import { FILING_URL, FilingCard, OwnerDetailsCard } from "./TodaysPicksFiling";
+import type { FilingPackage, OwnerDetails } from "@/lib/marketing/todays-picks-filing";
 import { TodaysPicksDaily } from "./TodaysPicksDaily";
 
 const PREVIEW_URL = "/api/admin/marketing/todays-picks";
@@ -111,6 +112,12 @@ function ConnectSheet({ onConnected }: { onConnected: () => void }) {
  */
 export function TodaysPicksPreview() {
   const { data, mutate, isLoading } = useSWR<PreviewResponse>(PREVIEW_URL, jsonFetcher, { revalidateOnFocus: false });
+  // Each item's Today's Picks answers and automatic readiness, and the username/email used for all.
+  const filingSwr = useSWR<{ filings: FilingPackage[]; owner: OwnerDetails }>(FILING_URL, jsonFetcher, { revalidateOnFocus: false });
+  const refreshAll = () => {
+    void mutate();
+    void filingSwr.mutate();
+  };
   const [busySku, setBusySku] = useState<string | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -207,6 +214,7 @@ export function TodaysPicksPreview() {
       </div>
       {!data.sheetUrl && <ConnectSheet onConnected={() => mutate()} />}
       <TodaysPicksDaily />
+      {filingSwr.data && <OwnerDetailsCard owner={filingSwr.data.owner} onChanged={refreshAll} />}
 
       {data.items.map((item) => (
         <section key={item.sku} className="space-y-2 rounded-lg border bg-card p-3">
@@ -219,9 +227,14 @@ export function TodaysPicksPreview() {
               </p>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <span className="self-center rounded bg-muted px-1.5 py-0.5 text-[11px]">Nomination: {data.nominations[item.sku]?.state ?? "not started"}</span>
+              <span className="self-center rounded bg-muted px-1.5 py-0.5 text-[11px]">
+                {(() => {
+                  const f = filingSwr.data?.filings.find((x) => x.sku === item.sku);
+                  return !f ? "Today's Picks" : f.filed ? "Today's Picks: filed" : f.ready ? "Today's Picks: ready" : "Today's Picks: not ready";
+                })()}
+              </span>
               <Button size="sm" variant={openSku === item.sku ? "default" : "outline"} className="h-7 text-xs" onClick={() => setOpenSku(openSku === item.sku ? null : item.sku)}>
-                {openSku === item.sku ? "Close nomination" : "Nomination"}
+                {openSku === item.sku ? "Close" : "Today's Picks"}
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!busySku} onClick={() => checkOne(item.sku)}>
                 <RefreshCw className={`mr-1 h-3 w-3 ${busySku === item.sku ? "animate-spin" : ""}`} />
@@ -236,7 +249,12 @@ export function TodaysPicksPreview() {
               ))}
             </ul>
           )}
-          {openSku === item.sku && <NominationPanel sku={item.sku} onChanged={() => mutate()} />}
+          {openSku === item.sku &&
+            filingSwr.data &&
+            (() => {
+              const f = filingSwr.data.filings.find((x) => x.sku === item.sku);
+              return f ? <FilingCard filing={f} owner={filingSwr.data.owner} onChanged={refreshAll} /> : null;
+            })()}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             {item.listings.map((listing, index) => (
               <ListingTile key={listing.id} listing={listing} index={index} busy={busySku === item.sku} onMain={() => setMain(item.sku, listing)} />

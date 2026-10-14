@@ -26,7 +26,8 @@ import { appSettings } from "@/lib/db/schema/app_settings";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { GOOGLE_SHEET_CLIENT, type FileAccess, type SheetClient, type SheetRequest, type SheetTab } from "./google-sheet-access";
 import { listTodaysPicksPreview, TODAYS_PICKS_OWNER_EMAIL, TodaysPicksError, type PreviewItem } from "./todays-picks-service";
-import { ingestSuggestions, nominationSummaries } from "./nomination-service";
+import { ingestSuggestions } from "./nomination-service";
+import { listFilings, markFiled, type FilingPackage } from "./todays-picks-filing";
 import { ingestEvidenceRows } from "./name-evidence";
 
 export interface NominationSummary {
@@ -44,6 +45,9 @@ export const ITEMS_TAB = "Items";
 export const LISTINGS_TAB = "Listings";
 export const SUGGESTIONS_TAB = "Suggestions";
 export const EVIDENCE_TAB = "Evidence";
+// Where the assistant logs a filing it did: one row per item filed. Only read by the Kanban.
+export const FILED_TAB = "Filed";
+export const FILED_HEADER = ["sku", "filed_by", "note"];
 export const LOG_TAB = "Sync log";
 export const ITEMS_HEADER = [
   "sku",
@@ -56,10 +60,20 @@ export const ITEMS_HEADER = [
   "artifacts",
   "reference_images",
   "blockers",
-  "final_name",
-  "nomination_state",
-  "nomination_attempt",
-  "submitted_at",
+  // Today's Picks: "ready", "not ready" or "filed", and everything needed to fill the form.
+  "todays_picks",
+  "not_ready_because",
+  "name",
+  "item_link",
+  "item_type",
+  "tags",
+  "audience",
+  "colour_links",
+  "season",
+  "extra_info",
+  "theme",
+  "filed_at",
+  "filed_by",
   "synced_at",
 ];
 export const LISTINGS_HEADER = [
@@ -89,6 +103,7 @@ const TABS = [
   { title: LISTINGS_TAB, header: LISTINGS_HEADER },
   { title: SUGGESTIONS_TAB, header: SUGGESTIONS_HEADER },
   { title: EVIDENCE_TAB, header: EVIDENCE_HEADER },
+  { title: FILED_TAB, header: FILED_HEADER },
   { title: LOG_TAB, header: LOG_HEADER },
 ];
 // Google Sheets ids are 44 characters of letters, digits, - and _.
@@ -184,7 +199,7 @@ export async function connectTodaysPicksSheet(input: string, actorId: string | n
 }
 
 /** Input: preview items and the sync time. Output: the Items and Listings rows, without headers. */
-export function sheetRows(items: PreviewItem[], syncedAt: string, nominations: Map<string, NominationSummary> = new Map()): { items: string[][]; listings: string[][] } {
+export function sheetRows(items: PreviewItem[], syncedAt: string, filings: Map<string, FilingPackage> = new Map()): { items: string[][]; listings: string[][] } {
   const yesNo = (v: boolean | null | undefined) => (v === null || v === undefined ? "" : v ? "yes" : "no");
   return {
     items: items.map((item) => [
@@ -198,10 +213,7 @@ export function sheetRows(items: PreviewItem[], syncedAt: string, nominations: M
       item.artifacts.map((a) => `${a.artifactId} ${a.title}`).join("; "),
       String(item.referenceImageCount),
       item.blockers.join("; "),
-      nominations.get(item.sku)?.finalName ?? "",
-      nominations.get(item.sku)?.state ?? "not started",
-      nominations.get(item.sku) ? String(nominations.get(item.sku)!.attemptNo) : "",
-      nominations.get(item.sku)?.submittedAt ?? "",
+      ...filingCells(filings.get(item.sku)),
       syncedAt,
     ]),
     listings: items.flatMap((item) =>
@@ -225,6 +237,26 @@ export function sheetRows(items: PreviewItem[], syncedAt: string, nominations: M
       ])
     ),
   };
+}
+
+// The Today's Picks columns of one Items row, in ITEMS_HEADER order.
+function filingCells(f: FilingPackage | undefined): string[] {
+  if (!f) return ["", "", "", "", "", "", "", "", "", "", "", "", ""];
+  return [
+    f.filed ? "filed" : f.ready ? "ready" : "not ready",
+    f.checklist.filter((c) => !c.ok).map((c) => c.label).join("; "),
+    f.name ?? "",
+    f.fields.item_link,
+    f.fields.item_type,
+    f.fields.tags,
+    f.fields.audience,
+    f.fields.colour_links,
+    f.fields.season,
+    f.fields.extra_info,
+    f.fields.theme,
+    f.filed?.at ?? "",
+    f.filed?.by ?? "",
+  ];
 }
 
 /**
@@ -302,9 +334,21 @@ export async function syncTodaysPicksSheet(
       items.map((i) => i.sku)
     );
 
-    const rows = sheetRows(items, syncedAt, await nominationSummaries());
+    // Filings the assistant logged in the Filed tab are recorded like "Mark filed" (once per item).
+    const filedRows = (await google.readRows(config.sheetId, `'${FILED_TAB}'!A2:C`)).map(([sku = "", by = "", note = ""]) => ({ sku: sku.trim(), by: by.trim(), note: note.trim() }));
+    const filedRefused: string[] = [];
+    for (const [index, row] of filedRows.entries()) {
+      if (!row.sku) continue;
+      if (!items.some((i) => i.sku === row.sku)) {
+        filedRefused.push(`Filed row ${index + 2}: SKU "${row.sku}" isn't live`);
+        continue;
+      }
+      await markFiled(row.sku, { by: row.by || "assistant", note: row.note || null }, actorId);
+    }
+    const filings = await listFilings();
+    const rows = sheetRows(items, syncedAt, new Map(filings.map((f) => [f.sku, f])));
     await google.batchUpdate(config.sheetId, [...replaceRowsRequests(tab(ITEMS_TAB), ITEMS_HEADER, rows.items), ...replaceRowsRequests(tab(LISTINGS_TAB), LISTINGS_HEADER, rows.listings)]);
-    const refusedNote = [...suggestions.refused.map((r) => `Suggestions row ${r.row}: ${r.reason}`), ...evidence.refused.map((r) => `Evidence row ${r.row}: ${r.reason}`)].join("; ");
+    const refusedNote = [...suggestions.refused.map((r) => `Suggestions row ${r.row}: ${r.reason}`), ...evidence.refused.map((r) => `Evidence row ${r.row}: ${r.reason}`), ...filedRefused].join("; ");
     await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "ok", String(rows.items.length), String(rows.listings.length), refusedNote]]);
     await db.insert(auditLog).values({ action: "syncTodaysPicksSheet", entityType: "todays_picks_sheet", entityId: null, actorId, payload: { items: rows.items.length, listings: rows.listings.length, suggestions, evidence } });
     return {
