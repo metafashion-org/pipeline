@@ -31,6 +31,20 @@ function NamingCard({ item, onChanged }: { item: NamingView; onChanged: () => vo
   const [busy, setBusy] = useState(false);
   useEffect(() => setName(item.proposal?.candidates[0]?.name ?? ""), [item.proposal?.id, item.proposal?.candidates]);
 
+  async function suggestForThis() {
+    setBusy(true);
+    try {
+      const { ok, data } = await apiCall<{ error?: string; named: number; skipped: number; failed: number }>(NAMING_URL, { method: "POST", body: { action: "run", skus: [item.sku] } });
+      if (!ok) toast.error(data.error || "Naming failed");
+      else if (data.named) toast.success(`Suggestions ready for ${item.sku}`);
+      else if (data.skipped) toast.info("Nothing changed since the last suggestions, so nothing was sent");
+      else toast.error("Claude didn't return suggestions; see the card");
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function approve() {
     setBusy(true);
     try {
@@ -52,8 +66,59 @@ function NamingCard({ item, onChanged }: { item: NamingView; onChanged: () => vo
           </p>
           <p className="text-muted-foreground">Working title: {item.itemName}</p>
         </div>
-        {item.approvedName && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-400">Approved: {item.approvedName}</span>}
+        <span className="flex items-center gap-2">
+          {item.approvedName && <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-400">Approved: {item.approvedName}</span>}
+          {!item.approvedName && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={suggestForThis}>
+              <Sparkles className="mr-1 h-3 w-3" />
+              {busy ? "Asking Claude…" : "Suggest for this item"}
+            </Button>
+          )}
+        </span>
       </div>
+      <details>
+        <summary className="cursor-pointer text-muted-foreground">What Claude reads for this item</summary>
+        <div className="mt-1 space-y-1 rounded bg-muted/50 p-2">
+          <p>
+            <span className="font-medium">Working title</span> (only to know which item; never a word source): {item.reads.workingTitle}
+          </p>
+          <p>
+            <span className="font-medium">Category:</span> {item.reads.category ?? "none"}
+          </p>
+          <p>
+            <span className="font-medium">Trend note:</span> {item.reads.trendNote ?? "none"}
+          </p>
+          <p className="font-medium">Linked artifacts (the Registry summary only, not the document behind the link):</p>
+          {item.reads.artifacts.length === 0 ? (
+            <p className="text-muted-foreground">None linked.</p>
+          ) : (
+            <ul className="list-inside list-disc">
+              {item.reads.artifacts.map((a) => (
+                <li key={a.artifactId}>
+                  {a.artifactId} {a.title}
+                  {a.description ? ` — ${a.description}` : ""}
+                  {a.tags.length ? ` (tags: ${a.tags.join(", ")})` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="font-medium">Evidence quotes from the sheet&apos;s Evidence tab (full text from reports, workbooks, images):</p>
+          {item.reads.evidence.length === 0 ? (
+            <p className="text-muted-foreground">None yet. Add rows in the Evidence tab and sync the sheet to give Claude the detail from the documents.</p>
+          ) : (
+            <ul className="list-inside list-disc">
+              {item.reads.evidence.map((e) => (
+                <li key={e.label + e.quote}>
+                  {e.label}: &ldquo;{e.quote}&rdquo;
+                </li>
+              ))}
+            </ul>
+          )}
+          <p>
+            <span className="font-medium">Concept images:</span> {item.reads.imageCount} (shown above)
+          </p>
+        </div>
+      </details>
       {item.imageFileIds.length > 0 && (
         <div className="flex gap-2">
           {item.imageFileIds.map((id) => (

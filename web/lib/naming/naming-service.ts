@@ -71,7 +71,7 @@ const RULES = `You suggest base names for Roblox accessories. Work only from the
 For each item:
 1. image_notes: describe only what the concept images show - item type, shape, motifs, materials, notable details. No guesses about use or origin. Write "No images" if none were given.
 2. candidates: up to ${CANDIDATES_PER_ITEM} base names, best first, following the naming guidelines. Each must be under 50 characters.
-3. For every word of every name, give its source: "artifact:<ID>" for an artifact's text, "trend" for the item's trend note, or "images" for your image_notes. Every meaningful word must appear in that source. If a word can't be sourced, don't use it.
+3. For every word of every name, give its source: "artifact:<ID>" for an artifact's text, "evidence:<label>" for an evidence quote, "trend" for the item's trend note, or "images" for your image_notes. Every meaningful word must appear in that source. If a word can't be sourced, don't use it.
 
 The working title is an internal, exploratory label. Use it to understand which item is meant, never as a source of words.
 Answer for every item you were given, using its exact SKU.`;
@@ -100,6 +100,10 @@ export interface NamingInputItem {
   trendReasoning: string | null;
   artifacts: PreviewItem["artifacts"];
   imageFileIds: string[];
+  // Full-text naming evidence from the sheet's Evidence tab (report lines, workbook rows, image
+  // notes), excluding Claude's own earlier image readings. The artifacts above are only their
+  // Registry summary; these quotes carry the detail from the documents themselves.
+  evidenceQuotes?: { label: string; quote: string }[];
 }
 
 /** One call to the model. Swappable so tests don't call Claude. */
@@ -132,7 +136,7 @@ export function groupKeyOf(item: Pick<NamingInputItem, "artifacts">): string {
 /** A hash of everything sent to Claude for one item, so unchanged inputs aren't named twice. */
 export function inputHashOf(item: NamingInputItem, guidelines: string): string {
   return createHash("sha256")
-    .update(JSON.stringify([NAMING_MODEL, guidelines, item.itemName, item.category, item.trendReasoning, item.artifacts, item.imageFileIds.slice(0, IMAGES_PER_ITEM)]))
+    .update(JSON.stringify([NAMING_MODEL, guidelines, item.itemName, item.category, item.trendReasoning, item.artifacts, item.imageFileIds.slice(0, IMAGES_PER_ITEM), item.evidenceQuotes ?? []]))
     .digest("hex")
     .slice(0, 32);
 }
@@ -149,6 +153,7 @@ async function loadNamingInputs(onlySkus?: string[]): Promise<NamingInputItem[]>
     .from(artifactSkuLinks)
     .innerJoin(knowledgeArtifacts, eq(knowledgeArtifacts.id, artifactSkuLinks.artifactId))
     .where(inArray(artifactSkuLinks.assetId, rows.map((r) => r.id)));
+  const evidence = await loadNameEvidence(rows.map((r) => r.id));
   return rows.map((r) => ({
     assetId: r.id,
     sku: r.sku,
@@ -157,7 +162,13 @@ async function loadNamingInputs(onlySkus?: string[]): Promise<NamingInputItem[]>
     trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
     artifacts: links.filter((l) => l.assetId === r.id).map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
     imageFileIds: ((r.referenceImages as { externalId?: string }[] | null) ?? []).map((f) => f.externalId).filter((id): id is string => !!id),
+    evidenceQuotes: evidenceQuotesOf(evidence.get(r.id) ?? []),
   }));
+}
+
+// Evidence quotes to send: everything except Claude's own earlier image readings and conflicting records.
+function evidenceQuotesOf(records: PreviewItem["nameEvidence"]): { label: string; quote: string }[] {
+  return records.filter((e) => e.enteredBy !== NAMING_MODEL && !e.conflict).map((e) => ({ label: `${e.sourceRef} ${e.location}`, quote: e.quote }));
 }
 
 async function fetchImage(fileId: string): Promise<NamingImage | null> {
@@ -181,7 +192,7 @@ export const CLAUDE_NAMING_CALLER: NamingCaller = async ({ guidelines, groupKey,
   for (const item of items) {
     content.push({
       type: "text",
-      text: `<item sku="${item.sku}">\nworking title (exploratory, not a word source): ${item.itemName}\ncategory: ${item.category ?? "unknown"}\ntrend note: ${item.trendReasoning ?? "none"}\nconcept images attached below: ${item.images.length}\n</item>`,
+      text: `<item sku="${item.sku}">\nworking title (exploratory, not a word source): ${item.itemName}\ncategory: ${item.category ?? "unknown"}\ntrend note: ${item.trendReasoning ?? "none"}\n${(item.evidenceQuotes ?? []).map((e) => `<evidence label="${e.label}">${e.quote}</evidence>`).join("\n") || "no evidence quotes"}\nconcept images attached below: ${item.images.length}\n</item>`,
     });
     for (const image of item.images) content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } });
   }
@@ -312,6 +323,8 @@ export interface NamingView {
   approvedName: string | null;
   imageFileIds: string[];
   evidenceCount: number;
+  // Exactly what Claude is given for this item, for the "What Claude reads" panel.
+  reads: { workingTitle: string; category: string | null; trendNote: string | null; artifacts: PreviewItem["artifacts"]; evidence: { label: string; quote: string }[]; imageCount: number };
   proposal: { id: string; status: string; createdAt: string; imageNotes: string | null; error: string | null; candidates: (NameCandidate & { unsupported: string[]; conflictOnly: string[] })[] } | null;
 }
 
@@ -356,6 +369,14 @@ export async function listNaming(): Promise<NamingView[]> {
       approvedName: r.approvedName,
       imageFileIds: input.imageFileIds.slice(0, IMAGES_PER_ITEM),
       evidenceCount: preview.nameEvidence.length + preview.artifacts.length + (preview.trendReasoning ? 1 : 0),
+      reads: {
+        workingTitle: r.itemName,
+        category: r.category,
+        trendNote: input.trendReasoning,
+        artifacts: input.artifacts,
+        evidence: evidenceQuotesOf(preview.nameEvidence),
+        imageCount: Math.min(input.imageFileIds.length, IMAGES_PER_ITEM),
+      },
       proposal: latest && {
         id: latest.id,
         status: latest.status,

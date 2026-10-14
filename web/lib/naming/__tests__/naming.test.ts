@@ -35,9 +35,9 @@ async function cleanup() {
 }
 
 // Answers like Claude would, from what each item's images "show".
-function fakeCaller(calls: { groupKey: string; skus: string[]; images: number }[]): NamingCaller {
+function fakeCaller(calls: { groupKey: string; skus: string[]; images: number; quotes?: string[] }[]): NamingCaller {
   return async ({ groupKey, items }) => {
-    calls.push({ groupKey, skus: items.map((i) => i.sku), images: items.reduce((n, i) => n + i.images.length, 0) });
+    calls.push({ groupKey, skus: items.map((i) => i.sku), images: items.reduce((n, i) => n + i.images.length, 0), quotes: items.flatMap((i) => (i.evidenceQuotes ?? []).map((e) => e.quote)) });
     return {
       refusal: null,
       usage: { input_tokens: 1000, output_tokens: 200 },
@@ -80,19 +80,26 @@ async function test() {
   if (savedKey) process.env.ANTHROPIC_API_KEY = savedKey;
 
   console.log("Verifying one batched call, image evidence, and filtered candidates...");
-  const calls: { groupKey: string; skus: string[]; images: number }[] = [];
+  // Full-text evidence entered from the sheet reaches Claude with the item.
+  const [hatForEvidence] = await db.select().from(assets).where(eq(assets.sku, `${PREFIX}HAT`));
+  await db.insert(nameEvidence).values({ assetId: hatForEvidence.id, kind: "workbook_row", sourceRef: "hat-ranking", location: "row 12", quote: "santa antler hat", confidence: "high", enteredBy: "instinct", rowHash: "test-naming-evidence-row" });
+  const calls: { groupKey: string; skus: string[]; images: number; quotes?: string[] }[] = [];
   const loadImage = async () => PIXEL;
   const first = await runNaming({ onlySkus: [`${PREFIX}HAT`, `${PREFIX}NECK`, `${PREFIX}DONE`, `${PREFIX}LIVE`], caller: fakeCaller(calls), loadImage, actorId: owner.id });
   assert.strictEqual(first.named, 3, "Items waiting to upload or live, without an approved base name, are named");
   assert.strictEqual(calls.length, 1, "Items with the same artifacts go in one call");
   assert.deepStrictEqual([...calls[0].skus].sort(), [`${PREFIX}HAT`, `${PREFIX}LIVE`, `${PREFIX}NECK`], "The already-named item is skipped");
   assert.strictEqual(calls[0].images, 2, "Concept images are sent");
+  assert.deepStrictEqual(calls[0].quotes, ["santa antler hat"], "Evidence quotes are sent; nothing else yet");
+  const reads = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!.reads;
+  assert.deepStrictEqual(reads.evidence.map((e) => e.quote), ["santa antler hat"], "Claude's own image reading isn't fed back as evidence");
+  assert.strictEqual(reads.imageCount, 1);
   const hat = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!;
   assert.deepStrictEqual(hat.proposal!.candidates.map((c) => c.name), ["Santa Reindeer Antler Hat", "Sparkly Glitter Santa Hat"], "Placeholder and over-long names are dropped");
   assert.deepStrictEqual(hat.proposal!.candidates[0].unsupported, [], "Every word is in the image reading");
   assert.deepStrictEqual(hat.proposal!.candidates[1].unsupported, ["sparkly", "glitter"], "Words not in any evidence are flagged");
   const [hatAsset] = await db.select().from(assets).where(eq(assets.sku, `${PREFIX}HAT`));
-  const [evidence] = await db.select().from(nameEvidence).where(eq(nameEvidence.assetId, hatAsset.id));
+  const evidence = (await db.select().from(nameEvidence).where(eq(nameEvidence.assetId, hatAsset.id))).find((e) => e.enteredBy === "claude-sonnet-5-5")!;
   assert.ok(evidence.kind === "image_correspondence" && evidence.confidence === "medium" && evidence.enteredBy === "claude-sonnet-5-5", "The image reading is saved as AI evidence");
   assert.strictEqual((await db.select().from(teamTaskComments).where(eq(teamTaskComments.taskId, MARKETING_TASK_ID))).length, 1, "One update asks Arjun to pick names");
 
