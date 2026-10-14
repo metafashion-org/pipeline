@@ -27,7 +27,7 @@ import { knowledgeArtifacts } from "@/lib/db/schema/knowledge_artifacts";
 import { nameEvidence } from "@/lib/db/schema/name_evidence";
 import { nameProposals, type NameCandidate } from "@/lib/db/schema/name_proposals";
 import { teamTaskComments } from "@/lib/db/schema/team_task_comments";
-import { driveThumbnailUrl } from "@/lib/assets/drive-links";
+import { driveThumbnailUrl, parseDriveRefs } from "@/lib/assets/drive-links";
 import { loadNameEvidence } from "@/lib/marketing/name-evidence";
 import { conflictOnlyNameWords, MARKETING_TASK_ID, unsupportedNameWords } from "@/lib/marketing/nomination-service";
 import { isPlaceholderName, type PreviewItem } from "@/lib/marketing/todays-picks-service";
@@ -54,6 +54,16 @@ const NAMING_STATUSES = ["ready_for_upload", ...LIVE_ON_ROBLOX_STATUSES];
 const IMAGE_EVIDENCE_SOURCE = "Concept images (AI reading)";
 
 export class NamingError extends Error {}
+
+/**
+ * Input: a stored image list. Entries hold a Drive link or a bare id in externalId, so they are
+ * parsed like everywhere else in the app. Output: the Drive file ids, in order.
+ */
+export function driveFileIds(stored: unknown): string[] {
+  return parseDriveRefs(stored)
+    .map((r) => r.fileId)
+    .filter((id): id is string => !!id);
+}
 
 // A starting point for Arjun's own guidelines, which replace it from the Naming page.
 export const DEFAULT_GUIDELINES = `Names are for Roblox UGC accessories sold by Meta Fashion. Players find items by searching the Marketplace, so a name is mostly the words a player would type.
@@ -161,7 +171,7 @@ async function loadNamingInputs(onlySkus?: string[]): Promise<NamingInputItem[]>
     category: r.category,
     trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
     artifacts: links.filter((l) => l.assetId === r.id).map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
-    imageFileIds: ((r.referenceImages as { externalId?: string }[] | null) ?? []).map((f) => f.externalId).filter((id): id is string => !!id),
+    imageFileIds: driveFileIds(r.referenceImages),
     evidenceQuotes: evidenceQuotesOf(evidence.get(r.id) ?? []),
   }));
 }
@@ -357,7 +367,7 @@ export async function listNaming(): Promise<NamingView[]> {
       category: r.category,
       trendReasoning: r.briefFields?.trendReasoning?.trim() || null,
       artifacts: links.filter((l) => l.assetId === r.id).map(({ artifactId, title, description, tags }) => ({ artifactId, title, description, tags: tags ?? [] })),
-      imageFileIds: ((r.referenceImages as { externalId?: string }[] | null) ?? []).map((f) => f.externalId).filter((id): id is string => !!id),
+      imageFileIds: driveFileIds(r.referenceImages),
     };
     const preview = asPreviewItem(input, evidence.get(r.id) ?? []);
     const latest = proposals.find((p) => p.assetId === r.id) ?? null;

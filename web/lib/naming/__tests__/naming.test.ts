@@ -11,7 +11,7 @@ import { teamTasks } from "@/lib/db/schema/team_tasks";
 import { teamTaskComments } from "@/lib/db/schema/team_task_comments";
 import { getReadyForUploadQueue } from "@/lib/publisher/publisher-service";
 import { MARKETING_TASK_ID, proposeDraft } from "@/lib/marketing/nomination-service";
-import { approveName, groupKeyOf, listNaming, NamingError, runNaming, setGuidelines, type NamingCaller } from "../naming-service";
+import { approveName, driveFileIds, groupKeyOf, listNaming, NamingError, runNaming, setGuidelines, type NamingCaller } from "../naming-service";
 
 const PREFIX = "TEST-NAME-";
 const OWNER_EMAIL = "test-naming-owner@example.test";
@@ -63,13 +63,16 @@ async function test() {
   await cleanup();
   const [owner] = await db.insert(personnel).values({ name: "Naming Owner", email: OWNER_EMAIL, roles: ["admin"] }).returning();
   await db.insert(teamTasks).values({ id: MARKETING_TASK_ID, title: "Marketing company function", area: "marketing", ownerId: owner.id, isPrivate: true });
-  const img = (id: string) => [{ provider: "google_drive", externalId: id, sizeBytes: 10, mimeType: "image/png" }];
+  const img = (id: string) => [{ provider: "google_drive", externalId: `https://drive.google.com/file/d/${id}/view`, sizeBytes: 10, mimeType: "image/png" }];
   await db.insert(assets).values([
-    { sku: `${PREFIX}HAT`, itemName: "Reindeer hat", category: "Hat", currentStatus: "ready_for_upload", referenceImages: img("img-hat") },
-    { sku: `${PREFIX}NECK`, itemName: "christmas necklace", category: "Neck", currentStatus: "ready_for_upload", referenceImages: img("img-neck"), briefFields: { trendReasoning: "Christmas charm necklaces trend" } },
+    { sku: `${PREFIX}HAT`, itemName: "Reindeer hat", category: "Hat", currentStatus: "ready_for_upload", referenceImages: img("img-hat-fixture-id") },
+    { sku: `${PREFIX}NECK`, itemName: "christmas necklace", category: "Neck", currentStatus: "ready_for_upload", referenceImages: img("img-neck-fixture-id"), briefFields: { trendReasoning: "Christmas charm necklaces trend" } },
     { sku: `${PREFIX}DONE`, itemName: "already named", currentStatus: "ready_for_upload", approvedName: "Already Named Hat" },
     { sku: `${PREFIX}LIVE`, itemName: "live item", currentStatus: "uploaded_to_roblox" },
   ]);
+
+  console.log("Verifying Drive links and bare ids both resolve to file ids...");
+  assert.deepStrictEqual(driveFileIds([{ provider: "drive", externalId: "https://drive.google.com/file/d/110FA8IgXtefpGlLDECp9fjfaFl678pRP/view" }]), ["110FA8IgXtefpGlLDECp9fjfaFl678pRP"]);
 
   console.log("Verifying grouping and the missing-key guard...");
   assert.strictEqual(groupKeyOf({ artifacts: [] }), "none");

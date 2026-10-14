@@ -56,11 +56,11 @@ async function test() {
   assert.strictEqual(variantName("pastel PINK", "Christmas Bow Parasol"), "Pastel Pink Christmas Bow Parasol");
   assert.strictEqual(variantName("red and white!", "Christmas Bow Parasol"), "Red and White Christmas Bow Parasol");
 
-  const img = (id: string) => [{ provider: "google_drive", externalId: id, sizeBytes: 10, mimeType: "image/png" }];
+  const img = (id: string) => [{ provider: "google_drive", externalId: `https://drive.google.com/file/d/${id}/view`, sizeBytes: 10, mimeType: "image/png" }];
   const trend = { trendReasoning: "Christmas bow parasol trend" };
   const [ready] = await db
     .insert(assets)
-    .values({ sku: `${PREFIX}READY`, itemName: "parasol", currentStatus: "ready_for_upload", approvedName: "Christmas Bow Parasol", recolorReferenceImages: img("sheet-1"), briefFields: trend })
+    .values({ sku: `${PREFIX}READY`, itemName: "parasol", currentStatus: "ready_for_upload", approvedName: "Christmas Bow Parasol", recolorReferenceImages: img("sheet-1-fixture-id"), briefFields: trend })
     .returning();
   const [live] = await db.insert(assets).values({ sku: `${PREFIX}LIVE`, itemName: "parasol", currentStatus: "uploaded_to_roblox", approvedName: "Christmas Bow Parasol", briefFields: trend }).returning();
   const listings = await db
@@ -70,7 +70,7 @@ async function test() {
       ["9101", "9102", "9103"].map((id, n) => ({ assetId: live.id, robloxAssetId: id, robloxItemUrl: `https://www.roblox.com/catalog/${id}`, onSaleAt: new Date(), mainAt: n === 0 ? new Date() : null, createdAt: new Date(Date.UTC(2026, 9, 1, 0, n)) }))
     )
     .returning();
-  await db.insert(assets).values({ sku: `${PREFIX}NOBASE`, itemName: "no base", currentStatus: "ready_for_upload", recolorReferenceImages: img("sheet-2") });
+  await db.insert(assets).values({ sku: `${PREFIX}NOBASE`, itemName: "no base", currentStatus: "ready_for_upload", recolorReferenceImages: img("sheet-2-fixture-id") });
 
   console.log("Verifying one call covers both items and the base-name gate...");
   const calls: string[][] = [];
