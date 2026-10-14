@@ -12,7 +12,7 @@ import { teamTasks } from "@/lib/db/schema/team_tasks";
 import { teamTaskComments } from "@/lib/db/schema/team_task_comments";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { MARKETING_TASK_ID } from "../nomination-service";
-import { filingPackage, getOwnerDetails, listFilings, markFiled, setOwnerDetails } from "../todays-picks-filing";
+import { filingPackage, getOwnerDetails, isProperRobloxName, listFilings, markFiled, setOwnerDetails } from "../todays-picks-filing";
 import type { PreviewItem, PreviewListing } from "../todays-picks-service";
 
 const PREFIX = "TEST-FILING-";
@@ -54,7 +54,13 @@ function testChecklist() {
     const p = filingPackage(item(o), { tags: "christmas" }, null);
     assert.ok(!p.ready && p.checklist.some((c) => !c.ok && c.label.includes(text)), `${text}: ${JSON.stringify(p.checklist)}`);
   };
-  notReady({ approvedName: null }, "Approve a name on the Naming page");
+  // No approved name: a proper Roblox name counts; a placeholder or all-lowercase one doesn't.
+  const robloxNamed = filingPackage(item({ approvedName: null }), { tags: "christmas" }, null);
+  assert.ok(robloxNamed.ready && robloxNamed.name === "Christmas Bow Parasol" && robloxNamed.checklist[0].label === "Named on Roblox: Christmas Bow Parasol", JSON.stringify(robloxNamed.checklist));
+  const withRoblox = (n: string) => ({ approvedName: null, listings: [listing({ lastCheck: { ...listing({}).lastCheck!, robloxName: n } })] });
+  notReady(withRoblox("belt 6"), "isn't a proper name yet");
+  notReady(withRoblox("santa head christmas"), "isn't a proper name yet");
+  assert.ok(isProperRobloxName("Red Christmas Crossed Candy Canes (Back)") && !isProperRobloxName("headband_3") && !isProperRobloxName("Parasol"));
   notReady({ listings: [listing({ isMain: false })] }, "Choose a main listing");
   notReady({ listings: [listing({ lastCheck: { ...listing({}).lastCheck!, isForSale: false } })] }, "off sale");
   notReady({ listings: [listing({ lastCheck: { ...listing({}).lastCheck!, robloxName: "Umbrella-2" } })] }, 'Rename on Roblox: "Umbrella-2" → "Christmas Bow Parasol"');
