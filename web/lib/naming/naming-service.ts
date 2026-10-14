@@ -17,7 +17,7 @@ import { createHash, randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { appSettings } from "@/lib/db/schema/app_settings";
@@ -247,7 +247,7 @@ export async function runNaming(
   const { text: guidelines } = await getGuidelines();
   const inputs = await loadNamingInputs(options.onlySkus);
   const existing = inputs.length
-    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(and(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)), eq(nameProposals.kind, "base")))
+    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(and(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)), eq(nameProposals.kind, "base"), ne(nameProposals.status, "failed")))
     : [];
   const todo = inputs.filter((i) => !existing.some((e) => e.assetId === i.assetId && e.inputHash === inputHashOf(i, guidelines))).slice(0, MAX_ITEMS_PER_RUN);
   const result = { named: 0, skipped: inputs.length - todo.length, failed: 0, batchId: null as string | null };
@@ -277,7 +277,11 @@ export async function runNaming(
           await db
             .insert(nameProposals)
             .values({ assetId: item.assetId, batchId, groupKey, model: NAMING_MODEL, inputHash, status: "failed", error: response.refusal ?? "No answer for this SKU", usage: response.usage })
-            .onConflictDoNothing();
+            .onConflictDoUpdate({
+              target: [nameProposals.assetId, nameProposals.inputHash],
+              set: { batchId, error: response.refusal ?? "No answer for this SKU", usage: response.usage, createdAt: new Date() },
+              setWhere: eq(nameProposals.status, "failed"),
+            });
           continue;
         }
         // The image reading becomes evidence, clearly marked as Claude's, so names can cite it.
@@ -307,7 +311,12 @@ export async function runNaming(
           await tx
             .insert(nameProposals)
             .values({ assetId: item.assetId, batchId, groupKey, model: NAMING_MODEL, inputHash, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage })
-            .onConflictDoNothing();
+            // A retry after a failed attempt on the same inputs replaces the failure.
+            .onConflictDoUpdate({
+              target: [nameProposals.assetId, nameProposals.inputHash],
+              set: { batchId, status: "pending", error: null, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage, createdAt: new Date() },
+              setWhere: eq(nameProposals.status, "failed"),
+            });
         });
         result.named++;
         namedSkus.push(item.sku);

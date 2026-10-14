@@ -130,8 +130,15 @@ async function test() {
 
   console.log("Verifying a failed call is recorded, not lost...");
   const failing: NamingCaller = async () => ({ result: null, refusal: "Declined", usage: {} });
-  const failed = await runNaming({ onlySkus: [`${PREFIX}NECK`], caller: failing, loadImage });
-  assert.strictEqual(failed.named + failed.failed + failed.skipped, 1);
+  // A fresh item fails once (e.g. a bad API key), then the retry with the same inputs succeeds.
+  await db.insert(assets).values({ sku: `${PREFIX}RETRY`, itemName: "retry hat", category: "Hat", currentStatus: "ready_for_upload", referenceImages: img("img-retry-fixture-id") });
+  const failed = await runNaming({ onlySkus: [`${PREFIX}RETRY`], caller: failing, loadImage });
+  assert.strictEqual(failed.failed, 1);
+  assert.strictEqual((await listNaming()).find((i) => i.sku === `${PREFIX}RETRY`)!.proposal!.status, "failed");
+  const retried = await runNaming({ onlySkus: [`${PREFIX}RETRY`], caller: fakeCaller(calls), loadImage });
+  assert.strictEqual(retried.named, 1, "A failed attempt doesn't block a retry");
+  const retry = (await listNaming()).find((i) => i.sku === `${PREFIX}RETRY`)!.proposal!;
+  assert.ok(retry.status === "pending" && retry.error === null && retry.candidates.length > 0);
   console.log("Confirmed AI naming");
 }
 
