@@ -5,10 +5,12 @@
 // submits anything to Roblox, renames a listing, or verifies a filing with Roblox: a recorded
 // filing is Arjun's own confirmation.
 //
-// Final names: the internal item name is exploratory, so it is never turned into a final name. The
-// Kanban offers words from the linked artifacts and the trend origin, each with its source, and
-// Arjun's assistant can suggest whole names through the sheet. Without artifact or trend evidence
-// the final name stays unset and can't be approved.
+// Final names: the internal item name is exploratory, so it is never turned into a final name. A
+// name is checked word by word against the SKU's full evidence: its naming evidence records (exact
+// report lines, workbook rows, image correspondences, live metadata; lib/marketing/name-evidence.ts),
+// its linked artifacts and its trend origin. Naming evidence doesn't need a design-origin link. A
+// word backed only by evidence marked as conflicting is refused, so conflicting designs aren't
+// blended. Without any evidence a name can be typed but not approved.
 //
 // The form's fields and limits are in nomination-fields.ts.
 
@@ -23,6 +25,7 @@ import { auditLog } from "@/lib/db/schema/audit_log";
 import { parseRobloxCatalogLink } from "@/lib/publisher/roblox-links";
 import { isPlaceholderName, listTodaysPicksPreview, TodaysPicksError, type PreviewItem, type PreviewListing } from "./todays-picks-service";
 import { AUDIENCES, DRAFT_FIELDS, FIELD_LIMITS, FORM_VERSION, ITEM_TYPES, MAX_FINAL_NAME_CHARS, type DraftField, type DraftFields } from "./nomination-fields";
+import { evidenceLabel, type NameEvidenceView } from "./name-evidence";
 
 export { DRAFT_FIELDS, FORM_VERSION };
 
@@ -35,7 +38,11 @@ export const MARKETING_TASK_ID = "5749e9a7-f86f-4035-a5fd-1b82e7312b2a";
 // Fields a sheet suggestion may target. item_link and colour_links come only from the Kanban's own listings.
 export const SUGGESTIBLE_FIELDS: DraftField[] = ["final_name", "item_type", "tags", "audience", "season", "extra_info", "theme"];
 // Fields Arjun approves separately from saving: a generated value is never treated as approved.
-export const APPROVABLE_FIELDS = ["final_name", "colour_links"] as const;
+export const APPROVABLE_FIELDS = ["final_name", "colour_links", "answers"] as const;
+// The item-page answers approved together as "answers". item_link is included: choosing a main
+// listing later changes it, and changed content needs a new review.
+const ANSWER_FIELDS: DraftField[] = ["item_link", "item_type", "tags", "audience", "season", "extra_info", "theme"];
+const MAX_REVIEW_REF_CHARS = 200;
 export type ApprovableField = (typeof APPROVABLE_FIELDS)[number];
 const MIN_UNDO_REASON_CHARS = 10;
 // Evidence words offered for a name: the strongest few, so the list stays readable.
@@ -52,6 +59,8 @@ const ASSET_TYPE_TO_ITEM_TYPE: Record<number, (typeof ITEM_TYPES)[number]> = {
   17: "Head", 79: "Head",
   61: "Emote",
 };
+// Roblox's own accessory type for each AssetTypeId, shown beside the form's combined category.
+const ROBLOX_ACCESSORY_TYPE: Record<number, string> = { 8: "Hat accessory", 41: "Hair accessory", 42: "Face accessory", 43: "Neck accessory", 44: "Shoulder accessory", 45: "Front accessory", 46: "Back accessory", 47: "Waist accessory" };
 // Roblox's accessory slot names, used as a discovery tag.
 const ASSET_TYPE_SLOT: Record<number, string> = { 8: "hat", 41: "hair", 42: "face", 43: "neck", 44: "shoulder", 45: "front", 46: "back", 47: "waist" };
 const SEASON_WORDS: [RegExp, string][] = [
@@ -78,7 +87,7 @@ export interface NameTerm {
 }
 
 export interface DraftProblem {
-  field: DraftField | "roblox";
+  field: DraftField | "roblox" | "answers";
   message: string;
 }
 
@@ -91,6 +100,13 @@ export interface NominationView {
   proposed: DraftFields;
   nameTerms: NameTerm[];
   hasNameEvidence: boolean;
+  // Each word of the current name and the sources that support it; empty sources means unsupported.
+  nameWords: { word: string; sources: string[]; conflictOnly: boolean }[];
+  nameEvidence: NameEvidenceView[];
+  // Whether each approval still matches the saved value, and where it was reviewed.
+  approvedNow: Record<ApprovableField, { approved: boolean; reviewRef: string | null }>;
+  // Roblox's own type for the main listing, from the latest check, e.g. "Back accessory (AssetTypeId 46)".
+  robloxType: string | null;
   evidence: DraftEvidence[];
   problems: DraftProblem[];
   suggestions: { id: string; field: string; value: string; evidence: string | null; suggestedBy: string | null; status: string }[];
@@ -123,7 +139,10 @@ function words(text: string): string[] {
  * Input: one preview item. Output: up to MAX_NAME_TERMS words, each with its sources.
  */
 export function nameTerms(item: PreviewItem): NameTerm[] {
-  const sources: { label: string; text: string }[] = item.artifacts.map((a) => ({ label: `Artifact ${a.artifactId}`, text: [a.title, a.description ?? "", a.tags.join(" ")].join(" ") }));
+  const sources: { label: string; text: string }[] = [
+    ...item.nameEvidence.filter((e) => !e.conflict).map((e) => ({ label: evidenceLabel(e), text: `${e.quote} ${e.supports.join(" ")}` })),
+    ...item.artifacts.map((a) => ({ label: `Artifact ${a.artifactId}`, text: [a.title, a.description ?? "", a.tags.join(" ")].join(" ") })),
+  ];
   if (item.trendReasoning) sources.push({ label: "Trend origin", text: item.trendReasoning });
   const found = new Map<string, Set<string>>();
   for (const source of sources) {
@@ -135,28 +154,94 @@ export function nameTerms(item: PreviewItem): NameTerm[] {
     .slice(0, MAX_NAME_TERMS);
 }
 
-// Every word the linked artifacts and the trend origin contain, for checking a name against them.
-function evidenceWords(item: PreviewItem): Set<string> {
-  const texts = item.artifacts.map((a) => [a.title, a.description ?? "", a.tags.join(" ")].join(" "));
-  if (item.trendReasoning) texts.push(item.trendReasoning);
-  return new Set(texts.flatMap(words));
+// "glasses" and "glass", "bopper" and "boppers" match: a trailing s is ignored when comparing.
+function wordKey(word: string): string {
+  return word.length > 3 && word.endsWith("s") ? word.slice(0, -1) : word;
+}
+
+// Every word of the SKU's evidence, keyed by wordKey, with each source record it appears in. Sources
+// are told apart by their id (an evidence record's id, the artifact id, or "trend"), never by their
+// label: two records can share a label such as "head-ranking row 58", and one of them may be marked
+// as conflicting. Sources: naming evidence records (full quote and the words they list as
+// supported), linked artifacts, and the trend origin.
+function evidenceWordSources(item: PreviewItem): Map<string, { id: string; label: string; conflict: boolean }[]> {
+  const sources: { id: string; label: string; text: string; conflict: boolean }[] = [
+    ...item.nameEvidence.map((e) => ({ id: `evidence:${e.id}`, label: evidenceLabel(e), text: `${e.quote} ${e.supports.join(" ")}`, conflict: !!e.conflict })),
+    ...item.artifacts.map((a) => ({ id: `artifact:${a.artifactId}`, label: `Artifact ${a.artifactId}`, text: [a.title, a.description ?? "", a.tags.join(" ")].join(" "), conflict: false })),
+  ];
+  if (item.trendReasoning) sources.push({ id: "trend", label: "Trend origin", text: item.trendReasoning, conflict: false });
+  const found = new Map<string, { id: string; label: string; conflict: boolean }[]>();
+  for (const source of sources) {
+    for (const word of new Set(words(source.text).map(wordKey))) {
+      const list = found.get(word) ?? [];
+      if (!list.some((s) => s.id === source.id)) list.push({ id: source.id, label: source.label, conflict: source.conflict });
+      found.set(word, list);
+    }
+  }
+  return found;
 }
 
 /**
- * The words of a name that no linked artifact or trend origin contains. A name can be approved
- * only when this is empty, so every meaningful word is traceable to evidence. Filler words and
- * words under 3 letters are not checked.
+ * Each meaningful word of a name with the evidence sources that contain it. conflictOnly is true
+ * when every source record for the word is marked as conflicting. Filler words and words under 3
+ * letters are not checked. A label shared by two records is shown once, marked when one of them
+ * is conflicting.
  *
- * Input: the name and the SKU's preview. Output: the unsupported words, in name order.
+ * Input: the name and the SKU's preview. Output: one entry per word, in name order.
  */
-export function unsupportedNameWords(name: string, item: PreviewItem): string[] {
-  const known = evidenceWords(item);
-  return words(name).filter((w) => !known.has(w));
+export function nameWordSources(name: string, item: PreviewItem): { word: string; sources: string[]; conflictOnly: boolean }[] {
+  const known = evidenceWordSources(item);
+  return words(name).map((word) => {
+    const records = known.get(wordKey(word)) ?? [];
+    const labels: string[] = [];
+    for (const r of records) {
+      const label = r.conflict ? `${r.label} (conflicting)` : r.label;
+      if (!labels.includes(label)) labels.push(label);
+    }
+    return { word, sources: labels, conflictOnly: records.length > 0 && records.every((r) => r.conflict) };
+  });
 }
 
-/** True when the SKU has artifacts or a trend origin to ground a name in. */
+/** The words of a name that no evidence source contains. A name can be approved only when this is empty. */
+export function unsupportedNameWords(name: string, item: PreviewItem): string[] {
+  return nameWordSources(name, item)
+    .filter((w) => w.sources.length === 0)
+    .map((w) => w.word);
+}
+
+/** The words of a name backed only by evidence marked as conflicting. Also refused. */
+export function conflictOnlyNameWords(name: string, item: PreviewItem): string[] {
+  return nameWordSources(name, item)
+    .filter((w) => w.conflictOnly)
+    .map((w) => w.word);
+}
+
+/** True when the SKU has naming evidence, linked artifacts or a trend origin to ground a name in. */
 export function hasNameEvidence(item: PreviewItem): boolean {
-  return item.artifacts.length > 0 || !!item.trendReasoning;
+  return item.nameEvidence.length > 0 || item.artifacts.length > 0 || !!item.trendReasoning;
+}
+
+function approvalState(fields: DraftFields | null, approvals: NominationApprovals): NominationView["approvedNow"] {
+  const current: Record<ApprovableField, string | null> = {
+    final_name: fields ? (fields.final_name ?? "").trim() : null,
+    colour_links: fields ? (fields.colour_links ?? "").trim() : null,
+    answers: fields ? answersValue(fields) : null,
+  };
+  return Object.fromEntries(
+    APPROVABLE_FIELDS.map((f) => [f, { approved: current[f] !== null && approvals[f]?.value === current[f], reviewRef: approvals[f]?.reviewRef ?? null }])
+  ) as NominationView["approvedNow"];
+}
+
+/** The item-page answers approved together, as one comparable value. */
+export function answersValue(fields: DraftFields): string {
+  return JSON.stringify(ANSWER_FIELDS.map((f) => [f, (fields[f] ?? "").trim()]));
+}
+
+/** Input: one preview item. Output: Roblox's own type for its main (or first checked) listing, or null. */
+export function robloxTypeOf(item: PreviewItem): string | null {
+  const id = mainListing(item)?.lastCheck?.assetTypeId ?? item.listings.find((l) => l.lastCheck?.assetTypeId)?.lastCheck?.assetTypeId ?? null;
+  if (id === null) return null;
+  return `${ROBLOX_ACCESSORY_TYPE[id] ?? "Roblox asset type"} (AssetTypeId ${id})`;
 }
 
 /**
@@ -223,8 +308,8 @@ export function proposeDraft(item: PreviewItem, approvedName = ""): { proposed: 
   const robloxNames = [...new Set(item.listings.map((l) => l.lastCheck?.robloxName).filter((n): n is string => !!n))];
   if (robloxNames.length) evidence.push({ label: "Current Roblox names (not a naming source)", value: robloxNames.join(", ") });
   if (assetTypeId !== null) evidence.push({ label: "Roblox item type", value: `AssetTypeId ${assetTypeId}${ASSET_TYPE_SLOT[assetTypeId] ? ` (${ASSET_TYPE_SLOT[assetTypeId]} accessory)` : ""}` });
-  if (!hasNameEvidence(item)) evidence.push({ label: "Missing evidence", value: "No linked artifacts and no trend origin. The final name stays unset until one is added." });
-  else if (item.artifacts.length === 0) evidence.push({ label: "Weak evidence", value: "No linked artifacts; only the trend origin." });
+  if (!hasNameEvidence(item)) evidence.push({ label: "Missing evidence", value: "No naming evidence, linked artifacts or trend origin. Add rows to the sheet's Evidence tab before approving a name." });
+  if (item.artifacts.length === 0) evidence.push({ label: "Design origin", value: "No historical design-origin link. Naming evidence doesn't need one, and doesn't create one." });
   return { proposed, terms, evidence };
 }
 
@@ -245,12 +330,15 @@ export function draftProblems(fields: DraftFields, approvals: NominationApproval
   const main = mainListing(item);
 
   const name = v("final_name");
-  if (!hasNameEvidence(item)) problems.push({ field: "final_name", message: "Link an artifact or add a trend origin before naming this SKU" });
+  if (!hasNameEvidence(item)) problems.push({ field: "final_name", message: "Add naming evidence in the sheet's Evidence tab before approving a name" });
   if (!name) problems.push({ field: "final_name", message: "Set a final name from the evidence" });
   else if (name.length > FIELD_LIMITS.final_name) problems.push({ field: "final_name", message: `Final name is ${name.length} characters; the limit is ${FIELD_LIMITS.final_name}` });
   else if (isPlaceholderName(name)) problems.push({ field: "final_name", message: "Final name looks like a placeholder" });
-  else if (unsupportedNameWords(name, item).length) problems.push({ field: "final_name", message: `Not in any artifact or the trend origin: ${unsupportedNameWords(name, item).join(", ")}` });
+  else if (unsupportedNameWords(name, item).length) problems.push({ field: "final_name", message: `Not in any evidence for this SKU: ${unsupportedNameWords(name, item).join(", ")}` });
+  else if (conflictOnlyNameWords(name, item).length) problems.push({ field: "final_name", message: `Only conflicting evidence supports: ${conflictOnlyNameWords(name, item).join(", ")}` });
   else if (approvals.final_name?.value !== name) problems.push({ field: "final_name", message: "Approve the final name" });
+
+  if (approvals.answers?.value !== answersValue(fields)) problems.push({ field: "answers", message: "Approve the item-page answers" });
 
   const link = parseRobloxCatalogLink(v("item_link"));
   if (!main) problems.push({ field: "item_link", message: "Choose a main listing" });
@@ -359,6 +447,10 @@ export async function getNomination(sku: string): Promise<NominationView> {
     proposed,
     nameTerms: terms,
     hasNameEvidence: hasNameEvidence(item),
+    nameWords: nameWordSources((current.final_name ?? "").trim(), item),
+    nameEvidence: item.nameEvidence,
+    approvedNow: approvalState(draft ? (draft.fields as DraftFields) : null, approvals),
+    robloxType: robloxTypeOf(item),
     evidence,
     problems: draftProblems(current, approvals, item),
     suggestions: suggestions.map((s) => ({ id: s.id, field: s.field, value: s.value, evidence: s.evidence, suggestedBy: s.suggestedBy, status: s.status })),
@@ -412,35 +504,53 @@ export async function saveDraft(sku: string, fields: DraftFields, actorId: strin
 }
 
 /**
- * Approves the saved final name or colour links as they stand. A final name needs artifact or trend
- * evidence, a value, and the 49-character limit; colour links must already pass their checks.
+ * Approves the saved final name, colour links or item-page answers exactly as Arjun reviewed them.
+ * The draft row is locked and must still be the version his panel showed, so a value changed after
+ * review is never approved. A final name needs evidence for every word, none backed only by
+ * conflicting evidence, a value and the 49-character limit. Colour links and answers must pass
+ * their own checks. reviewRef records where the review happened, e.g. an earlier review of the same
+ * values, so an approval made elsewhere is carried into the Kanban without reviewing it again.
  *
- * Input: the SKU, the draft id, which field, who approved. Output: nothing.
+ * Input: the SKU, the draft id and version, which field, an optional review reference, who approved.
+ * Output: nothing.
  */
-export async function approveField(sku: string, draftId: string, field: ApprovableField, actorId: string | null): Promise<void> {
+export async function approveField(
+  sku: string,
+  input: { draftId: string; version: string; field: ApprovableField; reviewRef?: string | null },
+  actorId: string | null
+): Promise<void> {
   const { item, assetId } = await findItem(sku);
-  const [draft] = await db.select().from(nominationDrafts).where(and(eq(nominationDrafts.id, draftId), eq(nominationDrafts.assetId, assetId)));
-  if (!draft || draft.state !== "draft") throw new TodaysPicksError("Only an open draft can be approved");
-  const fields = draft.fields as DraftFields;
-  const value = (fields[field] ?? "").trim();
-  if (field === "final_name") {
-    if (!hasNameEvidence(item)) throw new TodaysPicksError("Link an artifact or add a trend origin before approving a name");
-    if (!value || value.length > MAX_FINAL_NAME_CHARS || isPlaceholderName(value)) throw new TodaysPicksError(`Save a real final name of at most ${MAX_FINAL_NAME_CHARS} characters first`);
-    const unsupported = unsupportedNameWords(value, item);
-    if (unsupported.length) throw new TodaysPicksError(`These words aren't in any linked artifact or the trend origin: ${unsupported.join(", ")}`);
-  } else {
-    const colourProblems = draftProblems(fields, { colour_links: { value, by: null, at: "" } }, item).filter((p) => p.field === "colour_links");
-    if (colourProblems.length) throw new TodaysPicksError(colourProblems.map((p) => p.message).join("; "));
-  }
-  const approvals: NominationApprovals = { ...(draft.approvals as NominationApprovals), [field]: { value, by: actorId, at: new Date().toISOString() } };
+  const reviewRef = input.reviewRef?.trim().slice(0, MAX_REVIEW_REF_CHARS) || null;
   await db.transaction(async (tx) => {
-    const updated = await tx
-      .update(nominationDrafts)
-      .set({ approvals, updatedAt: new Date() })
-      .where(and(eq(nominationDrafts.id, draftId), eq(nominationDrafts.state, "draft")))
-      .returning({ id: nominationDrafts.id });
-    if (updated.length === 0) throw new TodaysPicksError("The draft changed while approving. Reload and try again");
-    await addEvent(tx, draftId, `approved_${field}`, { value }, actorId);
+    const [draft] = await tx
+      .select()
+      .from(nominationDrafts)
+      .where(and(eq(nominationDrafts.id, input.draftId), eq(nominationDrafts.assetId, assetId)))
+      .for("update");
+    if (!draft || draft.state !== "draft") throw new TodaysPicksError("Only an open draft can be approved");
+    if (draft.updatedAt.toISOString() !== input.version) throw new TodaysPicksError("The draft changed after you reviewed it. Reload and check it again");
+    const fields = draft.fields as DraftFields;
+    let value: string;
+    if (input.field === "final_name") {
+      value = (fields.final_name ?? "").trim();
+      if (!hasNameEvidence(item)) throw new TodaysPicksError("Add naming evidence in the sheet's Evidence tab before approving a name");
+      if (!value || value.length > MAX_FINAL_NAME_CHARS || isPlaceholderName(value)) throw new TodaysPicksError(`Save a real final name of at most ${MAX_FINAL_NAME_CHARS} characters first`);
+      const unsupported = unsupportedNameWords(value, item);
+      if (unsupported.length) throw new TodaysPicksError(`These words aren't in any evidence for this SKU: ${unsupported.join(", ")}`);
+      const conflictOnly = conflictOnlyNameWords(value, item);
+      if (conflictOnly.length) throw new TodaysPicksError(`Only conflicting evidence supports: ${conflictOnly.join(", ")}`);
+    } else if (input.field === "colour_links") {
+      value = (fields.colour_links ?? "").trim();
+      const colourProblems = draftProblems(fields, { colour_links: { value, by: null, at: "" } }, item).filter((p) => p.field === "colour_links");
+      if (colourProblems.length) throw new TodaysPicksError(colourProblems.map((p) => p.message).join("; "));
+    } else {
+      value = answersValue(fields);
+      const limitProblems = draftProblems(fields, {}, item).filter((p) => ["item_type", "tags", "audience", "season", "extra_info", "theme"].includes(p.field));
+      if (limitProblems.length) throw new TodaysPicksError(limitProblems.map((p) => p.message).join("; "));
+    }
+    const approvals: NominationApprovals = { ...(draft.approvals as NominationApprovals), [input.field]: { value, by: actorId, at: new Date().toISOString(), reviewRef } };
+    await tx.update(nominationDrafts).set({ approvals, updatedAt: new Date() }).where(eq(nominationDrafts.id, draft.id));
+    await addEvent(tx, draft.id, `approved_${input.field}`, { value, reviewRef, version: input.version }, actorId);
   });
 }
 

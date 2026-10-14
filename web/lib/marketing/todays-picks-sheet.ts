@@ -13,6 +13,9 @@
 // - Suggestions: the assistant's suggestions. The Kanban only reads it, never writes or clears it.
 //   Each valid new row is stored as a suggestion Arjun can use or dismiss; none changes a draft or
 //   marks anything submitted by itself (lib/marketing/nomination-service.ts ingestSuggestions).
+// - Evidence: naming evidence written by the work account that can open the reports, workbooks and
+//   images. Only read, like Suggestions. Each valid new row becomes a name_evidence record
+//   (lib/marketing/name-evidence.ts); it never touches a SKU's design-origin links.
 // - Sync log: one appended row per sync attempt, ok or failed.
 // One sync runs at a time (a lease in app_settings); a second one at the same moment is refused.
 
@@ -24,6 +27,7 @@ import { auditLog } from "@/lib/db/schema/audit_log";
 import { GOOGLE_SHEET_CLIENT, type FileAccess, type SheetClient, type SheetRequest, type SheetTab } from "./google-sheet-access";
 import { listTodaysPicksPreview, TODAYS_PICKS_OWNER_EMAIL, TodaysPicksError, type PreviewItem } from "./todays-picks-service";
 import { ingestSuggestions, nominationSummaries } from "./nomination-service";
+import { ingestEvidenceRows } from "./name-evidence";
 
 export interface NominationSummary {
   state: string;
@@ -39,6 +43,7 @@ const LOCK_LEASE_MS = 2 * 60 * 1000;
 export const ITEMS_TAB = "Items";
 export const LISTINGS_TAB = "Listings";
 export const SUGGESTIONS_TAB = "Suggestions";
+export const EVIDENCE_TAB = "Evidence";
 export const LOG_TAB = "Sync log";
 export const ITEMS_HEADER = [
   "sku",
@@ -76,11 +81,14 @@ export const LISTINGS_HEADER = [
   "synced_at",
 ];
 export const SUGGESTIONS_HEADER = ["sku", "listing_id", "field", "suggested_value", "evidence", "suggested_by", "suggested_at"];
+// kind: report_line | workbook_row | image_correspondence | live_metadata. confidence: high | medium | low.
+export const EVIDENCE_HEADER = ["sku", "kind", "source_ref", "location", "quote", "supports", "confidence", "limits", "conflict", "entered_by"];
 const LOG_HEADER = ["time", "result", "items", "listings", "error"];
 const TABS = [
   { title: ITEMS_TAB, header: ITEMS_HEADER },
   { title: LISTINGS_TAB, header: LISTINGS_HEADER },
   { title: SUGGESTIONS_TAB, header: SUGGESTIONS_HEADER },
+  { title: EVIDENCE_TAB, header: EVIDENCE_HEADER },
   { title: LOG_TAB, header: LOG_HEADER },
 ];
 // Google Sheets ids are 44 characters of letters, digits, - and _.
@@ -262,7 +270,7 @@ export async function syncTodaysPicksSheet(
   actorId: string | null,
   google: SheetClient = GOOGLE_SHEET_CLIENT,
   loadItems: () => Promise<PreviewItem[]> = listTodaysPicksPreview
-): Promise<{ url: string; items: number; listings: number; suggestions: { added: number; known: number; refused: number } }> {
+): Promise<{ url: string; items: number; listings: number; suggestions: { added: number; known: number; refused: number }; evidence: { added: number; known: number; refused: number } }> {
   const config = await getTodaysPicksSheet();
   if (!config) throw new TodaysPicksError("Connect the sheet first");
   const token = randomUUID();
@@ -284,13 +292,28 @@ export async function syncTodaysPicksSheet(
       return { sku, listingId, field, value, evidence, suggestedBy, suggestedAt };
     });
     const suggestions = await ingestSuggestions(suggestionRows.filter((r) => r.sku || r.field || r.value), items);
+    // Evidence is read and stored the same way; the tab itself is never written.
+    const evidenceRows = (await google.readRows(config.sheetId, `'${EVIDENCE_TAB}'!A2:J`)).map((r) => {
+      const [sku = "", kind = "", sourceRef = "", location = "", quote = "", supports = "", confidence = "", limits = "", conflict = "", enteredBy = ""] = r;
+      return { sku, kind, sourceRef, location, quote, supports, confidence, limits, conflict, enteredBy };
+    });
+    const evidence = await ingestEvidenceRows(
+      evidenceRows.filter((r) => r.sku || r.quote),
+      items.map((i) => i.sku)
+    );
 
     const rows = sheetRows(items, syncedAt, await nominationSummaries());
     await google.batchUpdate(config.sheetId, [...replaceRowsRequests(tab(ITEMS_TAB), ITEMS_HEADER, rows.items), ...replaceRowsRequests(tab(LISTINGS_TAB), LISTINGS_HEADER, rows.listings)]);
-    const refusedNote = suggestions.refused.map((r) => `Suggestions row ${r.row}: ${r.reason}`).join("; ");
+    const refusedNote = [...suggestions.refused.map((r) => `Suggestions row ${r.row}: ${r.reason}`), ...evidence.refused.map((r) => `Evidence row ${r.row}: ${r.reason}`)].join("; ");
     await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "ok", String(rows.items.length), String(rows.listings.length), refusedNote]]);
-    await db.insert(auditLog).values({ action: "syncTodaysPicksSheet", entityType: "todays_picks_sheet", entityId: null, actorId, payload: { items: rows.items.length, listings: rows.listings.length, suggestions } });
-    return { url: config.url, items: rows.items.length, listings: rows.listings.length, suggestions: { added: suggestions.added, known: suggestions.known, refused: suggestions.refused.length } };
+    await db.insert(auditLog).values({ action: "syncTodaysPicksSheet", entityType: "todays_picks_sheet", entityId: null, actorId, payload: { items: rows.items.length, listings: rows.listings.length, suggestions, evidence } });
+    return {
+      url: config.url,
+      items: rows.items.length,
+      listings: rows.listings.length,
+      suggestions: { added: suggestions.added, known: suggestions.known, refused: suggestions.refused.length },
+      evidence: { added: evidence.added, known: evidence.known, refused: evidence.refused.length },
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
     if (isPrivate) await google.appendRows(config.sheetId, `'${LOG_TAB}'!A:E`, [[syncedAt, "failed", "", "", message]]).catch(() => undefined);

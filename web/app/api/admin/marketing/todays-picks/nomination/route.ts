@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthedUser } from "@/lib/auth/authed-user";
 import { isTodaysPicksOwner, TodaysPicksError } from "@/lib/marketing/todays-picks-service";
+import { NameEvidenceError, retireEvidence } from "@/lib/marketing/name-evidence";
 import { APPROVABLE_FIELDS, approveField, confirmSubmitted, DRAFT_FIELDS, getNomination, saveDraft, setSuggestionStatus, undoSubmitted } from "@/lib/marketing/nomination-service";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,8 @@ const SaveSchema = z.object({ sku: z.string().min(1), fields: FieldsSchema });
 const ActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("confirm"), sku: z.string().min(1), draftId: z.string().uuid(), version: z.string().min(1), rightsConfirmed: z.boolean(), evidence: z.string().max(500).nullable() }),
   z.object({ action: z.literal("undo"), sku: z.string().min(1), draftId: z.string().uuid(), reason: z.string().max(500) }),
-  z.object({ action: z.literal("approve"), sku: z.string().min(1), draftId: z.string().uuid(), field: z.enum(APPROVABLE_FIELDS) }),
+  z.object({ action: z.literal("approve"), sku: z.string().min(1), draftId: z.string().uuid(), version: z.string().min(1), field: z.enum(APPROVABLE_FIELDS), reviewRef: z.string().max(200).nullable().optional() }),
+  z.object({ action: z.literal("retire_evidence"), sku: z.string().min(1), evidenceId: z.string().uuid(), reason: z.string().max(500) }),
   z.object({ action: z.literal("suggestion"), sku: z.string().min(1), suggestionId: z.string().uuid(), status: z.enum(["used", "dismissed"]) }),
 ]);
 
@@ -25,7 +27,7 @@ async function owner() {
 }
 
 function handle(error: unknown) {
-  if (error instanceof TodaysPicksError) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error instanceof TodaysPicksError || error instanceof NameEvidenceError) return NextResponse.json({ error: error.message }, { status: 400 });
   throw error;
 }
 
@@ -56,7 +58,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// Approve the name or colour links, record Arjun's confirmation that he filed it, undo a mistaken
+// Approve the name, colour links or item-page answers, retire wrong naming evidence, record Arjun's confirmation that he filed it, undo a mistaken
 // confirmation, or use/dismiss a suggestion. Re-nomination is off until its policy is agreed.
 export async function POST(request: NextRequest) {
   const { user, error } = await owner();
@@ -72,7 +74,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (input.action === "approve") {
-      await approveField(input.sku, input.draftId, input.field, actor);
+      await approveField(input.sku, { draftId: input.draftId, version: input.version, field: input.field, reviewRef: input.reviewRef ?? null }, actor);
+      return NextResponse.json({ ok: true });
+    }
+    if (input.action === "retire_evidence") {
+      await retireEvidence(input.sku, input.evidenceId, input.reason, actor);
       return NextResponse.json({ ok: true });
     }
     await setSuggestionStatus(input.sku, input.suggestionId, input.status);

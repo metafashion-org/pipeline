@@ -18,6 +18,7 @@ import {
   getNomination,
   ingestSuggestions,
   MARKETING_TASK_ID,
+  answersValue,
   nameTerms,
   proposeDraft,
   proposeTags,
@@ -70,6 +71,7 @@ function item(overrides: Partial<PreviewItem> = {}): PreviewItem {
     brandGroup: null,
     artifacts: [{ artifactId: "TR006", title: "Christmas", description: "Christmas assets", tags: ["festive"] }],
     trendReasoning: TREND,
+    nameEvidence: [],
     referenceImageCount: 0,
     blockers: [],
     listings: [listing("main", "111", { isMain: true }), listing("r1", "222", { lastCheck: { ...listing("x", "1").lastCheck!, robloxName: "Green Christmas Bow Parasol" } })],
@@ -97,7 +99,11 @@ function testProposals() {
     tags: "christmas, parasol",
     colour_links: "https://www.roblox.com/catalog/222",
   };
-  const approvals = { final_name: { value: good.final_name, by: null, at: "" }, colour_links: { value: good.colour_links, by: null, at: "" } };
+  const approvals = {
+    final_name: { value: good.final_name, by: null, at: "" },
+    colour_links: { value: good.colour_links, by: null, at: "" },
+    answers: { value: answersValue(good), by: null, at: "" },
+  };
   assert.deepStrictEqual(draftProblems(good, approvals, item()), [], "An approved, grounded draft has no problems");
   const expect = (fields: Record<string, string>, text: string, it: PreviewItem = item(), appr: typeof approvals | Record<string, never> = approvals) => {
     const found = draftProblems({ ...good, ...fields }, appr, it);
@@ -106,7 +112,8 @@ function testProposals() {
   expect({}, "Approve the final name", item(), { colour_links: approvals.colour_links } as typeof approvals);
   expect({}, "Review and approve the colour links", item(), { final_name: approvals.final_name } as typeof approvals);
   expect({ colour_links: "" }, "Review and approve the colour links");
-  expect({}, "Link an artifact or add a trend origin", item({ artifacts: [], trendReasoning: null }));
+  expect({}, "Add naming evidence", item({ artifacts: [], trendReasoning: null }));
+  expect({ tags: "christmas, bow" }, "Approve the item-page answers");
   expect({ final_name: "belt 1" }, "placeholder");
   expect({ final_name: "A".repeat(50) }, "limit is 49");
   expect({ tags: "x".repeat(81) }, "limit is 80");
@@ -150,7 +157,7 @@ async function testFlow() {
 
   // A SKU with no artifacts or trend origin gets no name and can't approve one.
   const bareId = await saveDraft(BARE_SKU, { final_name: "Belt Idea" }, owner.id);
-  await assert.rejects(approveField(BARE_SKU, bareId, "final_name", owner.id), /Link an artifact or add a trend origin/);
+  await assert.rejects(approveField(BARE_SKU, { draftId: bareId, version: await version(bareId), field: "final_name" }, owner.id), /Add naming evidence/);
 
   const view = await getNomination(SKU);
   assert.strictEqual(view.proposed.final_name, "", "The final name starts unset");
@@ -162,11 +169,12 @@ async function testFlow() {
 
   // A name word that no artifact or trend origin contains can't be approved.
   await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol Deluxe" }, owner.id);
-  await assert.rejects(approveField(SKU, draftId, "final_name", owner.id), /aren't in any linked artifact or the trend origin: deluxe/);
+  await assert.rejects(approveField(SKU, { draftId: draftId, version: await version(draftId), field: "final_name" }, owner.id), /aren't in any evidence for this SKU: deluxe/);
   await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol" }, owner.id);
 
-  await approveField(SKU, draftId, "final_name", owner.id);
-  await approveField(SKU, draftId, "colour_links", owner.id);
+  await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "final_name" }, owner.id);
+  await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "colour_links" }, owner.id);
+  await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "answers" }, owner.id);
   await assert.rejects(confirmSubmitted(SKU, { draftId, version: await version(draftId), rightsConfirmed: false, evidence: null }, owner.id), TodaysPicksError, "No confirmation without the rights answer");
 
   // Edited after review: the version Arjun saw is stale, so confirming it records nothing.
@@ -179,6 +187,7 @@ async function testFlow() {
   // An edit racing a confirmation: whichever wins, a filing never records answers other than the
   // ones it was confirmed with, and the loser fails cleanly.
   for (let round = 0; round < 5; round++) {
+    await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "answers" }, owner.id);
     const seen = await version(draftId);
     const tags = `christmas, parasol, round ${round}`;
     const [edit, confirm] = await Promise.allSettled([
@@ -198,7 +207,8 @@ async function testFlow() {
   }
   // Put back the reviewed answers and approvals for the rest of the test.
   await saveDraft(SKU, { ...view.proposed, final_name: "Christmas Bow Parasol" }, owner.id);
-  await approveField(SKU, draftId, "colour_links", owner.id);
+  await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "colour_links" }, owner.id);
+  await approveField(SKU, { draftId: draftId, version: await version(draftId), field: "answers" }, owner.id);
   await db.delete(teamTaskComments).where(eq(teamTaskComments.taskId, MARKETING_TASK_ID));
   await db.delete(nominationEvents).where(and(eq(nominationEvents.draftId, draftId), inArray(nominationEvents.kind, ["owner_confirmed_filed", "confirmation_undone"])));
   await db.delete(auditLog).where(eq(auditLog.entityId, asset.id));
