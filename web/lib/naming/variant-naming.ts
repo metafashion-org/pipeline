@@ -16,7 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
@@ -197,7 +197,7 @@ export async function runVariantNaming(
   const loadImages = options.loadImages ?? defaultLoadImages;
   const inputs = await loadVariantInputs(options.onlySkus);
   const existing = inputs.length
-    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)))
+    ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(and(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)), ne(nameProposals.status, "failed")))
     : [];
   const todo = inputs.filter((i) => !existing.some((e) => e.assetId === i.assetId && e.inputHash === inputHashOf(i))).slice(0, MAX_VARIANT_ITEMS_PER_RUN);
   const result = { named: 0, skipped: inputs.length - todo.length, failed: 0 };
@@ -216,7 +216,12 @@ export async function runVariantNaming(
       const inputHash = inputHashOf(item);
       if (!answer || answer.variants.length === 0) {
         result.failed++;
-        await db.insert(nameProposals).values({ assetId: item.assetId, batchId, groupKey: item.kind, kind: item.kind, model: NAMING_MODEL, inputHash, status: "failed", error: response.refusal ?? "No answer for this SKU", usage: response.usage }).onConflictDoNothing();
+        await db.insert(nameProposals).values({ assetId: item.assetId, batchId, groupKey: item.kind, kind: item.kind, model: NAMING_MODEL, inputHash, status: "failed", error: response.refusal ?? "No answer for this SKU", usage: response.usage })
+          .onConflictDoUpdate({
+            target: [nameProposals.assetId, nameProposals.inputHash],
+            set: { batchId, error: response.refusal ?? "No answer for this SKU", usage: response.usage, createdAt: new Date() },
+            setWhere: eq(nameProposals.status, "failed"),
+          });
         continue;
       }
       // For listings, keep only answers for this item's own listings, one per listing.
@@ -248,7 +253,15 @@ export async function runVariantNaming(
       }
       await db.transaction(async (tx) => {
         await tx.update(nameProposals).set({ status: "superseded" }).where(and(eq(nameProposals.assetId, item.assetId), eq(nameProposals.kind, item.kind), eq(nameProposals.status, "pending")));
-        await tx.insert(nameProposals).values({ assetId: item.assetId, batchId, groupKey: item.kind, kind: item.kind, model: NAMING_MODEL, inputHash, candidates, usage: response.usage }).onConflictDoNothing();
+        await tx
+          .insert(nameProposals)
+          .values({ assetId: item.assetId, batchId, groupKey: item.kind, kind: item.kind, model: NAMING_MODEL, inputHash, candidates, usage: response.usage })
+          // A retry after a failed attempt on the same inputs replaces the failure.
+          .onConflictDoUpdate({
+            target: [nameProposals.assetId, nameProposals.inputHash],
+            set: { batchId, status: "pending", error: null, candidates, usage: response.usage, createdAt: new Date() },
+            setWhere: eq(nameProposals.status, "failed"),
+          });
       });
       result.named++;
     }
