@@ -172,7 +172,7 @@ function fakeGoogle() {
       state.tabs = next;
     },
     readRows: async (_id, range) => {
-      assert.ok(["'Suggestions'!A2:G", "'Evidence'!A2:J"].includes(range), "Only Suggestions and Evidence are read");
+      assert.ok(["'Suggestions'!A2:G", "'Evidence'!A2:J", "'Filed'!A2:C"].includes(range), "Only Suggestions and Evidence are read");
       return state.tabs.find((t) => t.title === range.split("'")[1])?.cells.slice(1) ?? [];
     },
     appendRows: async (_id, range, rows) => {
