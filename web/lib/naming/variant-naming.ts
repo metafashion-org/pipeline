@@ -32,7 +32,7 @@ import { conflictOnlyNameWords, unsupportedNameWords } from "@/lib/marketing/nom
 import { isPlaceholderName } from "@/lib/marketing/todays-picks-service";
 import { MAX_FINAL_NAME_CHARS } from "@/lib/marketing/nomination-fields";
 import { fetchThumbnails } from "@/lib/marketing/roblox-catalog";
-import { asPreviewItem, NAMING_MODEL, NamingError, type NamingImage } from "./naming-service";
+import { asPreviewItem, driveFileIds, NAMING_MODEL, NamingError, type NamingImage } from "./naming-service";
 
 const VARIANT_EFFORT = "medium";
 const VARIANT_MAX_TOKENS = 16000;
@@ -172,7 +172,7 @@ async function loadVariantInputs(onlySkus?: string[]): Promise<VariantInputItem[
   for (const r of rows) {
     const base = { assetId: r.id, sku: r.sku, baseName: r.baseName!, approvedColourways: r.colourways ?? [] };
     if (r.status === "ready_for_upload") {
-      const sheetFileIds = ((r.recolours as { externalId?: string }[] | null) ?? []).map((f) => f.externalId).filter((id): id is string => !!id);
+      const sheetFileIds = driveFileIds(r.recolours);
       if (sheetFileIds.length && base.approvedColourways.length === 0) out.push({ ...base, kind: "colourways", sheetFileIds, listings: [] });
     } else {
       const unnamed = listings.filter((l) => l.assetId === r.id && !l.approvedName && l.robloxAssetId).map((l) => ({ id: l.id, robloxAssetId: l.robloxAssetId! }));
