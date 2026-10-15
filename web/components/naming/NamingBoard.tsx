@@ -140,6 +140,21 @@ function NamingCard({ item, onChanged }: { item: NamingView; onChanged: () => vo
         </div>
       )}
       {item.proposal?.status === "failed" && <p className="text-destructive">Naming failed: {item.proposal.error}</p>}
+      {item.proposal?.promptLog && (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">
+            Exact prompt sent to Claude and its raw answer ({item.proposal.usage.input_tokens ?? "?"} tokens in, {item.proposal.usage.output_tokens ?? "?"} out)
+          </summary>
+          <div className="mt-1 space-y-1">
+            <button type="button" className="text-primary hover:underline" onClick={() => void navigator.clipboard.writeText(`${item.proposal!.promptLog}\n\n=== CLAUDE'S ANSWER ===\n${item.proposal!.responseLog ?? ""}`).then(() => toast.success("Copied"))}>
+              Copy both
+            </button>
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-[11px]">{item.proposal.promptLog}</pre>
+            <p className="font-medium">Claude&apos;s answer</p>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-[11px]">{item.proposal.responseLog}</pre>
+          </div>
+        </details>
+      )}
       {item.proposal && item.proposal.status !== "failed" && (
         <>
           {item.proposal.imageNotes && (

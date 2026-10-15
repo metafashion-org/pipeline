@@ -44,6 +44,9 @@ export const nameProposals = pgTable(
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     usage: jsonb("usage").$type<Record<string, number>>().default({}).notNull(),
     error: text("error"),
+    // The exact prompt Claude received (images listed by Drive file id) and its raw answer.
+    promptLog: text("prompt_log"),
+    responseLog: text("response_log"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [uniqueIndex("name_proposals_asset_input_idx").on(table.assetId, table.inputHash), index("name_proposals_status_idx").on(table.status)]

@@ -41,6 +41,12 @@ function fakeCaller(calls: { groupKey: string; skus: string[]; images: number; q
     return {
       refusal: null,
       usage: { input_tokens: 1000, output_tokens: 200 },
+      promptLog: `=== SYSTEM ===
+rules
+
+=== USER ===
+${items.map((i) => i.sku).join(",")}`,
+      responseLog: "{\"items\":[]}",
       result: {
         items: items.map((i) => ({
           sku: i.sku,
@@ -97,6 +103,8 @@ async function test() {
   const reads = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!.reads;
   assert.deepStrictEqual(reads.evidence.map((e) => e.quote), ["santa antler hat"], "Claude's own image reading isn't fed back as evidence");
   assert.strictEqual(reads.imageCount, 1);
+  const logged = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!.proposal!;
+  assert.ok(logged.promptLog?.startsWith("=== SYSTEM ===") && logged.responseLog === "{\"items\":[]}" && logged.usage.input_tokens === 1000, "The exact prompt and answer are kept for the owner");
   const hat = (await listNaming()).find((i) => i.sku === `${PREFIX}HAT`)!;
   assert.deepStrictEqual(hat.proposal!.candidates.map((c) => c.name), ["Santa Reindeer Antler Hat", "Sparkly Glitter Santa Hat"], "Placeholder and over-long names are dropped");
   assert.deepStrictEqual(hat.proposal!.candidates[0].unsupported, [], "Every word is in the image reading");
