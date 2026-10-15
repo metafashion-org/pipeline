@@ -33,6 +33,7 @@ import { conflictOnlyNameWords, MARKETING_TASK_ID, unsupportedNameWords } from "
 import { isPlaceholderName, type PreviewItem } from "@/lib/marketing/todays-picks-service";
 import { MAX_FINAL_NAME_CHARS } from "@/lib/marketing/nomination-fields";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
+import { readLinkedReports, type DocReader, type ReportReadResult } from "./report-reader";
 
 // Claude Sonnet 5.5, as Arjun chose for naming (Sonnet or Haiku credits). Medium effort: naming is
 // short, and the evidence check catches what a lower effort misses.
@@ -255,18 +256,21 @@ export function asPreviewItem(item: NamingInputItem, evidence: PreviewItem["name
  * fetchers. Output: counts of what happened.
  */
 export async function runNaming(
-  options: { onlySkus?: string[]; actorId?: string | null; caller?: NamingCaller; loadImage?: (fileId: string) => Promise<NamingImage | null> } = {}
-): Promise<{ named: number; skipped: number; failed: number; batchId: string | null }> {
+  options: { onlySkus?: string[]; actorId?: string | null; caller?: NamingCaller; loadImage?: (fileId: string) => Promise<NamingImage | null>; docReader?: DocReader } = {}
+): Promise<{ named: number; skipped: number; failed: number; batchId: string | null; reports: ReportReadResult | null }> {
   const caller = options.caller ?? CLAUDE_NAMING_CALLER;
   if (!options.caller && !process.env.ANTHROPIC_API_KEY) throw new NamingError("ANTHROPIC_API_KEY isn't set in Vercel, so naming can't run");
   const loadImage = options.loadImage ?? fetchImage;
   const { text: guidelines } = await getGuidelines();
+  // Pull the relevant lines of each linked report in as evidence first, so Claude gets them. Tests
+  // with a stand-in Claude skip this unless they pass a stand-in reader too.
+  const reports = options.caller && !options.docReader ? null : await readLinkedReports({ onlySkus: options.onlySkus, statuses: NAMING_STATUSES, reader: options.docReader });
   const inputs = await loadNamingInputs(options.onlySkus);
   const existing = inputs.length
     ? await db.select({ assetId: nameProposals.assetId, inputHash: nameProposals.inputHash }).from(nameProposals).where(and(inArray(nameProposals.assetId, inputs.map((i) => i.assetId)), eq(nameProposals.kind, "base"), ne(nameProposals.status, "failed")))
     : [];
   const todo = inputs.filter((i) => !existing.some((e) => e.assetId === i.assetId && e.inputHash === inputHashOf(i, guidelines))).slice(0, MAX_ITEMS_PER_RUN);
-  const result = { named: 0, skipped: inputs.length - todo.length, failed: 0, batchId: null as string | null };
+  const result = { named: 0, skipped: inputs.length - todo.length, failed: 0, batchId: null as string | null, reports };
   if (todo.length === 0) return result;
 
   const batchId = randomUUID();
