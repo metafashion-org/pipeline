@@ -117,7 +117,14 @@ export interface NamingInputItem {
 }
 
 /** One call to the model. Swappable so tests don't call Claude. */
-export type NamingCaller = (input: { guidelines: string; groupKey: string; items: (NamingInputItem & { images: NamingImage[] })[] }) => Promise<{ result: NamingResult | null; refusal: string | null; usage: Record<string, number> }>;
+export type NamingCaller = (input: { guidelines: string; groupKey: string; items: (NamingInputItem & { images: NamingImage[] })[] }) => Promise<{
+  result: NamingResult | null;
+  refusal: string | null;
+  usage: Record<string, number>;
+  // The exact prompt sent (images listed by Drive file id) and Claude's raw answer, for the owner to read.
+  promptLog?: string;
+  responseLog?: string;
+}>;
 
 /** Output: Arjun's naming guidelines, or the default draft until he saves his own. */
 export async function getGuidelines(): Promise<{ text: string; isDefault: boolean }> {
@@ -199,20 +206,28 @@ export const CLAUDE_NAMING_CALLER: NamingCaller = async ({ guidelines, groupKey,
     ? items[0].artifacts.map((a) => `<artifact id="${a.artifactId}">\n${[a.title, a.description, a.tags.length ? `tags: ${a.tags.join(", ")}` : ""].filter(Boolean).join("\n")}\n</artifact>`).join("\n")
     : "No artifacts are linked to these items.";
   const content: Anthropic.Beta.BetaContentBlockParam[] = [{ type: "text", text: `<shared_artifacts group="${groupKey}">\n${shared}\n</shared_artifacts>` }];
+  // A readable copy of everything sent, with each image replaced by its Drive file id.
+  const system = `${RULES}\n\n<naming_guidelines>\n${guidelines}\n</naming_guidelines>`;
+  const logParts: string[] = [`=== SYSTEM ===\n${system}`, `=== USER ===\n${(content[0] as { text: string }).text}`];
   for (const item of items) {
     content.push({
       type: "text",
       text: `<item sku="${item.sku}">\nworking title (exploratory, not a word source): ${item.itemName}\ncategory: ${item.category ?? "unknown"}\ntrend note: ${item.trendReasoning ?? "none"}\n${(item.evidenceQuotes ?? []).map((e) => `<evidence label="${e.label}">${e.quote}</evidence>`).join("\n") || "no evidence quotes"}\nconcept images attached below: ${item.images.length}\n</item>`,
     });
-    for (const image of item.images) content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } });
+    logParts.push((content[content.length - 1] as { text: string }).text);
+    for (const [n, image] of item.images.entries()) {
+      content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.base64 } });
+      logParts.push(`[concept image ${n + 1}: Drive file ${item.imageFileIds[n] ?? "unknown"}]`);
+    }
   }
+  const promptLog = logParts.join("\n\n");
   const response = await client.beta.messages.parse({
     model: NAMING_MODEL,
     max_tokens: NAMING_MAX_TOKENS,
     betas: ["server-side-fallback-2026-07-01"],
     // On a safety decline, the API retries on the model Anthropic recommends for that category.
     fallbacks: "default",
-    system: [{ type: "text", text: `${RULES}\n\n<naming_guidelines>\n${guidelines}\n</naming_guidelines>`, cache_control: { type: "ephemeral" } }],
+    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content }],
     output_config: { effort: NAMING_EFFORT, format: betaZodOutputFormat(NamingResponse) },
   });
@@ -221,8 +236,9 @@ export const CLAUDE_NAMING_CALLER: NamingCaller = async ({ guidelines, groupKey,
     output_tokens: response.usage.output_tokens,
     cache_read_input_tokens: response.usage.cache_read_input_tokens ?? 0,
   };
-  if (response.stop_reason === "refusal") return { result: null, refusal: response.stop_details?.explanation ?? "Declined", usage };
-  return { result: response.parsed_output ?? null, refusal: null, usage };
+  const responseLog = response.content.map((b) => (b.type === "text" ? b.text : `[${b.type}]`)).join("\n");
+  if (response.stop_reason === "refusal") return { result: null, refusal: response.stop_details?.explanation ?? "Declined", usage, promptLog, responseLog };
+  return { result: response.parsed_output ?? null, refusal: null, usage, promptLog, responseLog };
 };
 
 export function asPreviewItem(item: NamingInputItem, evidence: PreviewItem["nameEvidence"]): PreviewItem {
@@ -310,11 +326,11 @@ export async function runNaming(
           await tx.update(nameProposals).set({ status: "superseded" }).where(and(eq(nameProposals.assetId, item.assetId), eq(nameProposals.kind, "base"), eq(nameProposals.status, "pending")));
           await tx
             .insert(nameProposals)
-            .values({ assetId: item.assetId, batchId, groupKey, model: NAMING_MODEL, inputHash, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage })
+            .values({ assetId: item.assetId, batchId, groupKey, model: NAMING_MODEL, inputHash, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage, promptLog: response.promptLog ?? null, responseLog: response.responseLog ?? null })
             // A retry after a failed attempt on the same inputs replaces the failure.
             .onConflictDoUpdate({
               target: [nameProposals.assetId, nameProposals.inputHash],
-              set: { batchId, status: "pending", error: null, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage, createdAt: new Date() },
+              set: { batchId, status: "pending", error: null, candidates, imageNotes: answer.image_notes.trim(), usage: response.usage, promptLog: response.promptLog ?? null, responseLog: response.responseLog ?? null, createdAt: new Date() },
               setWhere: eq(nameProposals.status, "failed"),
             });
         });
@@ -344,7 +360,7 @@ export interface NamingView {
   evidenceCount: number;
   // Exactly what Claude is given for this item, for the "What Claude reads" panel.
   reads: { workingTitle: string; category: string | null; trendNote: string | null; artifacts: PreviewItem["artifacts"]; evidence: { label: string; quote: string }[]; imageCount: number };
-  proposal: { id: string; status: string; createdAt: string; imageNotes: string | null; error: string | null; candidates: (NameCandidate & { unsupported: string[]; conflictOnly: string[] })[] } | null;
+  proposal: { id: string; status: string; createdAt: string; imageNotes: string | null; error: string | null; promptLog: string | null; responseLog: string | null; usage: Record<string, number>; candidates: (NameCandidate & { unsupported: string[]; conflictOnly: string[] })[] } | null;
 }
 
 /**
@@ -402,6 +418,9 @@ export async function listNaming(): Promise<NamingView[]> {
         createdAt: latest.createdAt.toISOString(),
         imageNotes: latest.imageNotes,
         error: latest.error,
+        promptLog: latest.promptLog,
+        responseLog: latest.responseLog,
+        usage: latest.usage,
         candidates: (latest.candidates as NameCandidate[]).map((c) => ({ ...c, unsupported: unsupportedNameWords(c.name, preview), conflictOnly: conflictOnlyNameWords(c.name, preview) })),
       },
     };
