@@ -34,7 +34,14 @@ function NamingCard({ item, onChanged }: { item: NamingView; onChanged: () => vo
   async function suggestForThis() {
     setBusy(true);
     try {
-      const { ok, data } = await apiCall<{ error?: string; named: number; skipped: number; failed: number }>(NAMING_URL, { method: "POST", body: { action: "run", skus: [item.sku] } });
+      const { ok, data } = await apiCall<{ error?: string; named: number; skipped: number; failed: number; reports: { read: number; linesSaved: number; skipped: { artifactId: string; reason: string }[] } | null }>(NAMING_URL, {
+        method: "POST",
+        body: { action: "run", skus: [item.sku] },
+      });
+      if (ok && data.reports) {
+        const notRead = data.reports.skipped.map((s) => `${s.artifactId}: ${s.reason}`).join("; ");
+        toast.info(`Reports read: ${data.reports.read}, lines added as evidence: ${data.reports.linesSaved}${notRead ? `. Not read: ${notRead}` : ""}`, { duration: 15000 });
+      }
       if (!ok) toast.error(data.error || "Naming failed");
       else if (data.named) toast.success(`Suggestions ready for ${item.sku}`);
       else if (data.skipped) toast.info("Nothing changed since the last suggestions, so nothing was sent");
