@@ -1,7 +1,9 @@
 // An asset's Roblox links, one per uploaded recolour, and putting them on sale. The uploader adds
 // links on the Upload queue (publisher-service.ts) and can add one for a new recolour at any time
 // after that. Arjun ticks which links are on sale, on the card or on the Marketing page. Being on
-// sale is a property of each recolour, not a board column: an uploaded recolour can stay off sale.
+// sale is a property of each recolour: an uploaded recolour can stay off sale. The first recolour
+// ticked on sale moves the card from Uploaded to Roblox to Marked for Payment, so the artist's
+// payment starts once the item is selling.
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
@@ -9,9 +11,12 @@ import { assets } from "@/lib/db/schema/assets";
 import { uploadRecords } from "@/lib/db/schema/upload_records";
 import { auditLog } from "@/lib/db/schema/audit_log";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
+import { updateAssetStatusInKanban } from "@/lib/kanban/kanban-service";
 import { parseRobloxCatalogLink } from "./roblox-links";
 
 const MAX_VARIANT_LABEL_CHARS = 80;
+const UPLOADED_STATUS = "uploaded_to_roblox";
+const MARKED_FOR_PAYMENT_STATUS = "marked_for_payment";
 
 export class OnSaleError extends Error {}
 
@@ -81,12 +86,13 @@ export async function addRobloxLink(sku: string, rawUrl: string, variantLabel: s
 }
 
 /**
- * Ticks one Roblox link on or off sale.
+ * Ticks one Roblox link on or off sale. Ticking a link on sale while the card is in Uploaded to
+ * Roblox also moves the card to Marked for Payment. Taking it off sale never moves the card back.
  *
- * Input: the SKU, the link's id, on or off, and who did it. Output: nothing. Throws OnSaleError
- * when the link isn't this asset's.
+ * Input: the SKU, the link's id, on or off, and who did it. Output: whether the card moved.
+ * Throws OnSaleError when the link isn't this asset's.
  */
-export async function setLinkOnSale(sku: string, linkId: string, onSale: boolean, actorId: string | null): Promise<void> {
+export async function setLinkOnSale(sku: string, linkId: string, onSale: boolean, actorId: string | null): Promise<{ movedToPayment: boolean }> {
   const asset = await findAsset(sku);
   const now = new Date();
   const updated = await db
@@ -96,6 +102,10 @@ export async function setLinkOnSale(sku: string, linkId: string, onSale: boolean
     .returning({ id: uploadRecords.id, url: uploadRecords.robloxItemUrl });
   if (updated.length === 0) throw new OnSaleError("That link isn't on this asset");
   await db.insert(auditLog).values({ action: onSale ? "putLinkOnSale" : "takeLinkOffSale", entityType: "asset", entityId: asset.id, actorId, payload: { sku, linkId, url: updated[0].url } });
+  if (!onSale || asset.currentStatus !== UPLOADED_STATUS) return { movedToPayment: false };
+  // The pipeline makes this move as the system, which passes the payment-admin gate on the rule.
+  await updateAssetStatusInKanban(sku, MARKED_FOR_PAYMENT_STATUS, { system: true }, "Moved automatically: a recolour was put on sale");
+  return { movedToPayment: true };
 }
 
 export interface NotOnSaleAsset {

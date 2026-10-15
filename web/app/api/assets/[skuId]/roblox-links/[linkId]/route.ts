@@ -14,10 +14,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = OnSaleSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: "Say whether it's on sale" }, { status: 400 });
   try {
-    await setLinkOnSale(skuId, linkId, body.data.onSale, user.personnelId ?? null);
+    const { movedToPayment } = await setLinkOnSale(skuId, linkId, body.data.onSale, user.personnelId ?? null);
     // The Marketing page lists an asset for marketing once a recolour is on sale.
     revalidateViews(CACHE_TAGS.marketing);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, movedToPayment });
   } catch (error) {
     if (error instanceof OnSaleError) return NextResponse.json({ error: error.message }, { status: 400 });
     throw error;

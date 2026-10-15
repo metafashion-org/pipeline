@@ -42,19 +42,21 @@ async function testOnSale() {
   const waiting = (await listNotOnSale()).find((a) => a.sku === SKU);
   assert.strictEqual(waiting?.links.length, 2, "A live asset with nothing on sale is on the Marketing list, with all its links");
 
-  await setLinkOnSale(SKU, second.id, true, null);
+  assert.deepStrictEqual(await setLinkOnSale(SKU, second.id, true, null), { movedToPayment: true });
+  const [moved] = await db.select().from(assets).where(eq(assets.id, asset.id));
+  assert.strictEqual(moved.currentStatus, "marked_for_payment", "The first recolour on sale moves the card to Marked for Payment");
   const ticked = await listRobloxLinks(SKU);
   assert.ok(ticked[1].onSaleAt && !ticked[0].onSaleAt, "Only the ticked recolour is on sale");
   const partly = (await listNotOnSale()).find((a) => a.sku === SKU);
   assert.ok(partly?.links[1].onSaleAt && !partly.links[0].onSaleAt, "One recolour on sale keeps the asset listed, showing which is on sale");
 
-  await setLinkOnSale(SKU, first.id, true, null);
+  assert.deepStrictEqual(await setLinkOnSale(SKU, first.id, true, null), { movedToPayment: false }, "A second recolour on sale doesn't move the card again");
   assert.ok(!(await listNotOnSale()).some((a) => a.sku === SKU), "Every recolour on sale takes it off the list");
 
   await setLinkOnSale(SKU, second.id, false, null);
   assert.ok((await listNotOnSale()).some((a) => a.sku === SKU), "Taking one off sale puts it back on the list");
   const [still] = await db.select().from(assets).where(eq(assets.id, asset.id));
-  assert.strictEqual(still.currentStatus, "uploaded_to_roblox", "Putting on sale never moves the card");
+  assert.strictEqual(still.currentStatus, "marked_for_payment", "Taking a recolour off sale doesn't move the card back");
   console.log("Confirmed putting on sale");
 }
 
