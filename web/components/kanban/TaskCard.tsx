@@ -216,7 +216,8 @@ export function TaskCard({ task, role }: TaskCardProps) {
                         setDrawerOpen(true);
                     }
                 }}
-                className="group relative mb-2 cursor-pointer touch-none rounded-lg border border-border bg-card overflow-hidden shadow-sm hover:shadow-md hover:border-border/80 transition-[box-shadow,border-color]"
+                // A priority card gets a red ring so it stands out in its column.
+                className={`group relative mb-2 cursor-pointer touch-none rounded-lg border bg-card overflow-hidden shadow-sm hover:shadow-md transition-[box-shadow,border-color] ${task.priorityAt ? "border-red-500 ring-2 ring-red-500/60" : "border-border hover:border-border/80"}`}
             >
                 <div className={`w-full aspect-square overflow-hidden relative bg-gradient-to-br ${gradient} p-3 flex flex-col justify-between text-white`}>
                     {coverRef?.fileId && (
@@ -233,6 +234,7 @@ export function TaskCard({ task, role }: TaskCardProps) {
                     )}
                     <div className="relative flex items-center justify-between gap-1">
                         <DeadlineBadge deadline={task.deadline} />
+                        {task.priorityAt && <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase">Priority</span>}
                         <Button
                             variant="ghost"
                             size="icon"

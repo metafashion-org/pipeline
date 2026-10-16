@@ -52,6 +52,11 @@ export const assets = pgTable("assets", {
   briefFields: jsonb("brief_fields").$type<Record<string, string>>().default({}).notNull(),
   // Why it was archived (lib/assets/archive-reasons.ts), shown on the board's Archived list.
   boardHiddenReason: text("board_hidden_reason"),
+  // Set while the card is marked priority (lib/assets/priority-service.ts): highlighted on the
+  // board, and its artist was messaged on Discord. Null otherwise.
+  priorityAt: timestamp("priority_at", { withTimezone: true }),
+  priorityBy: uuid("priority_by").references(() => personnel.id, { onDelete: "set null" }),
+  priorityNote: text("priority_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

@@ -91,6 +91,9 @@ export interface KanbanAssetCard {
   // For a card in Curated: who curated it, and whether the team sent it back to them with a note.
   curatorId: string | null;
   curationSentBack: boolean;
+  // When the card was marked priority, and why. Null when it isn't a priority.
+  priorityAt: Date | null;
+  priorityNote: string | null;
 }
 
 /**
@@ -154,6 +157,8 @@ export async function getKanbanBoardData(
       briefFields: assets.briefFields,
       recolorReferenceImages: assets.recolorReferenceImages,
       hasPaymentReceipt: sql<boolean>`${assets.paymentReceiptUrl} IS NOT NULL`,
+      priorityAt: assets.priorityAt,
+      priorityNote: assets.priorityNote,
     })
     .from(assets)
     .leftJoin(personnel, eq(assets.currentArtistId, personnel.id))
