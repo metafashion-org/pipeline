@@ -25,6 +25,7 @@ import { CURATED_STATUS } from "@/lib/kanban/move-rules";
 import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-statuses";
 import { RemindArtistButton } from "./remind-artist-button";
 import { HideCardButton } from "./board-visibility-buttons";
+import { PriorityButton } from "./priority-button";
 import { RemindButton } from "./RemindButton";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
@@ -107,6 +108,11 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
             {canEdit && <EditAssetDialog asset={asset} />}
           </div>
         </SheetHeader>
+
+        {/* The team marks any card; an artist sees only their own cards, so may mark any they see. */}
+        {(viewerCapabilities.canAssignArtists || userRoles.includes("artist")) && (
+          <PriorityButton sku={asset.sku} isPriority={Boolean(asset.priorityAt)} note={asset.priorityNote} />
+        )}
 
         {/* First once the asset is on Roblox: Arjun puts recolours on sale from here. */}
         {showBusiness && LIVE_ON_ROBLOX_STATUSES.includes(asset.currentStatus) && (
