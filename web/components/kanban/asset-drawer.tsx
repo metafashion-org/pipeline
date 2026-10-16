@@ -26,6 +26,7 @@ import { isArtistNotifiedStatus } from "@/lib/notifications/artist-notified-stat
 import { RemindArtistButton } from "./remind-artist-button";
 import { HideCardButton } from "./board-visibility-buttons";
 import { PriorityButton } from "./priority-button";
+import { RecolourAttach } from "./recolour-attach";
 import { RemindButton } from "./RemindButton";
 import { LIVE_ON_ROBLOX_STATUSES } from "@/lib/kanban/status-groups";
 
@@ -77,6 +78,8 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
   const canSubmitFinalFiles = isAdminOrOperator || userRoles.includes("artist");
   // Editing an asset's name, category, budget or deadline is the same production-management right as assigning its artist, so it rides on the same capability rather than inventing a second one.
   const canEdit = canAssignArtists;
+  // Curators attach recolours from the drawer (RecolourAttach); the team does it through Edit.
+  const curatorAttachesRecolours = viewerCapabilities.canAccessCuratorTools && !canEdit;
   // Same rule the Knowledge Registry's own admin page and its API routes already use (see
   // lib/auth/rbac.ts's canManageKnowledge doc comment) — admin, operator or curator.
   //
@@ -207,10 +210,13 @@ export function AssetDrawer({ asset, open, onOpenChange, userRoles = ["admin"] }
                 <ReferenceGallery label="Secondary concept images" refs={references.slice(1)} />
                 {/* Everyone who can open the card sees the recolours, the artist included: they make
                     them. Showing them to curators, operators and admins only left artists without them. */}
-                <ReferenceGallery label="Recolour references" refs={recolorReferences} />
+                {!curatorAttachesRecolours && <ReferenceGallery label="Recolour references" refs={recolorReferences} />}
               </>
             ) : (
               <p className="text-xs text-muted-foreground italic">No reference links on this asset yet.</p>
+            )}
+            {curatorAttachesRecolours && (
+              <RecolourAttach key={asset.sku} sku={asset.sku} recolorReferenceImages={asset.recolorReferenceImages} />
             )}
           </div>
         </section>

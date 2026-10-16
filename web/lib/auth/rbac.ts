@@ -124,7 +124,9 @@ export const ROLE_DEFAULT_CAPABILITIES: Record<SystemRole, CapabilitySet> = {
     canPublishToRoblox: false,
     canMarkForPayment: false,
     canMarkPaymentDone: false,
-    canViewAllAssets: false,
+    // Curators work from the board: they see every card and attach recolours (see
+    // isRecolourOnlyPatch in lib/assets/asset-update.ts).
+    canViewAllAssets: true,
     canManageSystemConfig: false,
     canAccessCuratorTools: true,
     canAccessMarketingTools: false,

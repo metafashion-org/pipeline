@@ -51,6 +51,17 @@ export const UpdateAssetSchema = z.object({
 
 export type AssetUpdatePatch = z.infer<typeof UpdateAssetSchema>;
 
+/**
+ * Whether a patch changes only the recolour references. A curator may make that edit on any card;
+ * every other field stays with the team. The audit log keeps the before and after.
+ *
+ * Input: a parsed patch. Output: true when recolorReferenceImages is its only field.
+ */
+export function isRecolourOnlyPatch(patch: AssetUpdatePatch): boolean {
+  const fields = Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key);
+  return fields.length === 1 && fields[0] === "recolorReferenceImages";
+}
+
 export interface AssetCurrentValues {
   itemName: string;
   category: string | null;

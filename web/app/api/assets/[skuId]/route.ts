@@ -4,10 +4,10 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { db } from "@/lib/db/client";
 import { assets } from "@/lib/db/schema/assets";
 import { auditLog } from "@/lib/db/schema/audit_log";
-import { canAddAssets, getEffectiveCapabilities } from "@/lib/auth/rbac";
+import { getEffectiveCapabilities } from "@/lib/auth/rbac";
 import { assetSignoffs } from "@/lib/db/schema/asset_signoffs";
 import { SIGNOFF_STATUS } from "@/lib/signoff/signoff-rules";
-import { UpdateAssetSchema, computeAssetChanges } from "@/lib/assets/asset-update";
+import { UpdateAssetSchema, computeAssetChanges, isRecolourOnlyPatch } from "@/lib/assets/asset-update";
 import { eq } from "drizzle-orm";
 
 // Whether this asset is waiting for sign-off and was added by this person.
@@ -31,17 +31,20 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
-  // The team edits any asset. A curator can edit only an asset they added that is still waiting for
-  // Arjun's sign-off, so they can fix what he sent back; once it's on the board it's the team's.
-  if (!caps.canAssignArtists && !(canAddAssets(caps) && (await isOwnAssetAwaitingSignoff(skuId, session.user.personnelId)))) {
-    return NextResponse.json({ error: "You don't have permission to edit assets" }, { status: 403 });
-  }
-
   const body = await request.json();
   const parseResult = UpdateAssetSchema.safeParse(body);
   if (!parseResult.success) {
     return NextResponse.json({ error: parseResult.error.message }, { status: 400 });
+  }
+
+  const caps = getEffectiveCapabilities(session.user.roles || [], session.user.capabilityOverrides || {});
+  // The team edits any asset. A curator can attach recolours to any card, and edit everything else
+  // only on an asset they added that is still waiting for Arjun's sign-off, so they can fix what he
+  // sent back.
+  const curatorMayEdit =
+    caps.canAccessCuratorTools && (isRecolourOnlyPatch(parseResult.data) || (await isOwnAssetAwaitingSignoff(skuId, session.user.personnelId)));
+  if (!caps.canAssignArtists && !curatorMayEdit) {
+    return NextResponse.json({ error: "You don't have permission to edit assets" }, { status: 403 });
   }
 
   const { itemName, category, feeAmount, currency, brandGroupId, deadline, paymentReceiptUrl } = parseResult.data;
