@@ -100,8 +100,8 @@ function testRbacSystem() {
   // Everyone lands somewhere they can use. A pure marketing or payment_admin person used to
   // fall through every branch of the login redirect and sit on "/" with no error.
   assert.strictEqual(landingPathForRoles(["artist"]), "/artist");
-  // The Curation form is retired, so a curator with no other role has no page of their own.
-  assert.strictEqual(landingPathForRoles(["curator"]), "/unauthorized");
+  // Curators see the whole board, so they land on it like the rest of the team.
+  assert.strictEqual(landingPathForRoles(["curator"]), "/admin");
   assert.strictEqual(landingPathForRoles(["publisher"]), "/publisher");
   assert.strictEqual(landingPathForRoles(["payment_admin"]), "/admin");
   assert.strictEqual(landingPathForRoles([]), "/unauthorized", "someone with no roles has nowhere to land");
@@ -114,7 +114,7 @@ function testRbacSystem() {
   assert.strictEqual(isRouteAllowedForRoles("/team", ["operator", "publisher"]), false, "operators need the full-time role too");
   assert.strictEqual(isRouteAllowedForRoles("/admin", ["full_time"]), false, "the full-time role alone doesn't open the admin pages");
   assert.strictEqual(landingPathForRoles(["full_time"]), "/team", "someone who is only full-time lands on Team Tasks");
-  assert.strictEqual(landingPathForRoles(["curator", "full_time"]), "/team", "a full-time curator lands on Team Tasks");
+  assert.strictEqual(landingPathForRoles(["curator", "full_time"]), "/admin", "a full-time curator lands on the board");
 
   // New Asset and the Sign-off page: the team who assign artists, and curators.
   assert.strictEqual(canAddAssets(getEffectiveCapabilities(["curator"])), true, "a curator adds assets for sign-off");

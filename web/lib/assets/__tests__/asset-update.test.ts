@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { computeAssetChanges, UpdateAssetSchema } from "../asset-update";
+import { computeAssetChanges, isRecolourOnlyPatch, UpdateAssetSchema } from "../asset-update";
 
 function testFeeAmountNumericComparison() {
   console.log("Verifying feeAmount is compared numerically, not as a string...");
@@ -69,6 +69,17 @@ function testNoFieldsSentMeansNoChange() {
   console.log("✓ No-op update assertions passed cleanly!");
 }
 
+function testRecolourOnlyPatch() {
+  console.log("Verifying which edits count as attaching recolours only...");
+  assert.strictEqual(isRecolourOnlyPatch({ recolorReferenceImages: "https://drive.google.com/file/d/abc/view" }), true);
+  assert.strictEqual(isRecolourOnlyPatch({ recolorReferenceImages: "" }), true, "Removing the last recolour is still a recolour edit");
+  assert.strictEqual(isRecolourOnlyPatch({ recolorReferenceImages: "x", itemName: "Renamed" }), false, "Any other field makes it a full edit");
+  assert.strictEqual(isRecolourOnlyPatch({ itemName: "Renamed" }), false);
+  assert.strictEqual(isRecolourOnlyPatch({}), false);
+  console.log("✓ Recolour-only edit assertions passed cleanly!");
+}
+
 testFeeAmountNumericComparison();
 testDeadlineRejection();
+testRecolourOnlyPatch();
 testNoFieldsSentMeansNoChange();
