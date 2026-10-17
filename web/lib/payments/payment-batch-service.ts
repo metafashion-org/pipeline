@@ -4,6 +4,7 @@ import { personnel } from "@/lib/db/schema/personnel";
 import { paymentBatches } from "@/lib/db/schema/payment_batches";
 import { updateAssetPaymentDetails, SUPPORTED_CURRENCIES, type SupportedCurrency } from "@/lib/curation/curation-service";
 import { updateAssetStatusInKanban, type TransitionActor } from "@/lib/kanban/kanban-service";
+import { auditLog } from "@/lib/db/schema/audit_log";
 import { eq, and, asc } from "drizzle-orm";
 
 export interface PendingPaymentAsset {
@@ -167,4 +168,41 @@ export async function attachPaymentSummaryForArtist(options: AttachPaymentSummar
     assetCount: pending.length,
     skus: pending.map((a) => a.sku),
   };
+}
+
+const MAX_PAID_OUTSIDE_NOTE_CHARS = 300;
+
+export class AlreadyPaidError extends Error {}
+
+/**
+ * Records that an asset waiting in Marked for Payment was already paid outside the Kanban, and
+ * moves it to Payment Done with no invoice. It is never counted as owed again, and the artist
+ * isn't sent a payment notice, since the payment happened earlier.
+ *
+ * Input: the SKU, a note saying how and when it was paid, and who is recording it.
+ * Output: nothing. Throws AlreadyPaidError when the note is empty or the asset isn't in Marked for Payment.
+ */
+export async function markAssetPaidOutside(sku: string, note: string, actor: TransitionActor): Promise<void> {
+  const trimmed = note.trim().slice(0, MAX_PAID_OUTSIDE_NOTE_CHARS);
+  if (!trimmed) throw new AlreadyPaidError("Say how and when it was paid");
+  const [asset] = await db.select({ id: assets.id, currentStatus: assets.currentStatus }).from(assets).where(eq(assets.sku, sku)).limit(1);
+  if (!asset) throw new AlreadyPaidError(`Asset '${sku}' not found`);
+  if (asset.currentStatus !== "marked_for_payment") throw new AlreadyPaidError(`${sku} isn't waiting for payment`);
+
+  // The flag goes on first because Payment Done needs either an invoice or this flag (checkMove in
+  // lib/kanban/move-rules.ts). If the move is then refused, the flag is taken off again.
+  await db.update(assets).set({ paidOutsideAt: new Date(), paidOutsideNote: trimmed }).where(eq(assets.id, asset.id));
+  try {
+    await updateAssetStatusInKanban(sku, "payment_done", actor, `Already paid outside the Kanban: ${trimmed}. No invoice attached.`);
+  } catch (error) {
+    await db.update(assets).set({ paidOutsideAt: null, paidOutsideNote: null }).where(eq(assets.id, asset.id));
+    throw error;
+  }
+  await db.insert(auditLog).values({
+    action: "markPaidOutside",
+    entityType: "asset",
+    entityId: asset.id,
+    actorId: actor.system ? null : actor.personnelId ?? null,
+    payload: { sku, note: trimmed },
+  });
 }

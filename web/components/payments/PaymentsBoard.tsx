@@ -30,6 +30,80 @@ function initials(name: string): string {
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
 }
 
+// One line of an artist's payout. "Already paid" records that it was paid outside the Kanban, with a
+// note on how and when, and moves it to Payment Done with no invoice.
+function PayoutLine({ asset, onPaid }: { asset: ArtistPendingPayment["assets"][number]; onPaid: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function markPaid() {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/payments/already-paid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku: asset.sku, note }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't mark it paid");
+        return;
+      }
+      toast.success(`${asset.sku} marked as already paid`);
+      onPaid();
+    } catch {
+      toast.error("Couldn't reach the server, try again");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{asset.itemName}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            <span className="font-mono">{asset.sku}</span>
+            {asset.category ? ` · ${asset.category}` : ""}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-medium tabular-nums">{formatFee(asset.feeAmount, asset.currency, "—")}</p>
+          {!asking && (
+            <button type="button" onClick={() => setAsking(true)} className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
+              Already paid
+            </button>
+          )}
+        </div>
+      </div>
+      {asking && (
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="How and when, e.g. UPI on 14 Oct"
+            aria-label={`How ${asset.sku} was paid`}
+            className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs"
+          />
+          <button
+            type="button"
+            disabled={saving || !note.trim()}
+            onClick={markPaid}
+            className="h-8 shrink-0 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Mark paid"}
+          </button>
+          <button type="button" disabled={saving} onClick={() => setAsking(false)} className="h-8 shrink-0 text-xs text-muted-foreground">
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ArtistPayoutCard({ artist, onAttached }: { artist: ArtistPendingPayment; onAttached: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -101,16 +175,7 @@ function ArtistPayoutCard({ artist, onAttached }: { artist: ArtistPendingPayment
       {/* Line items */}
       <div className="divide-y divide-border/60 border-t border-border/60 px-5">
         {artist.assets.map((a) => (
-          <div key={a.id} className="flex items-start justify-between gap-3 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{a.itemName}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                <span className="font-mono">{a.sku}</span>
-                {a.category ? ` · ${a.category}` : ""}
-              </p>
-            </div>
-            <p className="shrink-0 text-sm font-medium tabular-nums">{formatFee(a.feeAmount, a.currency, "—")}</p>
-          </div>
+          <PayoutLine key={a.id} asset={a} onPaid={onAttached} />
         ))}
       </div>
 
